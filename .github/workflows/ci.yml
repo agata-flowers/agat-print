@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agat
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: agat_print
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U agat -d agat_print"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://agat:ci-only@localhost:5432/agat_print?schema=public
+      WEB_ORIGIN: http://localhost:3000
+      JWT_ACCESS_SECRET: ci-only-secret-at-least-32-characters
+      OTP_PROVIDER: mock
+      MOCK_OTP_CODE: "000000"
+      RUN_DB_E2E: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.19.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm db:validate
+      - run: pnpm --filter @agat/api exec prisma migrate deploy
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: docker compose config --quiet
+      - run: docker build -f apps/api/Dockerfile .
+      - run: docker build -f apps/web/Dockerfile .

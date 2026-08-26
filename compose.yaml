@@ -1,0 +1,88 @@
+name: agat-print
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-development-only}
+      POSTGRES_DB: agat_print
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      {
+        test: [CMD-SHELL, "pg_isready -U agat -d agat_print"],
+        interval: 5s,
+        timeout: 5s,
+        retries: 10,
+      }
+    ports: ["5432:5432"]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      { test: [CMD, redis-cli, ping], interval: 5s, timeout: 3s, retries: 10 }
+    ports: ["6379:6379"]
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-development-only}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-development-only-change-me}
+    volumes: [minio-data:/data]
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          "mc alias set health http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD >/dev/null && mc ready health",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports: ["9000:9000", "9001:9001"]
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql://agat:${POSTGRES_PASSWORD:-development-only}@postgres:5432/agat_print?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck:
+      {
+        test: [CMD, wget, -qO-, http://localhost:4000/api/v1/health/live],
+        interval: 10s,
+        timeout: 3s,
+        retries: 10,
+      }
+    ports: ["4000:4000"]
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    environment: { NEXT_PUBLIC_API_ORIGIN: http://localhost:4000 }
+    depends_on: { api: { condition: service_healthy } }
+    healthcheck:
+      {
+        test: [CMD, wget, -qO-, http://localhost:3000],
+        interval: 10s,
+        timeout: 3s,
+        retries: 10,
+      }
+    ports: ["3000:3000"]
+  backup:
+    profiles: [backup]
+    build: { context: ., dockerfile: ops/backup/Dockerfile }
+    env_file: [.env]
+    environment:
+      PGHOST: postgres
+      PGUSER: agat
+      PGDATABASE: agat_print
+      PGPASSWORD: ${POSTGRES_PASSWORD:-development-only}
+      MINIO_ALIAS_URL: http://minio:9000
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    entrypoint: ["/opt/agat/backup.sh"]
+volumes:
+  postgres-data:
+  minio-data:

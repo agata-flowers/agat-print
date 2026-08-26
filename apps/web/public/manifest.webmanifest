@@ -1,0 +1,10 @@
+{
+  "name": "AGAT PRINT",
+  "short_name": "AGAT",
+  "description": "We print your ideas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FEFEFE",
+  "theme_color": "#58221B",
+  "lang": "ru"
+}

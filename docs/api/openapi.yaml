@@ -1,0 +1,77 @@
+openapi: 3.1.0
+info:
+  title: AGAT PRINT API
+  version: 0.1.0
+servers:
+  - url: /api/v1
+paths:
+  /auth/csrf:
+    get:
+      summary: Issue a CSRF cookie and token
+      responses: { "200": { description: Token issued } }
+  /auth/otp/request:
+    post:
+      summary: Request a phone OTP
+      responses:
+        {
+          "202": { description: Accepted },
+          "429": { description: Rate limited },
+        }
+  /auth/otp/verify:
+    post:
+      summary: Verify OTP and create a session
+      responses:
+        {
+          "200": { description: Authenticated },
+          "401": { description: Invalid OTP },
+        }
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token
+      responses:
+        {
+          "200": { description: Rotated },
+          "401": { description: Invalid or reused token },
+        }
+  /auth/logout:
+    post:
+      summary: Revoke current session
+      responses: { "204": { description: Logged out } }
+  /profile:
+    get:
+      summary: Read current profile
+      responses: { "200": { description: Profile } }
+  /partners:
+    post:
+      summary: Submit partner application with initial branch
+      responses: { "201": { description: Pending partner created } }
+  /partners/me:
+    get:
+      summary: Read own partner application/workspace status
+      responses: { "200": { description: Partner status } }
+  /admin/partners/{partnerId}/approve:
+    post:
+      summary: Approve partner and grant role atomically
+      parameters:
+        - in: path
+          name: partnerId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        {
+          "200": { description: Approved },
+          "403": { description: Admin required },
+        }
+  /health/live:
+    get:
+      responses: { "200": { description: Process alive } }
+  /health/ready:
+    get:
+      responses:
+        {
+          "200": { description: Dependencies ready },
+          "503": { description: Not ready },
+        }
+  /metrics:
+    get:
+      responses: { "200": { description: Prometheus text format } }

@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  PARTNER
+  COURIER
+  ADMIN
+}
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model User {
+  id          String         @id @default(uuid()) @db.Uuid
+  phone       String         @unique @db.VarChar(32)
+  locale      String         @default("ru") @db.VarChar(8)
+  displayName String?        @db.VarChar(160)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  roles       UserRole[]
+  sessions    Session[]
+  challenges OtpChallenge[]
+  partner     Partner?
+  auditEvents AuditEvent[]   @relation("AuditActor")
+}
+
+model UserRole {
+  userId    String   @db.Uuid
+  role      Role
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, role])
+}
+
+model OtpChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  phone       String    @db.VarChar(32)
+  codeDigest  String    @db.Char(64)
+  attempts    Int       @default(0)
+  maxAttempts Int
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+  userId      String?   @db.Uuid
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([phone, createdAt])
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  familyId         String    @db.Uuid
+  refreshDigest    String    @db.Char(64)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  replacedById     String?   @db.Uuid
+  reuseDetectedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, familyId])
+}
+
+model Partner {
+  id          String        @id @default(uuid()) @db.Uuid
+  ownerId     String        @unique @db.Uuid
+  displayName String        @db.VarChar(180)
+  status      PartnerStatus @default(PENDING)
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  branches    Branch[]
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  partnerId String   @db.Uuid
+  name      String   @db.VarChar(180)
+  city      String   @default("Tashkent") @db.VarChar(100)
+  district  String?  @db.VarChar(120)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  eventType  String   @db.VarChar(80)
+  targetType String?  @db.VarChar(50)
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  @@index([eventType, createdAt])
+}
+
+model BootstrapState {
+  key       String   @id @db.VarChar(50)
+  usedAt    DateTime
+  createdAt DateTime @default(now())
+}

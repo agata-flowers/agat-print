@@ -1,0 +1,31 @@
+{
+  "name": "agat-print",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @agat/api db:generate",
+    "db:validate": "pnpm --filter @agat/api db:validate",
+    "db:migrate": "pnpm --filter @agat/api db:migrate",
+    "admin:bootstrap": "pnpm --filter @agat/api admin:bootstrap",
+    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm db:validate && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.34.0",
+    "@next/eslint-plugin-next": "16.3.3",
+    "@types/node": "24.3.0",
+    "eslint": "9.34.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.6.2",
+    "turbo": "2.5.6",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.41.0"
+  }
+}
