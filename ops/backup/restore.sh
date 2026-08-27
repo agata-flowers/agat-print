@@ -21,7 +21,9 @@ tail -n +2 "$manifest" | while IFS=$'\t' read -r object_key checksum; do
   [[ -z "$object_key" ]] && continue
   actual_checksum="$(sha256sum "$minio_dir/$object_key" | cut -d' ' -f1)"
   [[ "$actual_checksum" == "$checksum" ]] || { echo 'Object checksum mismatch' >&2; exit 3; }
-  mc --quiet cp "$minio_dir/$object_key" "target/${MINIO_BUCKET}/${object_key}"
+  mc cp "$minio_dir/$object_key" "target/${MINIO_BUCKET}/${object_key}" >/dev/null 2>&1 || {
+    echo 'Object restore copy failed' >&2; exit 3;
+  }
 done
 psql -Atqc "select to_regclass('public.\"RetentionTombstone\"') is not null" | grep -qx t || {
   echo 'Restore rejected: retention tombstone table is unavailable' >&2; exit 4;

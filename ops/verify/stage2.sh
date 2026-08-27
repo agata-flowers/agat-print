@@ -90,8 +90,8 @@ echo 'Creating synthetic database references and private objects.'
   tombstoned_checksum="$(sha256sum /tmp/tombstoned.bin | cut -d" " -f1)"
   mc alias set source "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
   mc mb --ignore-existing "source/$MINIO_BUCKET" >/dev/null
-  mc --quiet cp /tmp/retained.bin "source/$MINIO_BUCKET/$retained_key"
-  mc --quiet cp /tmp/tombstoned.bin "source/$MINIO_BUCKET/$tombstoned_key"
+  mc cp /tmp/retained.bin "source/$MINIO_BUCKET/$retained_key" >/dev/null 2>&1 || exit 3
+  mc cp /tmp/tombstoned.bin "source/$MINIO_BUCKET/$tombstoned_key" >/dev/null 2>&1 || exit 3
   psql -v ON_ERROR_STOP=1 \
     -v retained_key="$retained_key" -v retained_checksum="$retained_checksum" \
     -v tombstoned_key="$tombstoned_key" -v tombstoned_checksum="$tombstoned_checksum" <<"SQL"
@@ -122,7 +122,7 @@ SCRIPT
   printf %s "stale-copy-that-must-be-deleted" > /tmp/stale.bin
   mc alias set target "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
   mc mb --ignore-existing "target/$MINIO_BUCKET" >/dev/null
-  mc --quiet cp /tmp/stale.bin "target/$MINIO_BUCKET/$tombstoned_key"
+  mc cp /tmp/stale.bin "target/$MINIO_BUCKET/$tombstoned_key" >/dev/null 2>&1 || exit 3
 SCRIPT
 
 restore_started="$(date +%s)"
@@ -138,7 +138,7 @@ echo 'Validating the restored database, manifest object, checksum and tombstone 
   [[ "$retained_count" == 1 && "$tombstone_count" == 1 ]]
   expected_checksum="$(psql -Atqc "SELECT trim(checksum) FROM \"PermanentObjectReference\" WHERE \"objectKey\" = 'verification/retained.bin'")"
   mc alias set target "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
-  mc --quiet cp "target/$MINIO_BUCKET/$retained_key" /tmp/restored.bin
+  mc cp "target/$MINIO_BUCKET/$retained_key" /tmp/restored.bin >/dev/null 2>&1 || exit 3
   actual_checksum="$(sha256sum /tmp/restored.bin | cut -d" " -f1)"
   [[ "$actual_checksum" == "$expected_checksum" ]]
   if mc stat "target/$MINIO_BUCKET/$tombstoned_key" >/dev/null 2>&1; then
