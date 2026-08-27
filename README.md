@@ -26,11 +26,13 @@ Run `pnpm admin:bootstrap` in an interactive production shell. Enter the adminis
 
 ## Quality gates
 
-`pnpm run ci` runs formatting, lint, types, tests, Prisma validation, and production builds. Docker images are checked separately by CI.
+`pnpm run ci` runs formatting, lint, types, tests, Prisma validation, and production builds. GitHub Actions performs a frozen install from a fresh checkout with the standard Git index, then builds all Docker images and runs the isolated stage 2 infrastructure drill.
 
 ## Backup and restore
 
-Set an off-host `RESTIC_REPOSITORY`, S3 credentials, and `RESTIC_PASSWORD`, then run the backup profile described in [operations](docs/OPERATIONS.md). PostgreSQL uses a consistent custom-format `pg_dump`; only permanent, non-expired MinIO objects referenced by the database manifest are in scope. Redis, caches, logs, metrics, and temporary objects are excluded.
+Set an off-host `RESTIC_REPOSITORY`, `BACKUP_S3_URL`, `BACKUP_S3_BUCKET`, S3 credentials, and `RESTIC_PASSWORD`, then run `docker compose --profile backup run --rm backup` as described in [operations](docs/OPERATIONS.md). PostgreSQL uses a consistent custom-format `pg_dump`; only permanent, non-expired MinIO objects referenced by the database manifest are in scope. Redis, caches, logs, metrics, and temporary objects are excluded.
+
+On an isolated Docker host, run the complete recovery check with `bash ops/verify/stage2.sh`. The script uses disposable Compose volumes, restores into separate PostgreSQL and MinIO services, applies deletion tombstones before validation, and records actual RPO/RTO under the ignored `outputs/` directory.
 
 Recovery targets for the pilot are RPO ≤ 24 hours and RTO ≤ 4 hours. A monthly isolated restore drill is mandatory.
 

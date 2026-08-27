@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",
-    "db:validate": "prisma validate",
+    "db:validate": "node scripts/prisma-validate.mjs",
     "db:migrate": "prisma migrate dev",
     "admin:bootstrap": "tsx src/cli/admin-bootstrap.ts"
   },

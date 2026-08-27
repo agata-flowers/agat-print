@@ -48,3 +48,22 @@ jobs:
       - run: docker compose config --quiet
       - run: docker build -f apps/api/Dockerfile .
       - run: docker build -f apps/web/Dockerfile .
+
+  infrastructure:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify fresh checkout and standard Git index
+        run: |
+          test "$GIT_INDEX_FILE" = ""
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Run stage 2 Docker and recovery drill
+        run: bash ops/verify/stage2.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage2-verification-report
+          path: outputs/stage2-verification-report.json
+          if-no-files-found: error

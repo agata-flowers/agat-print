@@ -1,0 +1,81 @@
+services:
+  backup-minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: backup-ci
+      MINIO_ROOT_PASSWORD: backup-ci-secret-change-in-production
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          "mc alias set health http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD >/dev/null && mc ready health",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  postgres-restore:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agat
+      POSTGRES_PASSWORD: restore-ci-only
+      POSTGRES_DB: agat_restore
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U agat -d agat_restore"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-restore:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: restore-ci
+      MINIO_ROOT_PASSWORD: restore-ci-secret-change-in-production
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          "mc alias set health http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD >/dev/null && mc ready health",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backup:
+    environment:
+      NODE_ENV: test
+      RESTIC_REPOSITORY: s3:http://backup-minio:9000/restic
+      RESTIC_PASSWORD: stage2-verification-restic-password
+      BACKUP_S3_URL: http://backup-minio:9000
+      BACKUP_S3_BUCKET: restic
+      AWS_ACCESS_KEY_ID: backup-ci
+      AWS_SECRET_ACCESS_KEY: backup-ci-secret-change-in-production
+      MINIO_BUCKET: agat-private
+      MINIO_ACCESS_KEY: development-only
+      MINIO_SECRET_KEY: development-only-change-me
+    depends_on:
+      backup-minio: { condition: service_healthy }
+
+  restore:
+    profiles: [backup]
+    build: { context: ., dockerfile: ops/backup/Dockerfile }
+    environment:
+      RESTIC_REPOSITORY: s3:http://backup-minio:9000/restic
+      RESTIC_PASSWORD: stage2-verification-restic-password
+      AWS_ACCESS_KEY_ID: backup-ci
+      AWS_SECRET_ACCESS_KEY: backup-ci-secret-change-in-production
+      PGHOST: postgres-restore
+      PGUSER: agat
+      PGDATABASE: agat_restore
+      PGPASSWORD: restore-ci-only
+      MINIO_ALIAS_URL: http://minio-restore:9000
+      MINIO_BUCKET: agat-private
+      MINIO_ACCESS_KEY: restore-ci
+      MINIO_SECRET_KEY: restore-ci-secret-change-in-production
+    depends_on:
+      backup-minio: { condition: service_healthy }
+      postgres-restore: { condition: service_healthy }
+      minio-restore: { condition: service_healthy }
+    entrypoint: ["/opt/agat/restore.sh"]

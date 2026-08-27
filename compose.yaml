@@ -40,8 +40,15 @@ services:
     ports: ["9000:9000", "9001:9001"]
   api:
     build: { context: ., dockerfile: apps/api/Dockerfile }
-    env_file: [.env]
+    env_file:
+      - path: .env
+        required: false
     environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-development-only-change-me-at-least-32-chars}
+      OTP_PROVIDER: ${OTP_PROVIDER:-mock}
+      MOCK_OTP_CODE: ${MOCK_OTP_CODE:-000000}
       DATABASE_URL: postgresql://agat:${POSTGRES_PASSWORD:-development-only}@postgres:5432/agat_print?schema=public
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
@@ -72,13 +79,18 @@ services:
   backup:
     profiles: [backup]
     build: { context: ., dockerfile: ops/backup/Dockerfile }
-    env_file: [.env]
+    env_file:
+      - path: .env
+        required: false
     environment:
       PGHOST: postgres
       PGUSER: agat
       PGDATABASE: agat_print
       PGPASSWORD: ${POSTGRES_PASSWORD:-development-only}
       MINIO_ALIAS_URL: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-agat-private}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-development-only}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-development-only-change-me}
     depends_on:
       postgres: { condition: service_healthy }
       minio: { condition: service_healthy }

@@ -21,6 +21,13 @@ enum PartnerStatus {
   SUSPENDED
 }
 
+enum ObjectRetentionClass {
+  ORIGINAL
+  PREVIEW
+  DERIVATIVE
+  PRINT_READY
+}
+
 model User {
   id          String         @id @default(uuid()) @db.Uuid
   phone       String         @unique @db.VarChar(32)
@@ -40,6 +47,7 @@ model UserRole {
   role      Role
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([userId, role])
 }
 
@@ -54,6 +62,7 @@ model OtpChallenge {
   createdAt   DateTime  @default(now())
   userId      String?   @db.Uuid
   user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([phone, createdAt])
 }
 
@@ -68,6 +77,7 @@ model Session {
   reuseDetectedAt  DateTime?
   createdAt        DateTime  @default(now())
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, familyId])
 }
 
@@ -103,6 +113,7 @@ model AuditEvent {
   metadata   Json     @default("{}")
   createdAt  DateTime @default(now())
   actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
   @@index([eventType, createdAt])
 }
 
@@ -110,4 +121,25 @@ model BootstrapState {
   key       String   @id @db.VarChar(50)
   usedAt    DateTime
   createdAt DateTime @default(now())
+}
+
+/// Infrastructure record used by backup/retention. It does not expose uploads.
+model PermanentObjectReference {
+  objectKey      String               @id @db.VarChar(1024)
+  checksum       String               @db.Char(64)
+  retentionClass ObjectRetentionClass
+  expiresAt      DateTime
+  deletedAt      DateTime?
+  createdAt      DateTime             @default(now())
+
+  @@index([expiresAt, deletedAt])
+}
+
+/// Deletion marker replayed before restored object storage is exposed.
+model RetentionTombstone {
+  objectKey String   @id @db.VarChar(1024)
+  deletedAt DateTime @default(now())
+  reason    String?  @db.VarChar(80)
+
+  @@index([deletedAt])
 }

@@ -19,6 +19,13 @@ const integer = (value: string | undefined, fallback: number): number => {
   return parsed;
 };
 
+const assertProductionSecret = (secret: string): void => {
+  const forbiddenMarker =
+    /development|test-only|ci-only|local-only|change-me|replace-outside|example|password|secret-at-least/i;
+  if (forbiddenMarker.test(secret) || new Set(secret).size < 10)
+    throw new Error("Development JWT secrets are forbidden in production");
+};
+
 export function loadEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): AppEnvironment {
@@ -32,6 +39,11 @@ export function loadEnvironment(
   const jwtSecret = source.JWT_ACCESS_SECRET ?? "";
   if (jwtSecret.length < 32)
     throw new Error("JWT_ACCESS_SECRET must contain at least 32 characters");
+  if (nodeEnv === "production") {
+    assertProductionSecret(jwtSecret);
+    if (source.MOCK_OTP_CODE)
+      throw new Error("MOCK_OTP_CODE is forbidden in production");
+  }
   const webOrigin = source.WEB_ORIGIN ?? "http://localhost:3000";
   const origin = new URL(webOrigin);
   if (nodeEnv === "production" && origin.protocol !== "https:")

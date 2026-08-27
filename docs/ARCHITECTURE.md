@@ -37,10 +37,13 @@ erDiagram
   User ||--o| Partner : applies
   Partner ||--o{ Branch : operates
   User ||--o{ AuditEvent : acts
+  PermanentObjectReference ||--o| RetentionTombstone : deleted_by
   Order ||--|| PriceSnapshot : freezes
   Order ||--o{ Assignment : attempts
   Assignment ||--|| PartnerPayoutSnapshot : offers
 ```
+
+`PermanentObjectReference` and `RetentionTombstone` are stage 2 infrastructure records, not upload APIs. The reference records the object key, SHA-256 checksum, bounded retention class and expiry used to build an allow-list backup manifest. A tombstone is durable deletion intent. Restore must replay every tombstone before API traffic is permitted, including against stale objects already present in the recovery bucket.
 
 ## State machine contract
 
