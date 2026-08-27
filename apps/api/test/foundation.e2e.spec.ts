@@ -1,10 +1,13 @@
 import "reflect-metadata";
+import "./test-environment";
 import { ValidationPipe, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { PrismaService } from "../src/prisma/prisma.service";
+import { AdminBootstrapService } from "../src/admin/admin-bootstrap.service";
+import { AppModule } from "../src/app.module";
+import { PrismaService } from "../src/prisma/prisma.service";
 
 const runDatabaseTests = process.env.RUN_DB_E2E === "1";
 const origin = "http://localhost:3000";
@@ -14,10 +17,6 @@ describe.skipIf(!runDatabaseTests)("foundation e2e", () => {
   let prisma: PrismaService;
 
   beforeAll(async () => {
-    const { AppModule } = await import("../src/app.module");
-    const { PrismaService: PrismaServiceToken } = await import(
-      "../src/prisma/prisma.service"
-    );
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -32,7 +31,7 @@ describe.skipIf(!runDatabaseTests)("foundation e2e", () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaServiceToken);
+    prisma = app.get(PrismaService);
     await prisma.$transaction([
       prisma.auditEvent.deleteMany(),
       prisma.branch.deleteMany(),
@@ -122,9 +121,6 @@ describe.skipIf(!runDatabaseTests)("foundation e2e", () => {
       .expect(201);
     await customer.get("/api/v1/partners/workspace").expect(403);
 
-    const { AdminBootstrapService } = await import(
-      "../src/admin/admin-bootstrap.service"
-    );
     const bootstrap = app.get(AdminBootstrapService);
     await bootstrap.bootstrap("+998903333333");
     await expect(bootstrap.bootstrap("+998904444444")).rejects.toThrow(
