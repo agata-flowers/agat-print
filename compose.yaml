@@ -57,24 +57,32 @@ services:
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
     healthcheck:
-      {
-        test: [CMD, wget, -qO-, http://localhost:4000/api/v1/health/live],
-        interval: 10s,
-        timeout: 3s,
-        retries: 10,
-      }
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://localhost:4000/api/v1/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     ports: ["4000:4000"]
   web:
     build: { context: ., dockerfile: apps/web/Dockerfile }
     environment: { NEXT_PUBLIC_API_ORIGIN: http://localhost:4000 }
     depends_on: { api: { condition: service_healthy } }
     healthcheck:
-      {
-        test: [CMD, wget, -qO-, http://localhost:3000],
-        interval: 10s,
-        timeout: 3s,
-        retries: 10,
-      }
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     ports: ["3000:3000"]
   backup:
     profiles: [backup]

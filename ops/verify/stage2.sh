@@ -6,7 +6,14 @@ report_dir="${VERIFY_REPORT_DIR:-outputs}"
 mkdir -p "$report_dir"
 
 cleanup() {
+  local status="$?"
+  if [[ "$status" -ne 0 ]]; then
+    "${compose[@]}" ps >&2 || true
+    "${compose[@]}" logs --no-color --tail=100 api web postgres redis minio \
+      backup-minio postgres-restore minio-restore >&2 || true
+  fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  return "$status"
 }
 trap cleanup EXIT
 
