@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, UseGuards } from "@nestjs/common";
 import { AccessGuard } from "../auth/access.guard";
 import { CurrentUser } from "../common/current-user.decorator";
 import type { AuthenticatedUser } from "../common/request-user";
@@ -7,7 +7,7 @@ import { PrismaService } from "../prisma/prisma.service";
 @Controller("profile")
 @UseGuards(AccessGuard)
 export class ProfileController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
   @Get() async get(@CurrentUser() user: AuthenticatedUser) {
     const record = await this.prisma.user.findUniqueOrThrow({
       where: { id: user.id },

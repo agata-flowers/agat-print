@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -10,8 +11,8 @@ import type { CreatePartnerDto } from "./dto";
 @Injectable()
 export class PartnersService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
   async create(ownerId: string, input: CreatePartnerDto) {
     const exists = await this.prisma.partner.findUnique({ where: { ownerId } });

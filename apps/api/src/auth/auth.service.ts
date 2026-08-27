@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -28,10 +29,10 @@ interface SessionResult {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
-    private readonly otp: MockOtpProvider,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JwtService) private readonly jwt: JwtService,
+    @Inject(MockOtpProvider) private readonly otp: MockOtpProvider,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async requestOtp(

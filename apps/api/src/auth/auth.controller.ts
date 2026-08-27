@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Inject,
   Post,
   Req,
   Res,
@@ -26,7 +27,7 @@ const cookieBase = (): CookieOptions => ({
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   @Get("csrf") csrf(@Res({ passthrough: true }) response: Response) {
     const token = randomToken();

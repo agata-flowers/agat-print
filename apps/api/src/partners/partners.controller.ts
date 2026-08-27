@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   ParseUUIDPipe,
   Post,
@@ -18,7 +19,9 @@ import { PartnersService } from "./partners.service";
 @Controller("partners")
 @UseGuards(AccessGuard)
 export class PartnersController {
-  constructor(private readonly partners: PartnersService) {}
+  constructor(
+    @Inject(PartnersService) private readonly partners: PartnersService,
+  ) {}
   @Post() create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() input: CreatePartnerDto,
@@ -41,7 +44,9 @@ export class PartnersController {
 @UseGuards(AccessGuard, RolesGuard)
 @Roles("ADMIN")
 export class AdminPartnersController {
-  constructor(private readonly partners: PartnersService) {}
+  constructor(
+    @Inject(PartnersService) private readonly partners: PartnersService,
+  ) {}
   @Post(":partnerId/approve") approve(
     @CurrentUser() user: AuthenticatedUser,
     @Param("partnerId", ParseUUIDPipe) id: string,
