@@ -34,7 +34,7 @@ mkdir -p "$work_dir/minio"
 tail -n +2 "$work_dir/minio-manifest.tsv" | while IFS=$'\t' read -r object_key checksum; do
   [[ -z "$object_key" ]] && continue
   mkdir -p "$(dirname "$work_dir/minio/${object_key}")"
-  mc cp --quiet "source/${MINIO_BUCKET}/${object_key}" "$work_dir/minio/${object_key}"
+  mc --quiet cp "source/${MINIO_BUCKET}/${object_key}" "$work_dir/minio/${object_key}"
   actual_checksum="$(sha256sum "$work_dir/minio/${object_key}" | cut -d' ' -f1)"
   [[ "$actual_checksum" == "$checksum" ]] || { echo 'Object checksum mismatch' >&2; exit 3; }
 done

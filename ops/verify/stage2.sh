@@ -81,7 +81,7 @@ curl --fail --silent http://localhost:4000/api/v1/health/ready >/dev/null
 curl --fail --silent http://localhost:3000 >/dev/null
 
 echo 'Creating synthetic database references and private objects.'
-"${compose[@]}" run --rm --entrypoint bash backup -ceu '
+"${compose[@]}" run --rm -T --entrypoint bash backup -seu <<'SCRIPT'
   retained_key="verification/retained.bin"
   tombstoned_key="verification/tombstoned.bin"
   printf %s "stage2-retained-object" > /tmp/retained.bin
@@ -90,8 +90,8 @@ echo 'Creating synthetic database references and private objects.'
   tombstoned_checksum="$(sha256sum /tmp/tombstoned.bin | cut -d" " -f1)"
   mc alias set source "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
   mc mb --ignore-existing "source/$MINIO_BUCKET" >/dev/null
-  mc cp --quiet /tmp/retained.bin "source/$MINIO_BUCKET/$retained_key"
-  mc cp --quiet /tmp/tombstoned.bin "source/$MINIO_BUCKET/$tombstoned_key"
+  mc --quiet cp /tmp/retained.bin "source/$MINIO_BUCKET/$retained_key"
+  mc --quiet cp /tmp/tombstoned.bin "source/$MINIO_BUCKET/$tombstoned_key"
   psql -v ON_ERROR_STOP=1 \
     -v retained_key="$retained_key" -v retained_checksum="$retained_checksum" \
     -v tombstoned_key="$tombstoned_key" -v tombstoned_checksum="$tombstoned_checksum" <<"SQL"
@@ -102,50 +102,50 @@ VALUES (:'tombstoned_key', :'tombstoned_checksum', 'PRINT_READY', now() + interv
 INSERT INTO "RetentionTombstone" ("objectKey", reason)
 VALUES (:'tombstoned_key', 'retention-expired');
 SQL
-'
+SCRIPT
 
 backup_started="$(date +%s)"
 "${compose[@]}" run --rm backup
 
 echo 'Deleting source data and seeding a stale object in the isolated restore target.'
-"${compose[@]}" run --rm --entrypoint bash backup -ceu '
+"${compose[@]}" run --rm -T --entrypoint bash backup -seu <<'SCRIPT'
   retained_key="verification/retained.bin"
   tombstoned_key="verification/tombstoned.bin"
   mc alias set source "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
   mc rm --force "source/$MINIO_BUCKET/$retained_key" >/dev/null
   mc rm --force "source/$MINIO_BUCKET/$tombstoned_key" >/dev/null
-  psql -v ON_ERROR_STOP=1 -v retained_key="$retained_key" \
-    -c "DELETE FROM \"PermanentObjectReference\" WHERE \"objectKey\" = :'retained_key'" >/dev/null
-'
-"${compose[@]}" run --rm --entrypoint bash restore -ceu '
+  psql -v ON_ERROR_STOP=1 \
+    -c "DELETE FROM \"PermanentObjectReference\" WHERE \"objectKey\" = 'verification/retained.bin'" >/dev/null
+SCRIPT
+"${compose[@]}" run --rm -T --entrypoint bash restore -seu <<'SCRIPT'
   tombstoned_key="verification/tombstoned.bin"
   printf %s "stale-copy-that-must-be-deleted" > /tmp/stale.bin
   mc alias set target "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
   mc mb --ignore-existing "target/$MINIO_BUCKET" >/dev/null
-  mc cp --quiet /tmp/stale.bin "target/$MINIO_BUCKET/$tombstoned_key"
-'
+  mc --quiet cp /tmp/stale.bin "target/$MINIO_BUCKET/$tombstoned_key"
+SCRIPT
 
 restore_started="$(date +%s)"
 "${compose[@]}" run --rm restore
 restore_finished="$(date +%s)"
 
 echo 'Validating the restored database, manifest object, checksum and tombstone replay.'
-"${compose[@]}" run --rm --entrypoint bash restore -ceu '
+"${compose[@]}" run --rm -T --entrypoint bash restore -seu <<'SCRIPT'
   retained_key="verification/retained.bin"
   tombstoned_key="verification/tombstoned.bin"
-  retained_count="$(psql -Atqc "SELECT count(*) FROM \"PermanentObjectReference\" WHERE \"objectKey\" = '\''$retained_key'\''")"
-  tombstone_count="$(psql -Atqc "SELECT count(*) FROM \"RetentionTombstone\" WHERE \"objectKey\" = '\''$tombstoned_key'\''")"
+  retained_count="$(psql -Atqc "SELECT count(*) FROM \"PermanentObjectReference\" WHERE \"objectKey\" = 'verification/retained.bin'")"
+  tombstone_count="$(psql -Atqc "SELECT count(*) FROM \"RetentionTombstone\" WHERE \"objectKey\" = 'verification/tombstoned.bin'")"
   [[ "$retained_count" == 1 && "$tombstone_count" == 1 ]]
-  expected_checksum="$(psql -Atqc "SELECT trim(checksum) FROM \"PermanentObjectReference\" WHERE \"objectKey\" = '\''$retained_key'\''")"
+  expected_checksum="$(psql -Atqc "SELECT trim(checksum) FROM \"PermanentObjectReference\" WHERE \"objectKey\" = 'verification/retained.bin'")"
   mc alias set target "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
-  mc cp --quiet "target/$MINIO_BUCKET/$retained_key" /tmp/restored.bin
+  mc --quiet cp "target/$MINIO_BUCKET/$retained_key" /tmp/restored.bin
   actual_checksum="$(sha256sum /tmp/restored.bin | cut -d" " -f1)"
   [[ "$actual_checksum" == "$expected_checksum" ]]
   if mc stat "target/$MINIO_BUCKET/$tombstoned_key" >/dev/null 2>&1; then
     echo "Retention tombstone replay failed" >&2
     exit 1
   fi
-'
+SCRIPT
 "${compose[@]}" run --rm \
   -e DATABASE_URL=postgresql://agat:restore-ci-only@postgres-restore:5432/agat_restore?schema=public \
   api pnpm --filter @agat/api exec prisma migrate deploy
