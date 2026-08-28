@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: /api/v1
 paths:
@@ -62,6 +62,59 @@ paths:
           "200": { description: Approved },
           "403": { description: Admin required },
         }
+  /uploads:
+    post:
+      summary: Reserve quota and create a protected upload session
+      description: Original filenames are not accepted or stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUploadSession" }
+      responses:
+        "201":
+          description: Upload session created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadSession" }
+        "400": { description: Unsupported extension or invalid input }
+        "413": { description: File or active-user quota exceeded }
+        "401": { description: Authentication required }
+  /uploads/{uploadId}/content:
+    put:
+      summary: Stream one upload into private quarantine and finalize validation
+      description: >-
+        Requires an exact reserved size. The server validates extension,
+        declared MIME, signature and bounded structure, then requires a clean
+        antivirus verdict before promotion and atomic queue creation.
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary, maxLength: 26214400 }
+      responses:
+        "200":
+          description: Accepted and queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueuedUpload" }
+        "409": { description: Session is no longer writable }
+        "413": { description: Reserved or configured size exceeded }
+        "422":
+          description: Signature, structure, page, pixel or antivirus rejection
+        "503": { description: Antivirus unavailable; promotion denied }
+  /uploads/{uploadId}:
+    delete:
+      summary: Cancel an owned upload and remove private objects idempotently
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      responses:
+        "204": { description: Cancelled and cleanup requested }
+        "403": { description: Upload belongs to another user }
+        "404": { description: Upload does not exist }
+        "409": { description: Upload can no longer be cancelled }
   /health/live:
     get:
       responses: { "200": { description: Process alive } }
@@ -75,3 +128,44 @@ paths:
   /metrics:
     get:
       responses: { "200": { description: Prometheus text format } }
+components:
+  parameters:
+    UploadId:
+      in: path
+      name: uploadId
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    CreateUploadSession:
+      type: object
+      additionalProperties: false
+      required: [extension, declaredMime, sizeBytes]
+      properties:
+        extension:
+          type: string
+          enum: [pdf, docx, jpg, jpeg, png]
+        declaredMime:
+          type: string
+          enum:
+            - application/pdf
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            - image/jpeg
+            - image/png
+        sizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 26214400
+    UploadSession:
+      type: object
+      required: [id, status, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [CREATED] }
+        expiresAt: { type: string, format: date-time }
+    QueuedUpload:
+      type: object
+      required: [id, status, pageCount]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [QUEUED] }
+        pageCount: { type: integer, minimum: 1, maximum: 100 }

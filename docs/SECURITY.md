@@ -11,22 +11,46 @@
 | Sensitive cache leakage     | `no-store, private` and service-worker network-only denylist                                 |
 | Telemetry leakage           | Structured allowlists; no PII, secrets, URLs, IDs, or high-cardinality labels                |
 | Double processing           | Aggregate versions, outbox/inbox deduplication and provider idempotency                      |
-| Malicious documents         | Future isolated converter, signature/MIME checks, antivirus, quotas                          |
+| Polyglot or disguised file  | Extension/media-type/signature agreement and bounded parsers                                 |
+| Malware or scanner outage   | Private quarantine, ClamAV before promotion, fail-closed outage policy                       |
+| DOCX archive bomb/traversal | Lazy ZIP metadata checks, entry/unpacked/ratio limits, normalized path rejection             |
+| Image decompression bomb    | Dimension parsing and 40-megapixel decoded-image ceiling                                     |
+| Converter escape            | One-shot non-root container, no network/secrets/capabilities, read-only root, seccomp/limits |
+| Duplicate processing        | Transactional outbox, BullMQ job ID, CAS lease, durable inbox and unique result              |
 | Backup disclosure           | restic encryption, off-host access separation, 30-day expiry                                 |
 
 ## RBAC
 
-| Capability                 | Customer | Pending partner | Approved partner | Courier | Admin         |
-| -------------------------- | -------- | --------------- | ---------------- | ------- | ------------- |
-| Own profile/session        | yes      | yes             | yes              | yes     | yes           |
-| Submit partner application | yes      | n/a             | n/a              | no      | yes           |
-| Partner workspace          | no       | no              | yes, own         | no      | yes           |
-| Approve partner            | no       | no              | no               | no      | yes           |
-| Bootstrap admin            | no       | no              | no               | no      | CLI once only |
+| Capability                  | Customer | Pending partner | Approved partner | Courier | Admin         |
+| --------------------------- | -------- | --------------- | ---------------- | ------- | ------------- |
+| Own profile/session         | yes      | yes             | yes              | yes     | yes           |
+| Submit partner application  | yes      | n/a             | n/a              | no      | yes           |
+| Partner workspace           | no       | no              | yes, own         | no      | yes           |
+| Approve partner             | no       | no              | no               | no      | yes           |
+| Bootstrap admin             | no       | no              | no               | no      | CLI once only |
+| Create/cancel own upload    | yes      | yes             | yes              | yes     | yes           |
+| Read upload object directly | no       | no              | no               | no      | no            |
 
 ## Retention
 
-Incomplete uploads/temp: 24 hours; originals: 7 days after terminal state; preview/derivatives/print-ready: 30 days; content-free technical/access audit: 90 days; encrypted backup snapshots: 30 days. Financial/legal record retention remains a counsel decision. Restores apply deletion tombstones before API exposure.
+Incomplete upload sessions, quarantine objects and processing temp: 24 hours
+maximum, with eager cleanup on rejection/cancellation. Originals: 7 days after
+terminal state; derivatives: 30 days; content-free technical/access audit:
+90 days; encrypted backup snapshots: 30 days. Financial/legal record retention
+remains a counsel decision. Restores apply deletion tombstones before API
+exposure.
+
+## Upload privacy invariants
+
+- Client filenames are not accepted as identifiers and are neither persisted
+  nor logged.
+- Quarantine, original and result keys are opaque random/hash values without
+  user IDs, phone numbers or other personal values.
+- No object key or signed URL may enter logs, audit metadata, metrics,
+  analytics, browser storage or service-worker cache.
+- Antivirus and validation failures expose only bounded error codes.
+- Quarantine is private and never served to a client or processing container
+  before a clean verdict.
 
 ## Incident response
 

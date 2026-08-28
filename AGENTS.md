@@ -1,7 +1,11 @@
 # AGAT PRINT agent instructions
 
-- Current authorized scope is planning documentation and foundation (stages 1–2) only.
-- Do not implement uploads, document conversion, OCR/CV, preflight, orders, pricing, payments, dispatch, production queues, or delivery without explicit stage 3 approval.
+- Current authorized scope is planning, platform foundation, and the protected
+  upload/isolated processing foundation (stages 1–3) only.
+- Stage 3 was explicitly approved on 2026-08-28. Do not implement user preview,
+  full preflight, manual review, layout approval, orders, pricing, payments,
+  dispatch, production queues, printing, or delivery without explicit stage 4
+  approval.
 - Keep the domain core in the NestJS modular monolith. External capabilities use provider interfaces.
 - Never log OTPs, cookies, tokens, phone numbers, addresses, document contents, filenames, object keys, or signed URLs.
 - Metrics may use only bounded enums and route templates. Never use IDs, IPs, query strings, request IDs, or user-controlled text as labels.

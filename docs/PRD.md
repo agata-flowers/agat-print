@@ -4,9 +4,13 @@
 
 AGAT PRINT lets a customer prepare a print job remotely, know the price before payment, and route it to a capable nearby studio. The pilot serves Tashkent in Russian and Uzbek and is optimized for weak mobile connections.
 
-## Stage 1–2 release
+## Stage 1–3 release
 
-This release establishes secure identity and partner onboarding. A customer can request and verify a development OTP, create a profile, and maintain a session. A partner can register a legal/display name and one branch, then wait for administrator approval. An administrator can approve the partner. No customer document is accepted.
+This release establishes secure identity, partner onboarding and protected file
+intake. An authenticated user can reserve quota, upload PDF, DOCX, JPG/JPEG or
+PNG into private quarantine, receive bounded validation/antivirus rejection,
+cancel an upload, and have an accepted file queued for isolated normalization.
+It does not expose a preview or create an order.
 
 ## MVP boundary
 
@@ -16,12 +20,13 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 
 ## Roles and stories
 
-| Role              | Stage 2 story                       | Acceptance criterion                                                  |
-| ----------------- | ----------------------------------- | --------------------------------------------------------------------- |
-| Customer          | Sign in by phone without a password | OTP expires, is single-use, attempt-limited, and creates safe cookies |
-| Partner applicant | Register a company and branch       | Record is pending and protected from partner-only access              |
-| Administrator     | Review and approve a partner        | Approval is audited and grants the partner role atomically            |
-| Courier           | Reserved role                       | No courier workflow exists before delivery stage                      |
+| Role               | Current story                       | Acceptance criterion                                                  |
+| ------------------ | ----------------------------------- | --------------------------------------------------------------------- |
+| Customer           | Sign in by phone without a password | OTP expires, is single-use, attempt-limited, and creates safe cookies |
+| Partner applicant  | Register a company and branch       | Record is pending and protected from partner-only access              |
+| Administrator      | Review and approve a partner        | Approval is audited and grants the partner role atomically            |
+| Courier            | Reserved role                       | No courier workflow exists before delivery stage                      |
+| Authenticated user | Upload one supported private file   | Quota, signature, AV and isolation controls pass before persistence   |
 
 ## Non-functional requirements
 
@@ -33,8 +38,8 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 
 ## Backlog sequence
 
-1. Secure file intake and isolated conversion.
-2. Preflight, quality/manual review, preview, and approval.
+1. Secure file intake and isolated conversion foundation — implemented.
+2. Preflight, quality/manual review, preview, and approval — not started.
 3. Pricing, order state machine, and mock payment/refund.
 4. Partner matching, offered payout snapshot, manual production.
 5. Pickup, courier assignment, delivery, disputes, and retention automation.
