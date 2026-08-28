@@ -72,4 +72,3 @@ must not be treated as production capacity estimates.
   present and production configuration rejects the mock provider.
 - Uploads, conversion, OCR/CV, preflight, orders, payment, dispatch, production
   and delivery were outside stage 2 and were not implemented.
-
