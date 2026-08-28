@@ -19,24 +19,24 @@ format check was repaired.
 
 ## Verification results
 
-| Check | Result |
-| --- | --- |
-| Frozen dependency installation | Passed |
-| Format, lint, typecheck, tests and production build | Passed |
-| Fresh checkout, standard Git index and clean status | Passed |
-| Docker Compose configuration, build, startup and health | Passed |
-| API, web, backup and restore images | Built |
-| Migrations on a clean PostgreSQL database | Two migrations applied |
-| Repeated migration deployment | No pending migrations |
-| Database E2E suite | 5 files and 16 tests passed |
-| Production rejection of mock OTP and unsafe secrets | Passed |
-| Consistent custom-format PostgreSQL dump | Passed |
-| Persistent-object manifest filtering | Passed |
-| Encrypted restic backup to separate S3-compatible service | Passed |
-| Source deletion and isolated PostgreSQL/MinIO restore | Passed |
-| Mandatory retention tombstone replay | Passed |
-| Restored database, manifest and object checksum validation | Passed |
-| Sensitive object identifiers absent from the final CI log | Passed |
+| Check                                                      | Result                      |
+| ---------------------------------------------------------- | --------------------------- |
+| Frozen dependency installation                             | Passed                      |
+| Format, lint, typecheck, tests and production build        | Passed                      |
+| Fresh checkout, standard Git index and clean status        | Passed                      |
+| Docker Compose configuration, build, startup and health    | Passed                      |
+| API, web, backup and restore images                        | Built                       |
+| Migrations on a clean PostgreSQL database                  | Two migrations applied      |
+| Repeated migration deployment                              | No pending migrations       |
+| Database E2E suite                                         | 5 files and 16 tests passed |
+| Production rejection of mock OTP and unsafe secrets        | Passed                      |
+| Consistent custom-format PostgreSQL dump                   | Passed                      |
+| Persistent-object manifest filtering                       | Passed                      |
+| Encrypted restic backup to separate S3-compatible service  | Passed                      |
+| Source deletion and isolated PostgreSQL/MinIO restore      | Passed                      |
+| Mandatory retention tombstone replay                       | Passed                      |
+| Restored database, manifest and object checksum validation | Passed                      |
+| Sensitive object identifiers absent from the final CI log  | Passed                      |
 
 ## Measured recovery objectives
 
