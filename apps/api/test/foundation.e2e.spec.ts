@@ -34,6 +34,13 @@ describe.skipIf(!runDatabaseTests)("foundation e2e", () => {
     prisma = app.get(PrismaService);
     await prisma.$transaction([
       prisma.auditEvent.deleteMany(),
+      prisma.inboxOperation.deleteMany(),
+      prisma.outboxEvent.deleteMany(),
+      prisma.processingResult.deleteMany(),
+      prisma.processingJob.deleteMany(),
+      prisma.uploadSession.deleteMany(),
+      prisma.retentionTombstone.deleteMany(),
+      prisma.permanentObjectReference.deleteMany(),
       prisma.branch.deleteMany(),
       prisma.partner.deleteMany(),
       prisma.session.deleteMany(),

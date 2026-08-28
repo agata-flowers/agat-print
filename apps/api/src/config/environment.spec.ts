@@ -70,4 +70,16 @@ describe("environment validation", () => {
       }),
     ).toThrow(/MOCK_OTP_CODE/);
   });
+  it("requires object-storage credentials from the production secret store", () => {
+    expect(() =>
+      loadEnvironment({
+        NODE_ENV: "production",
+        WEB_ORIGIN: "https://print.invalid",
+        OTP_PROVIDER: "sms",
+        JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
+        MINIO_ACCESS_KEY: "development-only",
+        MINIO_SECRET_KEY: "development-only-change-me",
+      }),
+    ).toThrow(/secret store/);
+  });
 });

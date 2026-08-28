@@ -28,6 +28,38 @@ enum ObjectRetentionClass {
   PRINT_READY
 }
 
+enum UploadFileKind {
+  PDF
+  DOCX
+  JPEG
+  PNG
+}
+
+enum UploadStatus {
+  CREATED
+  QUARANTINED
+  SCANNING
+  QUEUED
+  PROCESSING
+  READY
+  REJECTED
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
+enum ProcessingOperation {
+  NORMALIZE
+}
+
+enum ProcessingJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+}
+
 model User {
   id          String         @id @default(uuid()) @db.Uuid
   phone       String         @unique @db.VarChar(32)
@@ -40,6 +72,7 @@ model User {
   challenges OtpChallenge[]
   partner     Partner?
   auditEvents AuditEvent[]   @relation("AuditActor")
+  uploads     UploadSession[]
 }
 
 model UserRole {
@@ -142,4 +175,89 @@ model RetentionTombstone {
   reason    String?  @db.VarChar(80)
 
   @@index([deletedAt])
+}
+
+/// A quota reservation and lifecycle record. Original filenames are never stored.
+model UploadSession {
+  id                  String         @id @default(uuid()) @db.Uuid
+  fileVersion         String         @unique @default(uuid()) @db.Uuid
+  userId              String         @db.Uuid
+  fileKind            UploadFileKind
+  declaredMime        String         @db.VarChar(100)
+  expectedSizeBytes   BigInt
+  actualSizeBytes     BigInt?
+  sha256              String?        @db.Char(64)
+  pageCount           Int?
+  pixelCount          BigInt?
+  status              UploadStatus   @default(CREATED)
+  quarantineObjectKey String         @unique @db.VarChar(160)
+  permanentObjectKey  String?        @unique @db.VarChar(160)
+  version             Int            @default(0)
+  expiresAt           DateTime
+  cancelledAt         DateTime?
+  completedAt         DateTime?
+  rejectionCode       String?        @db.VarChar(80)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  user                User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  processingJobs      ProcessingJob[]
+  processingResults   ProcessingResult[]
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+}
+
+model ProcessingJob {
+  id           String              @id @default(uuid()) @db.Uuid
+  uploadId     String              @db.Uuid
+  operation    ProcessingOperation
+  settingsHash String              @db.Char(64)
+  dedupKey     String              @unique @db.Char(64)
+  resultObjectKey String           @unique @db.VarChar(160)
+  status       ProcessingJobStatus @default(PENDING)
+  aggregateVersion Int
+  attempts     Int                 @default(0)
+  leaseOwner   String?             @db.VarChar(100)
+  leaseUntil   DateTime?
+  lastErrorCode String?            @db.VarChar(80)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  upload       UploadSession       @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  result       ProcessingResult?
+
+  @@index([status, leaseUntil])
+}
+
+model ProcessingResult {
+  id         String          @id @default(uuid()) @db.Uuid
+  jobId      String          @unique @db.Uuid
+  uploadId   String          @db.Uuid
+  objectKey  String          @unique @db.VarChar(160)
+  checksum   String          @db.Char(64)
+  sizeBytes  BigInt
+  pageCount  Int
+  createdAt  DateTime        @default(now())
+  job        ProcessingJob   @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  upload     UploadSession   @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+}
+
+model OutboxEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  aggregateType    String   @db.VarChar(50)
+  aggregateId      String   @db.Uuid
+  aggregateVersion Int
+  eventType        String   @db.VarChar(80)
+  dedupKey         String   @unique @db.Char(64)
+  payload          Json
+  createdAt        DateTime @default(now())
+  publishedAt      DateTime?
+
+  @@index([publishedAt, createdAt])
+}
+
+model InboxOperation {
+  dedupKey    String   @id @db.Char(64)
+  operation   String   @db.VarChar(80)
+  completedAt DateTime @default(now())
+  resultId    String?  @db.Uuid
 }

@@ -10,6 +10,26 @@ export interface AppEnvironment {
   otpRateLimitPerHour: number;
   accessTtlSeconds: number;
   refreshTtlSeconds: number;
+  redisUrl: string;
+  minioEndpoint: string;
+  minioAccessKey: string;
+  minioSecretKey: string;
+  minioBucket: string;
+  clamavHost: string;
+  clamavPort: number;
+  uploadMaxFileBytes: number;
+  uploadMaxPages: number;
+  uploadUserActiveQuotaBytes: number;
+  uploadMaxImagePixels: number;
+  uploadSessionTtlSeconds: number;
+  docxMaxEntries: number;
+  docxMaxUncompressedBytes: number;
+  docxMaxCompressionRatio: number;
+  processingDispatchEnabled: boolean;
+  processingImage: string;
+  processingRunnerScript: string;
+  processingSeccompProfile: string;
+  processingTimeoutSeconds: number;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -39,15 +59,22 @@ export function loadEnvironment(
   const jwtSecret = source.JWT_ACCESS_SECRET ?? "";
   if (jwtSecret.length < 32)
     throw new Error("JWT_ACCESS_SECRET must contain at least 32 characters");
-  if (nodeEnv === "production") {
-    assertProductionSecret(jwtSecret);
-    if (source.MOCK_OTP_CODE)
-      throw new Error("MOCK_OTP_CODE is forbidden in production");
-  }
   const webOrigin = source.WEB_ORIGIN ?? "http://localhost:3000";
   const origin = new URL(webOrigin);
   if (nodeEnv === "production" && origin.protocol !== "https:")
     throw new Error("Production WEB_ORIGIN must use HTTPS");
+  if (nodeEnv === "production") {
+    assertProductionSecret(jwtSecret);
+    if (source.MOCK_OTP_CODE)
+      throw new Error("MOCK_OTP_CODE is forbidden in production");
+    for (const [name, value] of [
+      ["MINIO_ACCESS_KEY", source.MINIO_ACCESS_KEY ?? ""],
+      ["MINIO_SECRET_KEY", source.MINIO_SECRET_KEY ?? ""],
+    ] as const) {
+      if (!value || forbiddenProductionValue(value))
+        throw new Error(`${name} must come from the production secret store`);
+    }
+  }
   return {
     nodeEnv,
     webOrigin,
@@ -60,5 +87,39 @@ export function loadEnvironment(
     otpRateLimitPerHour: integer(source.OTP_RATE_LIMIT_PER_HOUR, 5),
     accessTtlSeconds: integer(source.ACCESS_TTL_SECONDS, 900),
     refreshTtlSeconds: integer(source.REFRESH_TTL_SECONDS, 2_592_000),
+    redisUrl: source.REDIS_URL ?? "redis://localhost:6379",
+    minioEndpoint: source.MINIO_ENDPOINT ?? "http://localhost:9000",
+    minioAccessKey: source.MINIO_ACCESS_KEY ?? "development-only",
+    minioSecretKey: source.MINIO_SECRET_KEY ?? "development-only-change-me",
+    minioBucket: source.MINIO_BUCKET ?? "agat-private",
+    clamavHost: source.CLAMAV_HOST ?? "localhost",
+    clamavPort: integer(source.CLAMAV_PORT, 3310),
+    uploadMaxFileBytes: integer(source.UPLOAD_MAX_FILE_BYTES, 26_214_400),
+    uploadMaxPages: integer(source.UPLOAD_MAX_PAGES, 100),
+    uploadUserActiveQuotaBytes: integer(
+      source.UPLOAD_USER_ACTIVE_QUOTA_BYTES,
+      262_144_000,
+    ),
+    uploadMaxImagePixels: integer(source.UPLOAD_MAX_IMAGE_PIXELS, 40_000_000),
+    uploadSessionTtlSeconds: integer(source.UPLOAD_SESSION_TTL_SECONDS, 86_400),
+    docxMaxEntries: integer(source.DOCX_MAX_ENTRIES, 2_000),
+    docxMaxUncompressedBytes: integer(
+      source.DOCX_MAX_UNCOMPRESSED_BYTES,
+      104_857_600,
+    ),
+    docxMaxCompressionRatio: integer(source.DOCX_MAX_COMPRESSION_RATIO, 100),
+    processingDispatchEnabled:
+      (source.PROCESSING_DISPATCH_ENABLED ?? "false") === "true",
+    processingImage: source.PROCESSING_IMAGE ?? "agat-processing:local",
+    processingRunnerScript:
+      source.PROCESSING_RUNNER_SCRIPT ?? "ops/processing/run-job.sh",
+    processingSeccompProfile:
+      source.PROCESSING_SECCOMP_PROFILE ?? "ops/processing/seccomp.json",
+    processingTimeoutSeconds: integer(source.PROCESSING_TIMEOUT_SECONDS, 120),
   };
 }
+
+const forbiddenProductionValue = (value: string): boolean =>
+  /development|test-only|ci-only|local-only|change-me|example|password/i.test(
+    value,
+  ) || value.length < 16;

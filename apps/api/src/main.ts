@@ -15,7 +15,7 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: env.webOrigin,
     credentials: true,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   app.use(cookieParser());
   app.use((request: Request, response: Response, next: NextFunction) => {

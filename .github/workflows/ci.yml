@@ -52,7 +52,7 @@ jobs:
   infrastructure:
     needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Verify fresh checkout and standard Git index
@@ -66,4 +66,12 @@ jobs:
         with:
           name: stage2-verification-report
           path: outputs/stage2-verification-report.json
+          if-no-files-found: error
+      - name: Run stage 3 protected upload and processing verification
+        run: bash ops/verify/stage3.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage3-verification-report
+          path: outputs/stage3-verification-report.json
           if-no-files-found: error

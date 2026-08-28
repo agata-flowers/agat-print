@@ -10,6 +10,7 @@ import { MetricsModule } from "./metrics/metrics.module";
 import { PartnersModule } from "./partners/partners.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProfileModule } from "./profile/profile.module";
+import { UploadsModule } from "./uploads/uploads.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ProfileModule } from "./profile/profile.module";
     ProfileModule,
     PartnersModule,
     MetricsModule,
+    UploadsModule,
   ],
   controllers: [HealthController],
   providers: [
