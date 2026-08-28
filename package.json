@@ -3,11 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.19.0",
-  "pnpm": {
-    "ignoredBuiltDependencies": [
-      "msgpackr-extract"
-    ]
-  },
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -34,4 +29,3 @@
     "typescript-eslint": "8.41.0"
   }
 }
-

@@ -8,5 +8,6 @@ allowBuilds:
   "@prisma/engines": true
   "@scarf/scarf": true
   esbuild: true
+  msgpackr-extract: false
   prisma: true
   sharp: true
