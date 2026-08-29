@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   ParseUUIDPipe,
   Post,
@@ -22,7 +23,9 @@ import { LayoutsService } from "./layouts.service";
 @Controller("layouts")
 @UseGuards(AccessGuard)
 export class LayoutsController {
-  constructor(private readonly layouts: LayoutsService) {}
+  constructor(
+    @Inject(LayoutsService) private readonly layouts: LayoutsService,
+  ) {}
 
   @Post()
   generate(
@@ -62,7 +65,9 @@ export class LayoutsController {
 @UseGuards(AccessGuard, RolesGuard)
 @Roles("ADMIN")
 export class ManualReviewsController {
-  constructor(private readonly layouts: LayoutsService) {}
+  constructor(
+    @Inject(LayoutsService) private readonly layouts: LayoutsService,
+  ) {}
 
   @Get()
   queue() {
