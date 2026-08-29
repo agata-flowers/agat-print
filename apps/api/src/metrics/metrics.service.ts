@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Counter, Registry, collectDefaultMetrics } from "prom-client";
+import { Counter, Registry } from "prom-client";
 
 export const METRIC_LABELS = [
   "route",
@@ -24,7 +24,6 @@ export class MetricsService {
   readonly registry = new Registry();
   readonly httpRequests: Counter<"route" | "method" | "status_code">;
   constructor() {
-    collectDefaultMetrics({ register: this.registry, prefix: "agat_" });
     validateMetricLabelNames(["route", "method", "status_code"]);
     this.httpRequests = new Counter({
       name: "agat_http_requests_total",

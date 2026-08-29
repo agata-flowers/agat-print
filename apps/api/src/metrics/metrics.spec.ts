@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateMetricLabelNames } from "./metrics.service";
+import { MetricsService, validateMetricLabelNames } from "./metrics.service";
 describe("metric label policy", () => {
   it("allows bounded labels", () =>
     expect(() =>
@@ -9,4 +9,9 @@ describe("metric label policy", () => {
     "rejects %s",
     (label) => expect(() => validateMetricLabelNames([label])).toThrow(),
   );
+  it("does not expose default runtime labels outside the allowlist", async () => {
+    const output = await new MetricsService().registry.metrics();
+    expect(output).not.toContain("nodejs_");
+    expect(output).not.toContain("process_");
+  });
 });
