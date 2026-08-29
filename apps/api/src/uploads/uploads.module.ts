@@ -3,6 +3,7 @@ import { AntivirusService } from "./antivirus.service";
 import { CommandIsolatedProcessorService } from "./command-isolated-processor.service";
 import { OutboxDispatcherService } from "./outbox-dispatcher.service";
 import {
+  APP_ENVIRONMENT,
   environmentProvider,
   PrivateObjectStorageService,
 } from "./private-object-storage.service";
@@ -26,6 +27,7 @@ import { UploadsController } from "./uploads.controller";
     ProcessingWorkerService,
   ],
   exports: [
+    APP_ENVIRONMENT,
     AntivirusService,
     CommandIsolatedProcessorService,
     OutboxDispatcherService,
