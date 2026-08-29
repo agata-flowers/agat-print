@@ -203,7 +203,7 @@ describe.skipIf(!enabled)(
           sizeBytes: 26_214_401,
         })
         .expect(413);
-      await prisma.uploadSession.create({
+      const quotaReservation = await prisma.uploadSession.create({
         data: {
           userId,
           fileKind: "PDF",
@@ -212,17 +212,24 @@ describe.skipIf(!enabled)(
           quarantineObjectKey: "quarantine/" + "f".repeat(64),
           expiresAt: new Date(Date.now() + 60_000),
         },
+        select: { id: true },
       });
-      await agent
-        .post("/api/v1/uploads")
-        .set("Origin", origin)
-        .set("X-CSRF-Token", csrfToken)
-        .send({
-          extension: "pdf",
-          declaredMime: "application/pdf",
-          sizeBytes: 2,
-        })
-        .expect(413);
+      try {
+        await agent
+          .post("/api/v1/uploads")
+          .set("Origin", origin)
+          .set("X-CSRF-Token", csrfToken)
+          .send({
+            extension: "pdf",
+            declaredMime: "application/pdf",
+            sizeBytes: 2,
+          })
+          .expect(413);
+      } finally {
+        await prisma.uploadSession.delete({
+          where: { id: quotaReservation.id },
+        });
+      }
     });
 
     it("rejects EICAR and cleans quarantine; antivirus unavailability is fail-closed", async () => {
