@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -65,6 +66,9 @@ export class UploadService {
   ) {}
 
   async create(userId: string, dto: CreateUploadSessionDto) {
+    const fileKind = KIND_BY_EXTENSION[dto.extension];
+    if (!fileKind)
+      throw new BadRequestException({ code: "UNSUPPORTED_FILE_EXTENSION" });
     if (dto.sizeBytes > this.env.uploadMaxFileBytes)
       throw new PayloadTooLargeException({ code: "FILE_SIZE_EXCEEDED" });
     const session = await this.prisma.$transaction(
@@ -83,7 +87,7 @@ export class UploadService {
         return tx.uploadSession.create({
           data: {
             userId,
-            fileKind: KIND_BY_EXTENSION[dto.extension],
+            fileKind,
             declaredMime: dto.declaredMime,
             expectedSizeBytes: BigInt(dto.sizeBytes),
             quarantineObjectKey: opaqueKey("quarantine"),

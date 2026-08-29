@@ -226,13 +226,15 @@ describe.skipIf(!enabled)(
     });
 
     it("rejects EICAR and cleans quarantine; antivirus unavailability is fail-closed", async () => {
-      const infected = Buffer.concat([
-        await makePdf(),
-        Buffer.from(
-          "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*",
-        ),
+      const infected = await makeDocx([
+        {
+          name: "word/eicar.com",
+          value: Buffer.from(
+            "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*",
+          ),
+        },
       ]);
-      const rejected = await upload("pdf", "application/pdf", infected, 422);
+      const rejected = await upload("docx", docxMime, infected, 422);
       const record = await prisma.uploadSession.findUniqueOrThrow({
         where: { id: rejected.id },
       });
