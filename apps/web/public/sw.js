@@ -7,6 +7,7 @@ const NEVER_CACHE = [
   "/partner",
   "/admin",
   "/uploads/",
+  "/layouts/",
   "/documents/",
 ];
 const sensitive = (url) =>

@@ -9,6 +9,9 @@ export default function AdminPage() {
           Первый production-администратор создаётся только интерактивной
           одноразовой CLI-командой.
         </p>
+        <a className="button primary" href="/admin/reviews">
+          Очередь ручной проверки
+        </a>
       </div>
     </main>
   );

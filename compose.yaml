@@ -67,6 +67,7 @@ services:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
       PROCESSING_DISPATCH_ENABLED: "true"
+      PREVIEW_SIGNED_URL_TTL_SECONDS: ${PREVIEW_SIGNED_URL_TTL_SECONDS:-300}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -121,6 +122,7 @@ services:
       PROCESSING_RUNNER_SCRIPT: /app/ops/processing/run-job.sh
       PROCESSING_SECCOMP_PROFILE: /app/ops/processing/seccomp.json
       PROCESSING_TIMEOUT_SECONDS: 120
+      PREVIEW_SIGNED_URL_TTL_SECONDS: ${PREVIEW_SIGNED_URL_TTL_SECONDS:-300}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

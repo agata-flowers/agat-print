@@ -156,6 +156,18 @@ h1 {
   color: var(--muted);
   line-height: 1.6;
 }
+.layout-panel,
+.review-list {
+  display: grid;
+  gap: 20px;
+}
+.preview-frame {
+  width: 100%;
+  min-height: 65vh;
+  border: 1px solid #cbbab2;
+  border-radius: 8px;
+  background: white;
+}
 .auth-form {
   display: grid;
   gap: 18px;

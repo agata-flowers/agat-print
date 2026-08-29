@@ -30,6 +30,7 @@ export interface AppEnvironment {
   processingRunnerScript: string;
   processingSeccompProfile: string;
   processingTimeoutSeconds: number;
+  previewSignedUrlTtlSeconds: number;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -116,6 +117,10 @@ export function loadEnvironment(
     processingSeccompProfile:
       source.PROCESSING_SECCOMP_PROFILE ?? "ops/processing/seccomp.json",
     processingTimeoutSeconds: integer(source.PROCESSING_TIMEOUT_SECONDS, 120),
+    previewSignedUrlTtlSeconds: integer(
+      source.PREVIEW_SIGNED_URL_TTL_SECONDS,
+      300,
+    ),
   };
 }
 

@@ -1,17 +1,22 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 3 ]; then
-  echo "usage: run-job.sh INPUT OUTPUT KIND" >&2
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+  echo "usage: run-job.sh INPUT OUTPUT KIND [OPERATION]" >&2
   exit 64
 fi
 
 input_file=$1
 output_file=$2
 kind=$3
+operation=${4:-NORMALIZE}
 case "$kind" in
   PDF|DOCX|JPEG|PNG) ;;
   *) echo "unsupported processing kind" >&2; exit 64 ;;
+esac
+case "$operation" in
+  NORMALIZE|PREFLIGHT) ;;
+  *) echo "unsupported processing operation" >&2; exit 64 ;;
 esac
 test -f "$input_file"
 
@@ -20,6 +25,9 @@ timeout_seconds=${PROCESSING_TIMEOUT_SECONDS:-120}
 profile=${PROCESSING_SECCOMP_PROFILE:-ops/processing/seccomp.json}
 max_pages=${PROCESSING_MAX_PAGES:-100}
 max_pixels=${PROCESSING_MAX_IMAGE_PIXELS:-40000000}
+target_width_mm=${PROCESSING_TARGET_WIDTH_MM:-210}
+target_height_mm=${PROCESSING_TARGET_HEIGHT_MM:-297}
+photo_document=${PROCESSING_PHOTO_DOCUMENT:-false}
 test -f "$profile"
 
 suffix=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
@@ -73,7 +81,10 @@ timeout --signal=KILL "$timeout_seconds" docker run --rm \
   --mount "type=volume,source=$output_volume,target=/output" \
   --env "AGAT_MAX_PAGES=$max_pages" \
   --env "AGAT_MAX_IMAGE_PIXELS=$max_pixels" \
-  "$image" --kind "$kind"
+  --env "AGAT_TARGET_WIDTH_MM=$target_width_mm" \
+  --env "AGAT_TARGET_HEIGHT_MM=$target_height_mm" \
+  --env "AGAT_PHOTO_DOCUMENT=$photo_document" \
+  "$image" --kind "$kind" --operation "$operation"
 
 output_parent=$(dirname "$output_file")
 mkdir -p "$output_parent"
@@ -88,3 +99,14 @@ docker run --rm \
   --mount "type=volume,source=$output_volume,target=/data,readonly" \
   busybox:1.37 cat /data/result.pdf > "$output_file"
 test -s "$output_file"
+docker run --rm \
+  --network none \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --pids-limit 16 \
+  --memory 64m \
+  --cpus 0.25 \
+  --mount "type=volume,source=$output_volume,target=/data,readonly" \
+  busybox:1.37 cat /data/result.json > "$output_file.json"
+test -s "$output_file.json"

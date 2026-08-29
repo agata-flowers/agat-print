@@ -50,6 +50,22 @@ enum UploadStatus {
 
 enum ProcessingOperation {
   NORMALIZE
+  PREFLIGHT
+}
+
+enum LayoutStatus {
+  PROCESSING
+  QUALITY_CHECK_FAILED
+  MANUAL_REVIEW_REQUIRED
+  AWAITING_APPROVAL
+  APPROVED
+}
+
+enum ManualReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUPERSEDED
 }
 
 enum ProcessingJobStatus {
@@ -73,6 +89,9 @@ model User {
   partner     Partner?
   auditEvents AuditEvent[]   @relation("AuditActor")
   uploads     UploadSession[]
+  layouts     LayoutRequest[]
+  layoutApprovals LayoutApproval[]
+  manualReviews ManualReview[] @relation("ManualReviewOperator")
 }
 
 model UserRole {
@@ -202,6 +221,7 @@ model UploadSession {
   user                User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   processingJobs      ProcessingJob[]
   processingResults   ProcessingResult[]
+  layout               LayoutRequest?
 
   @@index([userId, status])
   @@index([status, expiresAt])
@@ -239,6 +259,108 @@ model ProcessingResult {
   createdAt  DateTime        @default(now())
   job        ProcessingJob   @relation(fields: [jobId], references: [id], onDelete: Restrict)
   upload     UploadSession   @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  previewVersions PreviewVersion[]
+  printReadyVersions PrintReadyVersion[]
+}
+
+/// Mutable pointer to the current layout revision; immutable artifacts live below.
+model LayoutRequest {
+  id                   String       @id @default(uuid()) @db.Uuid
+  uploadId             String       @unique @db.Uuid
+  userId               String       @db.Uuid
+  sourceFileVersion    String       @db.Uuid
+  settingsHash         String       @db.Char(64)
+  settings             Json
+  status               LayoutStatus @default(PROCESSING)
+  version              Int          @default(0)
+  latestPreviewId      String?      @db.Uuid
+  latestPrintReadyId   String?      @db.Uuid
+  currentApprovalId    String?      @db.Uuid
+  qualityCode          String?      @db.VarChar(80)
+  manualReviewReason   String?      @db.VarChar(80)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  upload               UploadSession @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  previews             PreviewVersion[]
+  printReadyVersions   PrintReadyVersion[]
+  approvals            LayoutApproval[]
+  manualReviews        ManualReview[]
+
+  @@index([userId, status])
+  @@index([status, updatedAt])
+}
+
+model PreviewVersion {
+  id                       String   @id @default(uuid()) @db.Uuid
+  layoutId                 String   @db.Uuid
+  version                  Int
+  objectKey                String   @unique @db.VarChar(160)
+  checksum                 String   @db.Char(64)
+  sizeBytes                BigInt
+  sourceFileVersion        String   @db.Uuid
+  settingsHash             String   @db.Char(64)
+  originProcessingResultId String   @db.Uuid
+  pageCount                Int
+  createdAt                DateTime @default(now())
+  layout                   LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  originProcessingResult   ProcessingResult @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
+  approvals                LayoutApproval[]
+  manualReview             ManualReview?
+
+  @@unique([layoutId, version])
+  @@unique([layoutId, sourceFileVersion, settingsHash])
+}
+
+model PrintReadyVersion {
+  id                       String   @id @default(uuid()) @db.Uuid
+  layoutId                 String   @db.Uuid
+  version                  Int
+  objectKey                String   @unique @db.VarChar(160)
+  checksum                 String   @db.Char(64)
+  sizeBytes                BigInt
+  sourceFileVersion        String   @db.Uuid
+  settingsHash             String   @db.Char(64)
+  originProcessingResultId String   @db.Uuid
+  pageCount                Int
+  createdAt                DateTime @default(now())
+  layout                   LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  originProcessingResult   ProcessingResult @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
+
+  @@unique([layoutId, version])
+  @@unique([layoutId, sourceFileVersion, settingsHash])
+}
+
+model LayoutApproval {
+  id               String   @id @default(uuid()) @db.Uuid
+  layoutId         String   @db.Uuid
+  previewVersionId String   @db.Uuid
+  userId           String   @db.Uuid
+  layoutVersion    Int
+  createdAt        DateTime @default(now())
+  layout           LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
+  user             User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([layoutId, previewVersionId])
+  @@index([userId, createdAt])
+}
+
+model ManualReview {
+  id               String             @id @default(uuid()) @db.Uuid
+  layoutId         String             @db.Uuid
+  previewVersionId String             @unique @db.Uuid
+  status           ManualReviewStatus @default(PENDING)
+  reason           String             @db.VarChar(80)
+  reviewerId       String?            @db.Uuid
+  decisionAt       DateTime?
+  version          Int                @default(0)
+  createdAt        DateTime           @default(now())
+  layout           LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
+  reviewer         User? @relation("ManualReviewOperator", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
 }
 
 model OutboxEvent {

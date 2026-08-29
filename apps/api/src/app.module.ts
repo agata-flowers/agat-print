@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module";
 import { CacheControlInterceptor } from "./common/cache-control.interceptor";
 import { CsrfGuard } from "./common/csrf.guard";
 import { HealthController } from "./health/health.controller";
+import { LayoutsModule } from "./layouts/layouts.module";
 import { MetricsModule } from "./metrics/metrics.module";
 import { PartnersModule } from "./partners/partners.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -22,6 +23,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     PartnersModule,
     MetricsModule,
     UploadsModule,
+    LayoutsModule,
   ],
   controllers: [HealthController],
   providers: [

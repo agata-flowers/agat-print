@@ -12,6 +12,45 @@ export class CommandIsolatedProcessorService {
   constructor(@Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment) {}
 
   async normalize(kind: UploadFileKind, input: Buffer): Promise<Buffer> {
+    const result = await this.run(kind, input, "NORMALIZE");
+    return result.output;
+  }
+
+  async preflight(
+    kind: UploadFileKind,
+    input: Buffer,
+    settings: {
+      targetWidthMm: number;
+      targetHeightMm: number;
+      photoDocument: boolean;
+    },
+  ): Promise<{
+    output: Buffer;
+    metadata: {
+      pages: number;
+      pageWidthPoints: number;
+      pageHeightPoints: number;
+      orientation: "PORTRAIT" | "LANDSCAPE";
+      printSuitable: boolean;
+      effectiveDpi?: number;
+      backgroundConfidence?: number;
+      headPositionConfidence?: number;
+      photoSizeConfidence?: number;
+    };
+  }> {
+    return this.run(kind, input, "PREFLIGHT", settings);
+  }
+
+  private async run(
+    kind: UploadFileKind,
+    input: Buffer,
+    operation: "NORMALIZE" | "PREFLIGHT",
+    settings?: {
+      targetWidthMm: number;
+      targetHeightMm: number;
+      photoDocument: boolean;
+    },
+  ) {
     const work = await mkdtemp(join(tmpdir(), "agat-processing-"));
     const inputPath = join(work, "input");
     const outputPath = join(work, "output.pdf");
@@ -21,7 +60,13 @@ export class CommandIsolatedProcessorService {
       await new Promise<void>((resolve, reject) => {
         const child = spawn(
           "sh",
-          [this.env.processingRunnerScript, inputPath, outputPath, kind],
+          [
+            this.env.processingRunnerScript,
+            inputPath,
+            outputPath,
+            kind,
+            operation,
+          ],
           {
             stdio: ["ignore", "ignore", "ignore"],
             env: {
@@ -35,6 +80,15 @@ export class CommandIsolatedProcessorService {
               PROCESSING_MAX_IMAGE_PIXELS: String(
                 this.env.uploadMaxImagePixels,
               ),
+              PROCESSING_TARGET_WIDTH_MM: String(
+                settings?.targetWidthMm ?? 210,
+              ),
+              PROCESSING_TARGET_HEIGHT_MM: String(
+                settings?.targetHeightMm ?? 297,
+              ),
+              PROCESSING_PHOTO_DOCUMENT: String(
+                settings?.photoDocument ?? false,
+              ),
             },
           },
         );
@@ -47,7 +101,30 @@ export class CommandIsolatedProcessorService {
       const output = await readFile(outputPath);
       if (output.length > this.env.uploadMaxFileBytes)
         throw new Error("Processing output exceeds configured limit");
-      return output;
+      const metadata = JSON.parse(
+        await readFile(`${outputPath}.json`, "utf8"),
+      ) as {
+        pages: number;
+        pageWidthPoints: number;
+        pageHeightPoints: number;
+        orientation: "PORTRAIT" | "LANDSCAPE";
+        printSuitable: boolean;
+        effectiveDpi?: number;
+        backgroundConfidence?: number;
+        headPositionConfidence?: number;
+        photoSizeConfidence?: number;
+      };
+      if (
+        !Number.isInteger(metadata.pages) ||
+        metadata.pages < 1 ||
+        metadata.pages > this.env.uploadMaxPages ||
+        !Number.isFinite(metadata.pageWidthPoints) ||
+        !Number.isFinite(metadata.pageHeightPoints) ||
+        typeof metadata.printSuitable !== "boolean" ||
+        !["PORTRAIT", "LANDSCAPE"].includes(metadata.orientation)
+      )
+        throw new Error("Processing metadata is invalid");
+      return { output, metadata };
     } finally {
       await rm(work, { recursive: true, force: true });
     }

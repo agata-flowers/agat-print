@@ -66,6 +66,30 @@ export class PrivateObjectStorageService {
     );
   }
 
+  async putDocument(key: string, value: Buffer): Promise<void> {
+    await this.ensureBucket();
+    await this.client.putObject(
+      this.env.minioBucket,
+      key,
+      value,
+      value.length,
+      {
+        "Content-Type": "application/pdf",
+        "Cache-Control": "no-store, private",
+      },
+    );
+  }
+
+  async signedGetUrl(key: string, ttlSeconds: number): Promise<string> {
+    await this.ensureBucket();
+    return this.client.presignedGetObject(
+      this.env.minioBucket,
+      key,
+      ttlSeconds,
+      { "response-cache-control": "no-store, private" },
+    );
+  }
+
   async get(key: string, maxBytes: number): Promise<Buffer> {
     await this.ensureBucket();
     const stream = await this.client.getObject(this.env.minioBucket, key);

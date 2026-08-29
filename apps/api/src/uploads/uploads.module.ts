@@ -27,6 +27,7 @@ import { UploadsController } from "./uploads.controller";
   ],
   exports: [
     AntivirusService,
+    CommandIsolatedProcessorService,
     OutboxDispatcherService,
     PrivateObjectStorageService,
     ProcessingResultService,

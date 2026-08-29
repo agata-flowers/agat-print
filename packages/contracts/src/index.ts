@@ -9,6 +9,15 @@ export const PARTNER_STATUSES = [
 ] as const;
 export type PartnerStatus = (typeof PARTNER_STATUSES)[number];
 
+export const LAYOUT_STATUSES = [
+  "PROCESSING",
+  "QUALITY_CHECK_FAILED",
+  "MANUAL_REVIEW_REQUIRED",
+  "AWAITING_APPROVAL",
+  "APPROVED",
+] as const;
+export type LayoutStatus = (typeof LAYOUT_STATUSES)[number];
+
 export const FUTURE_UPLOAD_MIME_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
