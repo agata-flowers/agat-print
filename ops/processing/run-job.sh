@@ -37,6 +37,7 @@ docker run --rm -i \
   --network none \
   --read-only \
   --cap-drop ALL \
+  --cap-add CHOWN \
   --security-opt no-new-privileges:true \
   --pids-limit 16 \
   --memory 64m \
@@ -48,6 +49,7 @@ docker run --rm \
   --network none \
   --read-only \
   --cap-drop ALL \
+  --cap-add CHOWN \
   --security-opt no-new-privileges:true \
   --pids-limit 16 \
   --memory 64m \
