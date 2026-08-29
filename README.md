@@ -1,8 +1,9 @@
 # AGAT PRINT
 
 Foundation for the AGAT PRINT mobile-first printing platform. This repository
-implements stages 1–3: planning, identity, partner onboarding, protected upload,
-safe sessions, observability, recovery and isolated file-processing foundations.
+implements stages 1–4: planning, platform foundation, protected upload,
+isolated processing, preflight, immutable layout artifacts, manual review and
+customer layout approval.
 
 ## Prerequisites
 
@@ -31,7 +32,9 @@ Run `pnpm admin:bootstrap` in an interactive production shell. Enter the adminis
 `pnpm run ci` runs formatting, lint, types, tests, Prisma validation, and
 production builds. GitHub Actions performs a frozen install from a fresh
 checkout with the standard Git index, runs the stage 2 recovery drill, then
-runs the stage 3 upload/processing isolation drill.
+runs the stage 3 upload/processing isolation drill and the stage 4
+preflight/approval drill. Diagnostic JSON artifacts are uploaded even when a
+drill fails.
 
 ## Protected uploads and processing
 
@@ -57,6 +60,22 @@ The worker needs a controlled Docker daemon connection. Processing children
 receive neither this connection nor infrastructure credentials and have no
 network. Run `bash ops/verify/stage3.sh` for the full isolation/E2E check.
 
+## Preflight and layout approval
+
+Only stage 3 files in `READY` state can enter preflight. Create a layout with
+`POST /api/v1/layouts`, then poll `GET /api/v1/layouts/{id}`. The isolated
+runtime converts DOCX with LibreOffice, validates the resulting PDF and records
+page geometry, orientation and image resolution. The API stores immutable,
+versioned preview and print-ready PDFs in private MinIO; the browser receives
+only a short-lived URL with a no-store response policy.
+
+Low-confidence document photos enter `MANUAL_REVIEW_REQUIRED`. An
+administrator handles them under `/admin/reviews`; customers cannot access the
+queue. A customer may confirm only the latest `AWAITING_APPROVAL` preview.
+Changing source version or layout settings clears the current approval and
+creates a new immutable artifact version. Run `bash ops/verify/stage4.sh` for
+the complete stage 4 acceptance drill.
+
 ## Backup and restore
 
 Set an off-host `RESTIC_REPOSITORY`, `BACKUP_S3_URL`, `BACKUP_S3_BUCKET`, S3 credentials, and `RESTIC_PASSWORD`, then run `docker compose --profile backup run --rm backup` as described in [operations](docs/OPERATIONS.md). PostgreSQL uses a consistent custom-format `pg_dump`; only permanent, non-expired MinIO objects referenced by the database manifest are in scope. Redis, caches, logs, metrics, and temporary objects are excluded.
@@ -67,6 +86,6 @@ Recovery targets for the pilot are RPO ≤ 24 hours and RTO ≤ 4 hours. A month
 
 ## Scope boundary
 
-Do not begin stage 4. User preview, full preflight, manual review, layout
-approval, orders, pricing, payments, partner matching, production and delivery
+Do not begin stage 5. Orders, pricing, `PriceSnapshot`, payments, refunds,
+partner matching, `PartnerPayoutSnapshot`, production, printing and delivery
 remain intentionally absent.

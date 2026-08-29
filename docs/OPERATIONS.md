@@ -10,15 +10,19 @@ injects secrets outside Compose source.
 ## Backup scope
 
 - PostgreSQL: consistent custom-format `pg_dump --serializable-deferrable`.
-- MinIO: permanent, non-expired objects referenced by the database backup manifest, including originals, approved previews, and print-ready objects once those tables exist.
+- MinIO: permanent, non-expired objects referenced by the database backup
+  manifest, including originals, derivatives, immutable previews and
+  print-ready objects.
 - Configuration: bucket policies/versioning/lifecycle are source-controlled configuration, not raw volume copies.
 - Excluded: Redis, caches, incomplete/temp objects, logs, metrics, processing workspaces, and Docker volumes.
 
 The backup job stages the database dump and a tab-separated allow-list manifest, copies only manifest objects after SHA-256 verification, and sends the set to encrypted restic storage at a distinct S3-compatible endpoint. Object keys and paths are never printed. Production validation rejects a primary-storage endpoint, local/example endpoints, mock credentials, and placeholder secrets. `RESTIC_PASSWORD` is kept outside the VPS and both object stores.
 
 The manifest query includes only `PermanentObjectReference` rows that are not
-deleted, have not expired, and have no matching `RetentionTombstone`. Stage 3
-creates these references only after validation and a clean antivirus verdict.
+deleted, have not expired, and have no matching `RetentionTombstone`. Stages 3
+and 4 create these references only after validation and a clean antivirus
+verdict. Signed URLs are never part of the manifest; it contains only opaque
+keys and SHA-256 checksums.
 
 Required backup variables are `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, `BACKUP_S3_URL`, `BACKUP_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `MINIO_ALIAS_URL`, `MINIO_BUCKET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY`. Run the backup container from a scheduler with injected secrets:
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: /api/v1
 paths:
@@ -115,6 +115,69 @@ paths:
         "403": { description: Upload belongs to another user }
         "404": { description: Upload does not exist }
         "409": { description: Upload can no longer be cancelled }
+  /layouts:
+    post:
+      summary: Preflight one owned stage-3-ready file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateLayout" }
+      responses:
+        "201": { description: Current layout revision }
+        "409": { description: Stage 3 file not ready or revision changed }
+  /layouts/{layoutId}:
+    get:
+      summary: Read an owned layout without storage identifiers
+      parameters: [{ $ref: "#/components/parameters/LayoutId" }]
+      responses:
+        "200": { description: Current layout revision }
+        "404": { description: Not owned or not found }
+  /layouts/{layoutId}/preview-url:
+    get:
+      summary: Issue a short-lived no-store URL for the owned latest preview
+      parameters: [{ $ref: "#/components/parameters/LayoutId" }]
+      responses:
+        "200": { description: Signed URL and expiry }
+        "404": { description: Not owned or not found }
+  /layouts/{layoutId}/confirm:
+    post:
+      summary: Confirm only the latest owned preview version
+      parameters: [{ $ref: "#/components/parameters/LayoutId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmLayout" }
+      responses:
+        "201": { description: Layout approved }
+        "409": { description: Stale version or concurrent approval lost }
+  /admin/manual-reviews:
+    get:
+      summary: List pending manual reviews (ADMIN only)
+      responses:
+        "200": { description: Bounded pending queue }
+        "403": { description: Admin required }
+  /admin/manual-reviews/{reviewId}/preview-url:
+    get:
+      summary: Issue a short-lived review URL (ADMIN only)
+      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      responses:
+        "200": { description: Signed URL and expiry }
+        "403": { description: Admin required }
+  /admin/manual-reviews/{reviewId}/decision:
+    post:
+      summary: Decide a pending review exactly once (ADMIN only)
+      parameters: [{ $ref: "#/components/parameters/ReviewId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ManualReviewDecision" }
+      responses:
+        "201": { description: Review applied }
+        "403": { description: Admin required }
+        "409": { description: Review already decided or revision changed }
   /health/live:
     get:
       responses: { "200": { description: Process alive } }
@@ -133,6 +196,16 @@ components:
     UploadId:
       in: path
       name: uploadId
+      required: true
+      schema: { type: string, format: uuid }
+    LayoutId:
+      in: path
+      name: layoutId
+      required: true
+      schema: { type: string, format: uuid }
+    ReviewId:
+      in: path
+      name: reviewId
       required: true
       schema: { type: string, format: uuid }
   schemas:
@@ -169,3 +242,29 @@ components:
         id: { type: string, format: uuid }
         status: { type: string, enum: [QUEUED] }
         pageCount: { type: integer, minimum: 1, maximum: 100 }
+    GenerateLayout:
+      type: object
+      additionalProperties: false
+      required: [uploadId, targetWidthMm, targetHeightMm, minDpi, photoDocument]
+      properties:
+        layoutId:
+          type: string
+          format: uuid
+          description: Existing owned layout when replacing its source file.
+        uploadId: { type: string, format: uuid }
+        targetWidthMm: { type: integer, minimum: 10, maximum: 1000 }
+        targetHeightMm: { type: integer, minimum: 10, maximum: 1000 }
+        minDpi: { type: integer, minimum: 72, maximum: 1200 }
+        photoDocument: { type: boolean }
+    ConfirmLayout:
+      type: object
+      additionalProperties: false
+      required: [previewVersionId]
+      properties:
+        previewVersionId: { type: string, format: uuid }
+    ManualReviewDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }

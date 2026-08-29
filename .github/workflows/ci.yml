@@ -75,3 +75,11 @@ jobs:
           name: stage3-verification-report
           path: outputs/stage3-verification-report.json
           if-no-files-found: error
+      - name: Run stage 4 preflight, preview and approval verification
+        run: bash ops/verify/stage4.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage4-verification-report
+          path: outputs/stage4-verification-report.json
+          if-no-files-found: error

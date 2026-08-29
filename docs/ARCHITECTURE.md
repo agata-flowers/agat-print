@@ -6,8 +6,8 @@ The platform is a modular NestJS monolith with a Next.js PWA. PostgreSQL is the
 source of truth, Redis supports queues/rate limits, and MinIO is private object
 storage. Provider ports isolate OTP, antivirus, isolated processing, payment,
 file storage, notifications, maps, and delivery. Stage 3 implements protected
-uploads and the isolated processing foundation, but no user preview or order
-workflow.
+uploads, isolated processing and stage 4 preflight/layout approval, but no
+order workflow.
 
 ```mermaid
 flowchart LR
@@ -36,6 +36,8 @@ flowchart LR
   cancellation, expiry and cleanup.
 - Processing: transactional outbox, BullMQ delivery, database inbox, CAS lease,
   isolated normalization and output revalidation.
+- Layout: preflight of stage 3-ready sources, immutable preview/print-ready
+  versions, bounded manual review and optimistic customer approval.
 - Future ports: payments, notifications, maps, delivery.
 
 ## Future order aggregates
@@ -55,6 +57,14 @@ erDiagram
   UploadSession ||--o{ ProcessingJob : requests
   ProcessingJob ||--o| ProcessingResult : creates
   UploadSession ||--o{ ProcessingResult : owns
+  User ||--o{ LayoutRequest : owns
+  UploadSession ||--o| LayoutRequest : preflights
+  LayoutRequest ||--o{ PreviewVersion : versions
+  LayoutRequest ||--o{ PrintReadyVersion : versions
+  ProcessingResult ||--o{ PreviewVersion : provenance
+  ProcessingResult ||--o{ PrintReadyVersion : provenance
+  LayoutRequest ||--o{ LayoutApproval : confirms
+  PreviewVersion ||--o| ManualReview : may_require
   Order ||--|| PriceSnapshot : freezes
   Order ||--o{ Assignment : attempts
   Assignment ||--|| PartnerPayoutSnapshot : offers
@@ -104,4 +114,24 @@ capabilities or privileges. It uses a read-only root, `no-new-privileges`,
 seccomp, a non-root UID, CPU/RAM/PID/time limits, a private temporary
 LibreOffice profile and no macro-capable input format. Network isolation also
 blocks external document links. Output is signature/page/size checked and
-rescanned before persistence. User preview and full preflight remain stage 4.
+rescanned before persistence.
+
+## Stage 4 artifact and approval invariants
+
+`LayoutRequest` is the mutable aggregate pointer. `PreviewVersion` and
+`PrintReadyVersion` are append-only records with SHA-256, byte size, page count,
+source file UUID, settings hash and origin `ProcessingResult`. The composite
+source/settings uniqueness constraint makes identical reprocessing idempotent.
+Opaque object keys are never returned by the API.
+
+Preflight checks page readability, encryption/corruption, page count and
+geometry, orientation, decoded image resolution and result validity. DOCX uses
+the same isolated LibreOffice path as stage 3. A bounded confidence result for
+document-photo background, head position or size creates one pending
+`ManualReview`. Only `ADMIN` may decide it; the decision is CAS-protected and
+audited with bounded metadata.
+
+An approval references one immutable preview and the observed aggregate
+version. The transaction permits only the latest preview in
+`AWAITING_APPROVAL`; concurrent or stale confirmations return conflict. A new
+source version or settings hash clears `currentApprovalId` before processing.

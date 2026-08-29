@@ -24,3 +24,23 @@
 
 Stage 3 explicitly excludes user preview, full preflight, manual review, layout
 approval, orders, prices, payments, partner selection, production and delivery.
+
+## Stage 4 acceptance
+
+- Runtime: successful real PDF, DOCX/LibreOffice, JPEG and PNG preflight;
+  corrupted/encrypted PDF and invalid DOCX conversion fail closed; output JSON
+  includes bounded pages, page geometry, orientation and print suitability.
+- Persistence: preview and print-ready rows contain SHA-256, source/settings
+  provenance and unique immutable versions; identical input is idempotent and
+  changed settings append a version and revoke the active approval pointer.
+- State/RBAC: low resolution reaches `QUALITY_CHECK_FAILED`; uncertain document
+  photos reach `MANUAL_REVIEW_REQUIRED`; only admins can list/decide reviews;
+  customers can read/confirm only their own latest preview.
+- Concurrency: two confirmation attempts create exactly one approval; stale
+  versions return conflict.
+- Privacy/cache: API views and audit/metric/log output contain no filenames,
+  object keys, signed URLs or personal values; layout/document routes are
+  network-only and `no-store, private`.
+
+Stage 4 explicitly excludes orders, prices, snapshots, payments, refunds,
+partner selection, production, printing and delivery.
