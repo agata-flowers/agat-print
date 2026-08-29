@@ -43,7 +43,7 @@ docker run --rm -i \
   --memory 64m \
   --cpus 0.25 \
   --mount "type=volume,source=$input_volume,target=/data" \
-  busybox:1.37 sh -c 'umask 077; cat > /data/source; chown 65532:65532 /data/source; chmod 0400 /data/source' < "$input_file"
+  busybox:1.37 sh -c 'umask 077; cat > /data/source; chmod 0400 /data/source; chown 65532:65532 /data/source' < "$input_file"
 
 docker run --rm \
   --network none \
