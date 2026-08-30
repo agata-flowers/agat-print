@@ -54,6 +54,15 @@ export const ORDER_STATUSES = [
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+export const PAYMENT_STATUSES = [
+  "PENDING",
+  "SUCCEEDED",
+  "FAILED",
+  "REFUND_PENDING",
+  "REFUNDED",
+] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
 export interface CurrentUser {
   id: string;
   roles: UserRole[];

@@ -6,6 +6,9 @@ export const NEVER_CACHE_PATHS = [
   "/admin",
   "/uploads/",
   "/layouts/",
+  "/orders/",
+  "/payments/",
+  "/tariffs/",
   "/documents/",
 ] as const;
 export const isSensitiveRequest = (url: URL): boolean =>

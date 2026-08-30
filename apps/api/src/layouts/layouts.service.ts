@@ -58,6 +58,7 @@ const view = (layout: {
   qualityCode: layout.qualityCode,
   manualReviewReason: layout.manualReviewReason,
   approved: layout.currentApprovalId !== null,
+  currentApprovalId: layout.currentApprovalId,
 });
 
 @Injectable()

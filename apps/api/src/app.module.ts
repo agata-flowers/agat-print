@@ -5,6 +5,7 @@ import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { CacheControlInterceptor } from "./common/cache-control.interceptor";
 import { CsrfGuard } from "./common/csrf.guard";
+import { CommerceModule } from "./commerce/commerce.module";
 import { HealthController } from "./health/health.controller";
 import { LayoutsModule } from "./layouts/layouts.module";
 import { MetricsModule } from "./metrics/metrics.module";
@@ -24,6 +25,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     MetricsModule,
     UploadsModule,
     LayoutsModule,
+    CommerceModule,
   ],
   controllers: [HealthController],
   providers: [

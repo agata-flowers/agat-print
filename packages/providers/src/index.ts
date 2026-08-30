@@ -6,6 +6,12 @@ export interface OtpProvider {
   send(phone: string, code: string, context: ProviderContext): Promise<void>;
 }
 export interface PaymentProvider {
+  start(
+    orderReference: string,
+    amountMinor: bigint,
+    currency: "UZS",
+    context: ProviderContext,
+  ): Promise<{ reference: string }>;
   refund(
     paymentReference: string,
     amountMinor: bigint,

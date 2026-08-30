@@ -31,6 +31,8 @@ export interface AppEnvironment {
   processingSeccompProfile: string;
   processingTimeoutSeconds: number;
   previewSignedUrlTtlSeconds: number;
+  paymentProvider: string;
+  mockPaymentSecret: string;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -57,6 +59,11 @@ export function loadEnvironment(
   const otpProvider = source.OTP_PROVIDER ?? "mock";
   if (nodeEnv === "production" && otpProvider === "mock")
     throw new Error("Mock OTP is forbidden in production");
+  const paymentProvider = source.PAYMENT_PROVIDER ?? "mock";
+  if (nodeEnv === "production" && paymentProvider === "mock")
+    throw new Error("Mock payment is forbidden in production");
+  const mockPaymentSecret =
+    source.MOCK_PAYMENT_SECRET ?? "development-only-mock-payment-secret";
   const jwtSecret = source.JWT_ACCESS_SECRET ?? "";
   if (jwtSecret.length < 32)
     throw new Error("JWT_ACCESS_SECRET must contain at least 32 characters");
@@ -68,6 +75,8 @@ export function loadEnvironment(
     assertProductionSecret(jwtSecret);
     if (source.MOCK_OTP_CODE)
       throw new Error("MOCK_OTP_CODE is forbidden in production");
+    if (source.MOCK_PAYMENT_SECRET)
+      throw new Error("MOCK_PAYMENT_SECRET is forbidden in production");
     for (const [name, value] of [
       ["MINIO_ACCESS_KEY", source.MINIO_ACCESS_KEY ?? ""],
       ["MINIO_SECRET_KEY", source.MINIO_SECRET_KEY ?? ""],
@@ -121,6 +130,8 @@ export function loadEnvironment(
       source.PREVIEW_SIGNED_URL_TTL_SECONDS,
       300,
     ),
+    paymentProvider,
+    mockPaymentSecret,
   };
 }
 

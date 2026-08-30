@@ -76,6 +76,31 @@ enum ProcessingJobStatus {
   DEAD_LETTER
 }
 
+enum TariffStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum OrderStatus {
+  AWAITING_PAYMENT
+  PAID
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum RefundStatus {
+  REQUESTED
+  CONFIRMED
+}
+
 model User {
   id          String         @id @default(uuid()) @db.Uuid
   phone       String         @unique @db.VarChar(32)
@@ -92,6 +117,8 @@ model User {
   layouts     LayoutRequest[]
   layoutApprovals LayoutApproval[]
   manualReviews ManualReview[] @relation("ManualReviewOperator")
+  tariffVersions TariffVersion[] @relation("TariffAuthor")
+  orders      Order[]
 }
 
 model UserRole {
@@ -286,6 +313,7 @@ model LayoutRequest {
   printReadyVersions   PrintReadyVersion[]
   approvals            LayoutApproval[]
   manualReviews        ManualReview[]
+  orders               Order[]
 
   @@index([userId, status])
   @@index([status, updatedAt])
@@ -326,6 +354,7 @@ model PrintReadyVersion {
   createdAt                DateTime @default(now())
   layout                   LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   originProcessingResult   ProcessingResult @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
+  orders                   Order[]
 
   @@unique([layoutId, version])
   @@unique([layoutId, sourceFileVersion, settingsHash])
@@ -341,9 +370,118 @@ model LayoutApproval {
   layout           LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
   user             User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order            Order?
 
   @@unique([layoutId, previewVersionId])
   @@index([userId, createdAt])
+}
+
+model TariffVersion {
+  id                String       @id @default(uuid()) @db.Uuid
+  version           Int          @unique
+  status            TariffStatus @default(ACTIVE)
+  currency          String       @default("UZS") @db.Char(3)
+  basePriceMinor    BigInt
+  perPagePriceMinor BigInt
+  createdById       String       @db.Uuid
+  createdAt         DateTime     @default(now())
+  retiredAt         DateTime?
+  createdBy         User         @relation("TariffAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  priceSnapshots    PriceSnapshot[]
+
+  @@index([status, version])
+}
+
+model Order {
+  id                  String      @id @default(uuid()) @db.Uuid
+  userId              String      @db.Uuid
+  layoutId            String      @db.Uuid
+  layoutApprovalId    String      @unique @db.Uuid
+  printReadyVersionId String      @db.Uuid
+  status              OrderStatus @default(AWAITING_PAYMENT)
+  version             Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  user                User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  layout              LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval      LayoutApproval @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  priceSnapshot       PriceSnapshot?
+  payment             Payment?
+
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model PriceSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  orderId           String   @unique @db.Uuid
+  tariffVersionId   String   @db.Uuid
+  tariffVersion     Int
+  sourceParameters  Json
+  lineItems         Json
+  quantity          Int
+  subtotalMinor     BigInt
+  discountMinor     BigInt   @default(0)
+  totalMinor        BigInt
+  currency          String   @db.Char(3)
+  createdAt         DateTime @default(now())
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  tariff            TariffVersion @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+}
+
+model Payment {
+  id                       String        @id @default(uuid()) @db.Uuid
+  orderId                  String        @unique @db.Uuid
+  provider                 String        @db.VarChar(30)
+  providerPaymentReference String?       @unique @db.VarChar(160)
+  amountMinor              BigInt
+  currency                 String        @db.Char(3)
+  status                   PaymentStatus @default(PENDING)
+  version                  Int           @default(0)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+  order                    Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds                  RefundOperation[]
+
+  @@index([status, updatedAt])
+}
+
+model RefundOperation {
+  id                      String       @id @default(uuid()) @db.Uuid
+  paymentId               String       @unique @db.Uuid
+  triggerDedupKey         String       @unique @db.Char(64)
+  providerRefundReference String?      @unique @db.VarChar(160)
+  amountMinor             BigInt
+  status                  RefundStatus @default(REQUESTED)
+  createdAt               DateTime     @default(now())
+  confirmedAt             DateTime?
+  payment                 Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+}
+
+model IdempotencyRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  scope       String   @db.VarChar(80)
+  keyDigest   String   @db.Char(64)
+  requestHash String   @db.Char(64)
+  response    Json
+  statusCode  Int
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@unique([scope, keyDigest])
+  @@index([expiresAt])
+}
+
+model ProviderCallback {
+  id          String   @id @default(uuid()) @db.Uuid
+  provider    String   @db.VarChar(30)
+  eventId     String   @db.Uuid
+  payloadHash String   @db.Char(64)
+  result      Json
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, eventId])
 }
 
 model ManualReview {

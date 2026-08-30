@@ -4,6 +4,7 @@ import { loadEnvironment } from "./environment";
 const base = {
   JWT_ACCESS_SECRET: "x".repeat(32),
   WEB_ORIGIN: "http://localhost:3000",
+  PAYMENT_PROVIDER: "acquiring",
 };
 
 describe("environment validation", () => {
@@ -26,12 +27,35 @@ describe("environment validation", () => {
       }),
     ).toThrow(/forbidden/);
   });
+  it("rejects mock payment and its secret in production", () => {
+    expect(() =>
+      loadEnvironment({
+        ...base,
+        NODE_ENV: "production",
+        WEB_ORIGIN: "https://agat.example",
+        OTP_PROVIDER: "sms",
+        PAYMENT_PROVIDER: "mock",
+      }),
+    ).toThrow(/Mock payment/);
+    expect(() =>
+      loadEnvironment({
+        ...base,
+        NODE_ENV: "production",
+        WEB_ORIGIN: "https://agat.example",
+        OTP_PROVIDER: "sms",
+        PAYMENT_PROVIDER: "acquiring",
+        JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
+        MOCK_PAYMENT_SECRET: "not-for-production",
+      }),
+    ).toThrow(/MOCK_PAYMENT_SECRET/);
+  });
   it("requires secure production origin and strong signing secret", () => {
     expect(() =>
       loadEnvironment({
         ...base,
         NODE_ENV: "production",
         OTP_PROVIDER: "sms",
+        PAYMENT_PROVIDER: "acquiring",
         JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
       }),
     ).toThrow(/HTTPS/);
@@ -65,6 +89,7 @@ describe("environment validation", () => {
         NODE_ENV: "production",
         WEB_ORIGIN: "https://agat.example",
         OTP_PROVIDER: "sms",
+        PAYMENT_PROVIDER: "acquiring",
         JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
         MOCK_OTP_CODE: "000000",
       }),
@@ -76,6 +101,7 @@ describe("environment validation", () => {
         NODE_ENV: "production",
         WEB_ORIGIN: "https://print.invalid",
         OTP_PROVIDER: "sms",
+        PAYMENT_PROVIDER: "acquiring",
         JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
         MINIO_ACCESS_KEY: "development-only",
         MINIO_SECRET_KEY: "development-only-change-me",

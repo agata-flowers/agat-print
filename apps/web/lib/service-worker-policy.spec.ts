@@ -6,6 +6,9 @@ describe("PWA cache denylist", () => {
     "/auth/login",
     "/documents/a",
     "/layouts/a",
+    "/orders/a",
+    "/payments/mock/callback",
+    "/tariffs/current",
     "/x?X-Amz-Signature=secret",
   ])("never caches %s", (path) =>
     expect(isSensitiveRequest(new URL(path, "https://agat.example"))).toBe(

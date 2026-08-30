@@ -12,6 +12,9 @@ export default function AdminPage() {
         <a className="button primary" href="/admin/reviews">
           Очередь ручной проверки
         </a>
+        <a className="button" href="/admin/tariffs">
+          Тарифы и финансовый аудит
+        </a>
       </div>
     </main>
   );

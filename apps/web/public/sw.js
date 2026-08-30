@@ -8,6 +8,9 @@ const NEVER_CACHE = [
   "/admin",
   "/uploads/",
   "/layouts/",
+  "/orders/",
+  "/payments/",
+  "/tariffs/",
   "/documents/",
 ];
 const sensitive = (url) =>

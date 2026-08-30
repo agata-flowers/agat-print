@@ -10,6 +10,7 @@ type LayoutView = {
   latestPreviewId: string | null;
   qualityCode: string | null;
   approved: boolean;
+  currentApprovalId: string | null;
 };
 
 const statusText: Record<string, string> = {
@@ -65,6 +66,26 @@ export default function LayoutPage() {
     }
   };
 
+  const createOrder = async () => {
+    if (!layout?.currentApprovalId) return;
+    try {
+      const response = await apiRequest("/orders", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({
+          layoutApprovalId: layout.currentApprovalId,
+          quantity: 1,
+        }),
+      });
+      const order = (await response.json()) as { id: string };
+      window.location.assign(`/orders/${order.id}`);
+    } catch {
+      setMessage(
+        "Заказ можно создать только из актуального подтверждённого макета.",
+      );
+    }
+  };
+
   return (
     <main className="narrow">
       <p className="eyebrow">Защищённый просмотр</p>
@@ -98,6 +119,15 @@ export default function LayoutPage() {
           </button>
         )}
         {layout?.approved && <p>Подтверждение сохранено для текущей версии.</p>}
+        {layout?.approved && (
+          <button
+            className="button primary"
+            onClick={createOrder}
+            type="button"
+          >
+            Рассчитать итог и создать заказ
+          </button>
+        )}
         <p aria-live="polite">{message}</p>
       </section>
     </main>
