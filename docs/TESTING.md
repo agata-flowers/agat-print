@@ -44,3 +44,23 @@ approval, orders, prices, payments, partner selection, production and delivery.
 
 Stage 4 explicitly excludes orders, prices, snapshots, payments, refunds,
 partner selection, production, printing and delivery.
+
+## Stage 5 acceptance
+
+- Eligibility/RBAC: only the owner’s latest active approval and matching
+  print-ready version create an order; only admins publish tariff versions or
+  trigger the synthetic no-executor command; foreign orders are hidden.
+- Pricing: UZS uses integer minor units; line items and inputs are copied into
+  one immutable `PriceSnapshot`; a later tariff leaves it unchanged.
+- Idempotency: matching keys replay, changed payload conflicts, repeated
+  payment/refund delivery creates no duplicate rows or outbox transitions.
+- Provider: success, failure and retry paths; signed callback, replay and wrong
+  ordering; `REFUND_PENDING` changes to `REFUNDED` only after confirmation.
+- Security: mock payment and development secrets fail in production; no
+  financial/personal/provider values occur in logs, safe audit or metric
+  labels; commerce routes are no-store and network-only in the PWA.
+- Infrastructure: clean and repeated migrations, Compose build/health and
+  stage-5 DB-E2E produce `stage5-verification-report.json` even on failure.
+
+Stage 5 explicitly excludes partner matching, `PARTNER_OFFERED`,
+`PartnerPayoutSnapshot`, production, printing, pickup, courier and delivery.

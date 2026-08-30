@@ -54,6 +54,8 @@ For the drill, measured RPO is the age of the selected backup when recovery star
 ## Production readiness
 
 - Mock OTP must fail startup.
+- Mock payment and `MOCK_PAYMENT_SECRET` must fail startup; production payment
+  credentials live only in the deployment secret store.
 - `Secure` cookies and a non-development signing secret are mandatory.
 - Backup endpoint must be off-host and credentials supplied by secret storage.
 - Alerts cover backup failure, restore verification failure, auth abuse, and health/readiness.
@@ -91,3 +93,15 @@ and daemon access to a dedicated host or rootless Docker context.
 Do not relax `network=none`, read-only root, UID 65532, capability drop,
 `no-new-privileges`, seccomp or CPU/RAM/PID/time limits to process a failing
 document. Treat repeated failures as a security/compatibility incident.
+
+## Payment operations
+
+The stage-5 provider is synthetic and development/test only. Callbacks are
+HMAC-authenticated and recorded by unique provider event ID. Operators must
+never paste callback bodies, signatures, idempotency keys, provider references,
+money values or customer identifiers into logs or incident tickets. A payment
+or refund stuck in a pending state is investigated from bounded domain status
+and protected database records; it is never repaired with direct status SQL.
+Run `bash ops/verify/stage5.sh` on a Docker host to exercise clean/repeated
+migration deployment, provider policy, DB-E2E, telemetry/cache policy and
+duplicate-payment/refund integrity.

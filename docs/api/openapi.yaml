@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.3.0
+  version: 0.4.0
 servers:
   - url: /api/v1
 paths:
@@ -178,6 +178,101 @@ paths:
         "201": { description: Review applied }
         "403": { description: Admin required }
         "409": { description: Review already decided or revision changed }
+  /tariffs/current:
+    get:
+      summary: Read the active public calculation inputs
+      responses:
+        "200": { description: Active UZS tariff version }
+        "404": { description: No active tariff }
+  /admin/tariffs:
+    get:
+      summary: List tariff versions (ADMIN only)
+      responses:
+        "200": { description: Version history }
+        "403": { description: Admin required }
+    post:
+      summary: Retire the active tariff and publish a new version (ADMIN only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTariff" }
+      responses:
+        "201": { description: New active tariff version }
+        "403": { description: Admin required }
+  /orders:
+    post:
+      summary: Create an order from the latest active layout approval
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrder" }
+      responses:
+        "201": { description: Order and immutable PriceSnapshot }
+        "404": { description: Approval not owned or not found }
+        "409": { description: Stale approval, no tariff, or key conflict }
+  /orders/{orderId}:
+    get:
+      summary: Read an owned order and frozen price/payment status
+      parameters: [{ $ref: "#/components/parameters/OrderId" }]
+      responses:
+        "200": { description: Owned order }
+        "404": { description: Not owned or not found }
+  /orders/{orderId}/payment:
+    post:
+      summary: Start one idempotent mock payment in development/test
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartPayment" }
+      responses:
+        "201": { description: Pending payment and synthetic callback }
+        "404": { description: Order not owned or not found }
+        "409": { description: Invalid state or key conflict }
+  /payments/mock/callback:
+    post:
+      summary: Accept a signed mock-provider callback without CSRF
+      parameters:
+        - in: header
+          name: X-Provider-Signature
+          required: true
+          schema: { type: string, pattern: "^[a-f0-9]{64}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentCallback" }
+      responses:
+        "201": { description: State transition accepted or replayed }
+        "403": { description: Invalid signature }
+        "409": { description: Replay conflict or invalid ordering }
+  /admin/internal/orders/{orderId}/no-executor:
+    post:
+      summary: Synthetically request one full refund (ADMIN only; stage 6 hook)
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NoExecutorRefund" }
+      responses:
+        "201": { description: Order and payment are REFUND_PENDING }
+        "403": { description: Admin required }
+        "409": { description: Order not refundable or key conflict }
+  /admin/finance/audit:
+    get:
+      summary: Read bounded metadata-only financial audit (ADMIN only)
+      responses:
+        "200": { description: Safe audit events }
+        "403": { description: Admin required }
   /health/live:
     get:
       responses: { "200": { description: Process alive } }
@@ -208,6 +303,16 @@ components:
       name: reviewId
       required: true
       schema: { type: string, format: uuid }
+    OrderId:
+      in: path
+      name: orderId
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 200 }
   schemas:
     CreateUploadSession:
       type: object
@@ -268,3 +373,41 @@ components:
       required: [decision]
       properties:
         decision: { type: string, enum: [APPROVE, REJECT] }
+    CreateTariff:
+      type: object
+      additionalProperties: false
+      required: [basePriceMinor, perPagePriceMinor]
+      properties:
+        basePriceMinor: { type: string, pattern: "^\\d{1,15}$" }
+        perPagePriceMinor: { type: string, pattern: "^\\d{1,15}$" }
+    CreateOrder:
+      type: object
+      additionalProperties: false
+      required: [layoutApprovalId, quantity]
+      properties:
+        layoutApprovalId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 10000 }
+    StartPayment:
+      type: object
+      additionalProperties: false
+      required: [simulateOutcome]
+      properties:
+        simulateOutcome: { type: string, enum: [SUCCESS, FAILURE] }
+    PaymentCallback:
+      type: object
+      additionalProperties: false
+      required: [eventId, paymentReference, outcome]
+      properties:
+        eventId: { type: string, format: uuid }
+        paymentReference: { type: string, pattern: "^[a-f0-9]{64}$" }
+        outcome:
+          type: string
+          enum: [PAYMENT_SUCCEEDED, PAYMENT_FAILED, REFUND_SUCCEEDED]
+    NoExecutorRefund:
+      type: object
+      additionalProperties: false
+      required: [syntheticEventReference]
+      properties:
+        syntheticEventReference:
+          type: string
+          pattern: "^[a-zA-Z0-9._:-]{1,80}$"

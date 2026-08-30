@@ -29,6 +29,8 @@ jobs:
       JWT_ACCESS_SECRET: ci-only-secret-at-least-32-characters
       OTP_PROVIDER: mock
       MOCK_OTP_CODE: "000000"
+      PAYMENT_PROVIDER: mock
+      MOCK_PAYMENT_SECRET: development-only-mock-payment-secret
       RUN_DB_E2E: "1"
     steps:
       - uses: actions/checkout@v4
@@ -82,4 +84,12 @@ jobs:
         with:
           name: stage4-verification-report
           path: outputs/stage4-verification-report.json
+          if-no-files-found: error
+      - name: Run stage 5 pricing, payment and refund verification
+        run: bash ops/verify/stage5.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage5-verification-report
+          path: outputs/stage5-verification-report.json
           if-no-files-found: error

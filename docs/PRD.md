@@ -4,14 +4,16 @@
 
 AGAT PRINT lets a customer prepare a print job remotely, know the price before payment, and route it to a capable nearby studio. The pilot serves Tashkent in Russian and Uzbek and is optimized for weak mobile connections.
 
-## Stage 1–4 release
+## Stage 1–5 release
 
 This release establishes secure identity, partner onboarding and protected file
 intake. An authenticated user can reserve quota, upload PDF, DOCX, JPG/JPEG or
 PNG into private quarantine, receive bounded validation/antivirus rejection,
 cancel an upload, and have an accepted file queued for isolated normalization.
 Stage 4 adds preflight, immutable preview/print-ready versions, bounded manual
-review and latest-version customer approval. It does not create an order.
+review and latest-version customer approval. Stage 5 adds versioned UZS
+tariffs, order creation from that active approval, an immutable price snapshot,
+mock payment and an idempotent full-refund foundation.
 
 ## MVP boundary
 
@@ -30,6 +32,8 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 | Authenticated user | Upload one supported private file    | Quota, signature, AV and isolation controls pass before persistence   |
 | Customer           | Review and confirm the latest layout | Own private preview only; stale or concurrent approval is rejected    |
 | Administrator      | Decide an uncertain photo review     | ADMIN-only decision is CAS-protected and safely audited               |
+| Customer           | Pay the frozen total                 | Only a current approved print-ready layout can become an order        |
+| Administrator      | Publish a tariff version             | Integer UZS values, ADMIN RBAC, immutable existing snapshots          |
 
 ## Non-functional requirements
 
@@ -43,7 +47,7 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 
 1. Secure file intake and isolated conversion foundation — implemented.
 2. Preflight, quality/manual review, preview, and approval — implemented.
-3. Pricing, order state machine, and mock payment/refund.
+3. Pricing, order state machine, and mock payment/refund — implemented.
 4. Partner matching, offered payout snapshot, manual production.
 5. Pickup, courier assignment, delivery, disputes, and retention automation.
 

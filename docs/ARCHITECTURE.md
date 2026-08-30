@@ -38,11 +38,14 @@ flowchart LR
   isolated normalization and output revalidation.
 - Layout: preflight of stage 3-ready sources, immutable preview/print-ready
   versions, bounded manual review and optimistic customer approval.
-- Future ports: payments, notifications, maps, delivery.
+- Commerce: versioned tariffs, order eligibility, immutable UZS price
+  snapshots, idempotent mock payment callbacks and full refunds.
+- Future ports: production payment acquisition, notifications, maps, delivery.
 
-## Future order aggregates
+## Stage 5 order aggregates
 
-`Order` owns versioned state, one active `Assignment`, `PriceSnapshot`, and idempotent refund. Each `PARTNER_OFFERED` attempt owns an immutable `PartnerPayoutSnapshot`; rejected/expired snapshots remain auditable.
+`Order` owns versioned payment state and exactly one immutable
+`PriceSnapshot`. A future stage will add assignments and payout snapshots.
 
 ```mermaid
 erDiagram
@@ -65,9 +68,14 @@ erDiagram
   ProcessingResult ||--o{ PrintReadyVersion : provenance
   LayoutRequest ||--o{ LayoutApproval : confirms
   PreviewVersion ||--o| ManualReview : may_require
+  User ||--o{ TariffVersion : authors
+  LayoutRequest ||--o{ Order : creates
+  LayoutApproval ||--o| Order : authorizes
+  PrintReadyVersion ||--o{ Order : prices
   Order ||--|| PriceSnapshot : freezes
-  Order ||--o{ Assignment : attempts
-  Assignment ||--|| PartnerPayoutSnapshot : offers
+  TariffVersion ||--o{ PriceSnapshot : sources
+  Order ||--o| Payment : pays
+  Payment ||--o| RefundOperation : refunds
 ```
 
 `PermanentObjectReference` records the opaque object key, SHA-256 checksum,
@@ -135,3 +143,20 @@ An approval references one immutable preview and the observed aggregate
 version. The transaction permits only the latest preview in
 `AWAITING_APPROVAL`; concurrent or stale confirmations return conflict. A new
 source version or settings hash clears `currentApprovalId` before processing.
+
+## Stage 5 pricing and payment invariants
+
+Only an `APPROVED` layout whose `currentApprovalId`, latest preview,
+print-ready provenance and aggregate version still agree can create an order.
+The transaction copies the active tariff version, bounded source parameters,
+line items, quantity, discount, currency and total into `PriceSnapshot`.
+All money is PostgreSQL `BIGINT` exposed as decimal strings; MVP currency is
+`UZS`. Later tariff versions cannot mutate an existing snapshot.
+
+Create-order, payment-start and synthetic no-executor refund commands require
+an idempotency key. Only SHA-256 key and canonical request digests are stored;
+same-key/same-payload replays the prior response and changed payload conflicts.
+Provider callbacks require HMAC, persist unique provider event IDs and reject
+invalid ordering. Every domain transition and outbox event share one database
+transaction. A refund holds both aggregates in `REFUND_PENDING` until a signed
+provider confirmation moves them to `REFUNDED`.

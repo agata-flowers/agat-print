@@ -1,9 +1,9 @@
 # AGAT PRINT
 
 Foundation for the AGAT PRINT mobile-first printing platform. This repository
-implements stages 1–4: planning, platform foundation, protected upload,
+implements stages 1–5: planning, platform foundation, protected upload,
 isolated processing, preflight, immutable layout artifacts, manual review and
-customer layout approval.
+customer layout approval, versioned pricing and mock payment/refund flow.
 
 ## Prerequisites
 
@@ -22,6 +22,8 @@ customer layout approval.
 Web: `http://localhost:3000`; API: `http://localhost:4000/api/v1`; OpenAPI: `http://localhost:4000/api/docs`.
 
 Development mock OTP is the value of `MOCK_OTP_CODE`. It is returned only when `NODE_ENV=development` and cannot start in production.
+The mock payment provider is selected with `PAYMENT_PROVIDER=mock`; it and
+`MOCK_PAYMENT_SECRET` are also rejected in production.
 
 ## Bootstrap administrator
 
@@ -33,8 +35,8 @@ Run `pnpm admin:bootstrap` in an interactive production shell. Enter the adminis
 production builds. GitHub Actions performs a frozen install from a fresh
 checkout with the standard Git index, runs the stage 2 recovery drill, then
 runs the stage 3 upload/processing isolation drill and the stage 4
-preflight/approval drill. Diagnostic JSON artifacts are uploaded even when a
-drill fails.
+preflight/approval drill and the stage 5 commerce drill. Diagnostic JSON
+artifacts are uploaded even when a drill fails.
 
 ## Protected uploads and processing
 
@@ -76,6 +78,19 @@ Changing source version or layout settings clears the current approval and
 creates a new immutable artifact version. Run `bash ops/verify/stage4.sh` for
 the complete stage 4 acceptance drill.
 
+## Pricing, orders and mock payment
+
+An admin publishes integer UZS tariff versions under `/admin/tariffs`. A
+customer creates an order only from the latest current `LayoutApproval`; the
+calculation is copied once into immutable `PriceSnapshot` fields and is not
+affected by later tariffs. Order creation and payment/refund commands require
+`Idempotency-Key`; same-key changed requests conflict.
+
+The development UI shows the frozen total and drives the signed mock callback.
+The internal ADMIN-only synthetic no-executor command requests one full refund;
+the order stays `REFUND_PENDING` until provider confirmation. No card data is
+accepted. Run `bash ops/verify/stage5.sh` for the Docker/DB acceptance drill.
+
 ## Backup and restore
 
 Set an off-host `RESTIC_REPOSITORY`, `BACKUP_S3_URL`, `BACKUP_S3_BUCKET`, S3 credentials, and `RESTIC_PASSWORD`, then run `docker compose --profile backup run --rm backup` as described in [operations](docs/OPERATIONS.md). PostgreSQL uses a consistent custom-format `pg_dump`; only permanent, non-expired MinIO objects referenced by the database manifest are in scope. Redis, caches, logs, metrics, and temporary objects are excluded.
@@ -86,6 +101,6 @@ Recovery targets for the pilot are RPO ≤ 24 hours and RTO ≤ 4 hours. A month
 
 ## Scope boundary
 
-Do not begin stage 5. Orders, pricing, `PriceSnapshot`, payments, refunds,
-partner matching, `PartnerPayoutSnapshot`, production, printing and delivery
+Do not begin stage 6. Partner matching, `PARTNER_OFFERED`, assignment,
+`PartnerPayoutSnapshot`, production, printing, pickup, courier and delivery
 remain intentionally absent.
