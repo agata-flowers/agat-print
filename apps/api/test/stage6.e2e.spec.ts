@@ -436,9 +436,35 @@ describe.skipIf(!enabled)("stage 6 partner matching and production e2e", () => {
   });
 
   it("expires offers idempotently and requests exactly one refund after exhaustion", async () => {
-    await prisma.branch.updateMany({ data: { active: false } });
     const order = await paidOrder();
-    await matching.startOrder(order.id, digest(`empty:${order.id}`));
+    await matching.startOrder(order.id, digest(`expiry:${order.id}`));
+    const expiring = await prisma.partnerOffer.findFirstOrThrow({
+      where: { orderId: order.id, status: "PENDING" },
+    });
+    expect(
+      Math.round(
+        (expiring.expiresAt.getTime() - expiring.createdAt.getTime()) / 1000,
+      ),
+    ).toBe(180);
+    await prisma.branch.updateMany({ data: { active: false } });
+    await prisma.partnerOffer.update({
+      where: { id: expiring.id },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    const expiryDelivery = digest(`expire:${expiring.id}`);
+    expect(
+      (await matching.expireOffer(expiring.id, expiryDelivery)).duplicate,
+    ).toBe(false);
+    expect(
+      (await matching.expireOffer(expiring.id, expiryDelivery)).duplicate,
+    ).toBe(true);
+    expect(
+      (
+        await prisma.partnerOffer.findUniqueOrThrow({
+          where: { id: expiring.id },
+        })
+      ).status,
+    ).toBe("EXPIRED");
     expect(
       (
         await prisma.orderMatching.findUniqueOrThrow({
