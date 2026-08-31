@@ -64,3 +64,9 @@ partner selection, production, printing and delivery.
 
 Stage 5 explicitly excludes partner matching, `PARTNER_OFFERED`,
 `PartnerPayoutSnapshot`, production, printing, pickup, courier and delivery.
+
+# Stage 6 gate
+
+`bash ops/verify/stage6.sh` verifies matching filters/order, TTL/retry, payout
+immutability, assignment race/ownership, manual production and exhaustion
+refund DB-E2E over PostgreSQL, Redis/BullMQ and private MinIO.

@@ -105,3 +105,15 @@ and protected database records; it is never repaired with direct status SQL.
 Run `bash ops/verify/stage5.sh` on a Docker host to exercise clean/repeated
 migration deployment, provider policy, DB-E2E, telemetry/cache policy and
 duplicate-payment/refund integrity.
+
+# Matching operations
+
+- Default offer TTL is 180 seconds and is configured with
+  `PARTNER_OFFER_TTL_SECONDS`; a change affects only newly created offers.
+- Redis jobs are delivery hints. PostgreSQL outbox/inbox, offer state and order
+  version are authoritative. Replaying a job is safe.
+- An `EXHAUSTED` matching aggregate permanently blocks later offers and emits a
+  single idempotent stage 5 refund intent. Operators must not manually rewrite
+  matching, offer, assignment, payout or refund rows.
+- Partner production is manual through `READY`. There is no printer agent,
+  pickup, courier or completion operation in stage 6.

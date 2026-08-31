@@ -273,6 +273,76 @@ paths:
       responses:
         "200": { description: Safe audit events }
         "403": { description: Admin required }
+  /admin/branches/{branchId}/capabilities:
+    post:
+      summary: Publish an immutable branch capability version (ADMIN only)
+      parameters: [{ $ref: "#/components/parameters/BranchId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCapabilityVersion" }
+      responses:
+        "201": { description: New active capability version }
+        "403": { description: Admin required }
+  /partner/offers:
+    get:
+      summary: List only the authenticated partner's historical offers
+      responses:
+        "200": { description: Offers with partner payout but no customer data }
+        "403": { description: Approved partner required }
+  /partner/offers/{offerId}/decision:
+    post:
+      summary: Idempotently accept or reject an unexpired owned offer
+      parameters:
+        - $ref: "#/components/parameters/OfferId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfferDecision" }
+      responses:
+        "201": { description: Decision committed with order CAS }
+        "403": { description: Approved partner required }
+        "404": { description: Offer not owned }
+        "409": { description: Expired, decided, racing or key conflict }
+  /partner/orders/active:
+    get:
+      summary: Read the authenticated partner's next active assignment
+      responses:
+        "200": { description: Active assignment or null }
+        "403": { description: Approved partner required }
+  /partner/orders/{orderId}/print-ready:
+    post:
+      summary: Issue a short-lived assigned print-ready URL
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: No-store signed URL }
+        "403": { description: Order not assigned to partner }
+  /partner/orders/{orderId}/status:
+    post:
+      summary: Apply the next manual production transition
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductionStatus" }
+      responses:
+        "201": { description: Status changed }
+        "403": { description: Order not assigned to partner }
+        "409": { description: Reverse, skipped or concurrent transition }
+  /admin/matching:
+    get:
+      summary: Read bounded matching, offer and assignment history (ADMIN only)
+      responses:
+        "200": { description: Safe matching history }
+        "403": { description: Admin required }
   /health/live:
     get:
       responses: { "200": { description: Process alive } }
@@ -306,6 +376,16 @@ components:
     OrderId:
       in: path
       name: orderId
+      required: true
+      schema: { type: string, format: uuid }
+    BranchId:
+      in: path
+      name: branchId
+      required: true
+      schema: { type: string, format: uuid }
+    OfferId:
+      in: path
+      name: offerId
       required: true
       schema: { type: string, format: uuid }
     IdempotencyKey:
@@ -411,3 +491,37 @@ components:
         syntheticEventReference:
           type: string
           pattern: "^[a-zA-Z0-9._:-]{1,80}$"
+    CreateCapabilityVersion:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          supportedFileKinds,
+          maxPages,
+          maxWidthMm,
+          maxHeightMm,
+          minDpi,
+          priority,
+        ]
+      properties:
+        supportedFileKinds:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [PDF, DOCX, JPEG, PNG] }
+        maxPages: { type: integer, minimum: 1, maximum: 100 }
+        maxWidthMm: { type: integer, minimum: 10, maximum: 2000 }
+        maxHeightMm: { type: integer, minimum: 10, maximum: 2000 }
+        minDpi: { type: integer, minimum: 72, maximum: 2400 }
+        priority: { type: integer, minimum: 1, maximum: 1000 }
+    OfferDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [ACCEPT, REJECT] }
+    ProductionStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [IN_PRODUCTION, READY] }

@@ -28,7 +28,7 @@ flowchart LR
 ## Modules
 
 - Identity: OTP challenges, users, role assignments, access/refresh sessions.
-- Partner: application, branch, approval.
+- Partner: application, branch, approval and versioned matching capabilities.
 - Admin: one-time bootstrap and guarded moderation.
 - Audit: bounded event names and redacted metadata.
 - Health/metrics: readiness and low-cardinality telemetry.
@@ -40,12 +40,14 @@ flowchart LR
   versions, bounded manual review and optimistic customer approval.
 - Commerce: versioned tariffs, order eligibility, immutable UZS price
   snapshots, idempotent mock payment callbacks and full refunds.
-- Future ports: production payment acquisition, notifications, maps, delivery.
+- Matching: deterministic candidates, sequential TTL offers, immutable payout
+  snapshots, one active assignment and manual production through READY.
+- Future ports: production payment acquisition and delivery.
 
 ## Stage 5 order aggregates
 
-`Order` owns versioned payment state and exactly one immutable
-`PriceSnapshot`. A future stage will add assignments and payout snapshots.
+`Order` owns versioned payment/matching state and exactly one immutable
+`PriceSnapshot`. Matching owns historical offers and payout snapshots.
 
 ```mermaid
 erDiagram
@@ -76,6 +78,13 @@ erDiagram
   TariffVersion ||--o{ PriceSnapshot : sources
   Order ||--o| Payment : pays
   Payment ||--o| RefundOperation : refunds
+  Branch ||--o{ BranchCapabilityVersion : versions
+  Order ||--o| OrderMatching : matches
+  Order ||--o{ PartnerOffer : offers
+  BranchCapabilityVersion ||--o{ PartnerOffer : qualifies
+  PartnerOffer ||--|| PartnerPayoutSnapshot : freezes
+  PartnerOffer ||--o| PartnerAssignment : accepts
+  PartnerPayoutSnapshot ||--o| PartnerAssignment : binds
 ```
 
 `PermanentObjectReference` records the opaque object key, SHA-256 checksum,
@@ -160,3 +169,24 @@ Provider callbacks require HMAC, persist unique provider event IDs and reject
 invalid ordering. Every domain transition and outbox event share one database
 transaction. A refund holds both aggregates in `REFUND_PENDING` until a signed
 provider confirmation moves them to `REFUNDED`.
+
+## Stage 6 matching and production invariants
+
+Only `PAID` enters matching. Candidate hard filters require an approved active
+partner, active branch, active immutable capability version, supported file
+kind, page capacity, dimensions and DPI. Ranking is deterministic: configured
+priority, mock-map distance, then stable branch UUID. External maps and paid
+notification APIs are not called.
+
+Offers are sequential and retain rejected/expired history. Every offer creates
+one append-only `PartnerPayoutSnapshot`; PostgreSQL rejects update/delete and
+checks one active assignment per order with a partial unique index. Acceptance
+locks the order row and applies aggregate-version CAS in the same transaction
+as the assignment and outbox event. BullMQ expiry uses the outbox dedup key and
+the PostgreSQL inbox, so redelivery cannot advance twice.
+
+When candidates are exhausted, `OrderMatching` becomes `EXHAUSTED` and a
+durable outbox intent prevents any later offer. The consumer invokes the stage
+5 full-refund command with a stable key; provider confirmation remains required
+for `REFUNDED`. Partners receive only their assigned print-ready signed URL and
+manually transition `PARTNER_ACCEPTED → IN_PRODUCTION → READY`.

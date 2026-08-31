@@ -1,9 +1,10 @@
 # AGAT PRINT
 
 Foundation for the AGAT PRINT mobile-first printing platform. This repository
-implements stages 1–5: planning, platform foundation, protected upload,
+implements stages 1–6: planning, platform foundation, protected upload,
 isolated processing, preflight, immutable layout artifacts, manual review and
-customer layout approval, versioned pricing and mock payment/refund flow.
+customer layout approval, versioned pricing, mock payment/refund and partner
+matching through manual production readiness.
 
 ## Prerequisites
 
@@ -34,8 +35,9 @@ Run `pnpm admin:bootstrap` in an interactive production shell. Enter the adminis
 `pnpm run ci` runs formatting, lint, types, tests, Prisma validation, and
 production builds. GitHub Actions performs a frozen install from a fresh
 checkout with the standard Git index, runs the stage 2 recovery drill, then
-runs the stage 3 upload/processing isolation drill and the stage 4
-preflight/approval drill and the stage 5 commerce drill. Diagnostic JSON
+runs the stage 3 upload/processing isolation drill, the stage 4
+preflight/approval drill, the stage 5 commerce drill and the stage 6 matching
+drill. Diagnostic JSON
 artifacts are uploaded even when a drill fails.
 
 ## Protected uploads and processing
@@ -99,8 +101,23 @@ On an isolated Docker host, run the complete recovery check with `bash ops/verif
 
 Recovery targets for the pilot are RPO ≤ 24 hours and RTO ≤ 4 hours. A monthly isolated restore drill is mandatory.
 
+## Partner matching and manual production
+
+A successful payment is delivered through the transactional outbox and BullMQ
+to the matching module. Only approved partners, active branches and the latest
+active capability version are eligible. Candidates are ordered by bounded
+priority, deterministic mock-map distance and branch UUID. Each sequential
+offer expires after `PARTNER_OFFER_TTL_SECONDS` (180 seconds by default) and
+owns an immutable UZS `PartnerPayoutSnapshot`.
+
+Partners use `/partner` to accept or reject their own offer, download the
+assigned private print-ready artifact, and manually move the order from
+`PARTNER_ACCEPTED` to `IN_PRODUCTION` and `READY`. Exhaustion emits one durable
+refund request consumed through the stage 5 idempotent refund command. Run
+`bash ops/verify/stage6.sh` for the Docker/Redis/DB acceptance drill.
+
 ## Scope boundary
 
-Do not begin stage 6. Partner matching, `PARTNER_OFFERED`, assignment,
-`PartnerPayoutSnapshot`, production, printing, pickup, courier and delivery
-remain intentionally absent.
+Do not begin stage 7. Direct printer integration, local print agents, pickup
+PINs, `AWAITING_PICKUP`, couriers, delivery and `COMPLETED` remain intentionally
+absent.

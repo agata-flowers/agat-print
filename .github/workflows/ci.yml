@@ -93,3 +93,11 @@ jobs:
           name: stage5-verification-report
           path: outputs/stage5-verification-report.json
           if-no-files-found: error
+      - name: Run stage 6 matching and manual production verification
+        run: bash ops/verify/stage6.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage6-verification-report
+          path: outputs/stage6-verification-report.json
+          if-no-files-found: error

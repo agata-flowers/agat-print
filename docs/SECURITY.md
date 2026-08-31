@@ -82,3 +82,12 @@ exposure.
 4. Eradicate, rotate secrets, patch, and restore from verified backup if required.
 5. Determine notification duties with counsel and the data-protection owner.
 6. Record root cause, corrective controls, and restore/response timings.
+
+# Stage 6 matching controls
+
+Offer ownership is checked against the authenticated approved partner before
+decisions, production changes or print-ready access. Order row locks, aggregate
+CAS and a partial unique assignment index prevent double acceptance; expired
+offers fail closed. Payout snapshots are immutable at both service and database
+layers and are never included in customer responses, logs, audit metadata or
+metrics. Signed print-ready URLs remain private, short-lived and no-store.
