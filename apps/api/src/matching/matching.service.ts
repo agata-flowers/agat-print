@@ -245,13 +245,24 @@ export class MatchingService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ["P2002", "P2034"].includes(error.code)
-      ) {
-        const recovered =
-          await this.idempotency.replay<Record<string, unknown>>(prepared);
-        if (recovered) return recovered;
+      const prismaError =
+        error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
+      const serializationFailure =
+        prismaError?.code === "P2034" ||
+        (prismaError?.code === "P2010" &&
+          typeof prismaError.meta === "object" &&
+          prismaError.meta !== null &&
+          "code" in prismaError.meta &&
+          prismaError.meta.code === "40001");
+      if (prismaError?.code === "P2002" || serializationFailure) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const recovered =
+            await this.idempotency.replay<Record<string, unknown>>(prepared);
+          if (recovered) return recovered;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        if (serializationFailure)
+          throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
       }
       throw error;
     }
