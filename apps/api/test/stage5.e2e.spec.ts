@@ -54,11 +54,12 @@ describe.skipIf(!enabled)("stage 5 pricing, payment and refund e2e", () => {
       userId: adminId,
     } = await login("+998000000053"));
     await prisma.userRole.create({ data: { userId: adminId, role: "ADMIN" } });
-    await admin
+    const refreshedAdmin = await admin
       .post("/api/v1/auth/refresh")
       .set("Origin", origin)
       .set("X-CSRF-Token", adminCsrf)
       .expect(201);
+    adminCsrf = refreshedAdmin.body.csrfToken as string;
   });
 
   afterAll(async () => app.close());
