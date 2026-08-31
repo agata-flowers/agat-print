@@ -84,8 +84,36 @@ enum TariffStatus {
 enum OrderStatus {
   AWAITING_PAYMENT
   PAID
+  MATCHING
+  PARTNER_OFFERED
+  PARTNER_ACCEPTED
+  IN_PRODUCTION
+  READY
   REFUND_PENDING
   REFUNDED
+}
+
+enum CapabilityStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum MatchingStatus {
+  ACTIVE
+  ASSIGNED
+  EXHAUSTED
+}
+
+enum PartnerOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  READY
 }
 
 enum PaymentStatus {
@@ -119,6 +147,7 @@ model User {
   manualReviews ManualReview[] @relation("ManualReviewOperator")
   tariffVersions TariffVersion[] @relation("TariffAuthor")
   orders      Order[]
+  capabilityVersions BranchCapabilityVersion[] @relation("CapabilityAuthor")
 }
 
 model UserRole {
@@ -170,6 +199,8 @@ model Partner {
   updatedAt   DateTime      @updatedAt
   owner       User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   branches    Branch[]
+  offers      PartnerOffer[]
+  assignments PartnerAssignment[]
 }
 
 model Branch {
@@ -178,10 +209,37 @@ model Branch {
   name      String   @db.VarChar(180)
   city      String   @default("Tashkent") @db.VarChar(100)
   district  String?  @db.VarChar(120)
+  locationCode String @default("TASHKENT") @db.VarChar(40)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  capabilityVersions BranchCapabilityVersion[]
+  offers PartnerOffer[]
+  assignments PartnerAssignment[]
+}
+
+/// Immutable, versioned matching capabilities. Retiring a version never edits it.
+model BranchCapabilityVersion {
+  id                 String           @id @default(uuid()) @db.Uuid
+  branchId           String           @db.Uuid
+  version            Int
+  status             CapabilityStatus @default(ACTIVE)
+  supportedFileKinds UploadFileKind[]
+  maxPages           Int
+  maxWidthMm         Int
+  maxHeightMm        Int
+  minDpi             Int
+  priority           Int              @default(100)
+  createdById        String           @db.Uuid
+  createdAt          DateTime         @default(now())
+  retiredAt          DateTime?
+  branch             Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy          User             @relation("CapabilityAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  offers             PartnerOffer[]
+
+  @@unique([branchId, version])
+  @@index([branchId, status])
 }
 
 model AuditEvent {
@@ -408,9 +466,84 @@ model Order {
   printReadyVersion   PrintReadyVersion @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
   priceSnapshot       PriceSnapshot?
   payment             Payment?
+  matching            OrderMatching?
+  partnerOffers       PartnerOffer[]
+  assignments         PartnerAssignment[]
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
+}
+
+model OrderMatching {
+  id          String         @id @default(uuid()) @db.Uuid
+  orderId     String         @unique @db.Uuid
+  status      MatchingStatus @default(ACTIVE)
+  version     Int            @default(0)
+  startedAt   DateTime       @default(now())
+  exhaustedAt DateTime?
+  assignedAt  DateTime?
+  order       Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+}
+
+model PartnerOffer {
+  id                  String             @id @default(uuid()) @db.Uuid
+  orderId             String             @db.Uuid
+  partnerId           String             @db.Uuid
+  branchId            String             @db.Uuid
+  capabilityVersionId String             @db.Uuid
+  candidateRank       Int
+  status              PartnerOfferStatus @default(PENDING)
+  version             Int                @default(0)
+  expiresAt           DateTime
+  decidedAt           DateTime?
+  createdAt           DateTime           @default(now())
+  order               Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  partner             Partner            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  branch              Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  capabilityVersion   BranchCapabilityVersion @relation(fields: [capabilityVersionId], references: [id], onDelete: Restrict)
+  payoutSnapshot      PartnerPayoutSnapshot?
+  assignment          PartnerAssignment?
+
+  @@unique([orderId, branchId])
+  @@index([partnerId, status, expiresAt])
+  @@index([status, expiresAt])
+}
+
+/// Financial terms are append-only and never updated after offer creation.
+model PartnerPayoutSnapshot {
+  id                   String   @id @default(uuid()) @db.Uuid
+  offerId              String   @unique @db.Uuid
+  customerAmountMinor  BigInt
+  partnerPayoutMinor   BigInt
+  agatCommissionMinor  BigInt
+  currency             String   @default("UZS") @db.Char(3)
+  ruleVersion          String   @db.VarChar(40)
+  calculationInputs    Json
+  createdAt            DateTime @default(now())
+  offer                PartnerOffer @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  assignment           PartnerAssignment?
+}
+
+model PartnerAssignment {
+  id               String           @id @default(uuid()) @db.Uuid
+  orderId          String           @db.Uuid
+  offerId          String           @unique @db.Uuid
+  partnerId        String           @db.Uuid
+  branchId         String           @db.Uuid
+  payoutSnapshotId String           @unique @db.Uuid
+  status           AssignmentStatus @default(ACTIVE)
+  active           Boolean          @default(true)
+  version          Int              @default(0)
+  acceptedAt       DateTime         @default(now())
+  readyAt          DateTime?
+  order            Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  offer            PartnerOffer     @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  partner          Partner          @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  branch           Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  payoutSnapshot   PartnerPayoutSnapshot @relation(fields: [payoutSnapshotId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, active])
+  @@index([partnerId, active])
 }
 
 model PriceSnapshot {

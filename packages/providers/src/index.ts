@@ -52,6 +52,7 @@ export interface MapsProvider {
     query: string,
     context: ProviderContext,
   ): Promise<{ latitude: number; longitude: number }>;
+  distanceScore(originCode: string, destinationCode: string): Promise<number>;
 }
 export interface DeliveryProvider {
   createDelivery(

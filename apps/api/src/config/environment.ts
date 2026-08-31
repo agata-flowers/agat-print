@@ -33,6 +33,10 @@ export interface AppEnvironment {
   previewSignedUrlTtlSeconds: number;
   paymentProvider: string;
   mockPaymentSecret: string;
+  matchingDispatchEnabled: boolean;
+  partnerOfferTtlSeconds: number;
+  partnerPayoutBasisPoints: number;
+  partnerPayoutRuleVersion: string;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -85,6 +89,12 @@ export function loadEnvironment(
         throw new Error(`${name} must come from the production secret store`);
     }
   }
+  const partnerPayoutBasisPoints = integer(
+    source.PARTNER_PAYOUT_BASIS_POINTS,
+    8000,
+  );
+  if (partnerPayoutBasisPoints > 10_000)
+    throw new Error("PARTNER_PAYOUT_BASIS_POINTS must not exceed 10000");
   return {
     nodeEnv,
     webOrigin,
@@ -132,6 +142,11 @@ export function loadEnvironment(
     ),
     paymentProvider,
     mockPaymentSecret,
+    matchingDispatchEnabled:
+      (source.MATCHING_DISPATCH_ENABLED ?? "false") === "true",
+    partnerOfferTtlSeconds: integer(source.PARTNER_OFFER_TTL_SECONDS, 180),
+    partnerPayoutBasisPoints,
+    partnerPayoutRuleVersion: source.PARTNER_PAYOUT_RULE_VERSION ?? "mvp-v1",
   };
 }
 

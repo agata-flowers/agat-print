@@ -184,7 +184,7 @@ export class CommerceService {
           const approval = await tx.layoutApproval.findFirst({
             where: { id: input.layoutApprovalId, userId },
             include: {
-              layout: true,
+              layout: { include: { upload: true } },
               previewVersion: true,
             },
           });
@@ -233,6 +233,7 @@ export class CommerceService {
                   tariffVersionId: tariff.id,
                   tariffVersion: tariff.version,
                   sourceParameters: {
+                    fileKind: layout.upload.fileKind,
                     pageCount: printReady.pageCount,
                     layoutSettings: layout.settings,
                   },
@@ -510,7 +511,7 @@ export class CommerceService {
   }
 
   async requestNoExecutorRefund(
-    actorId: string,
+    actorId: string | undefined,
     orderId: string,
     key: string | undefined,
     input: NoExecutorRefundDto,
@@ -547,7 +548,7 @@ export class CommerceService {
     if (
       !order?.payment ||
       order.payment.status !== "SUCCEEDED" ||
-      order.status !== "PAID"
+      !["PAID", "MATCHING", "PARTNER_OFFERED"].includes(order.status)
     )
       throw new ConflictException({ code: "ORDER_NOT_REFUNDABLE" });
     const provider = await this.payments.refund(

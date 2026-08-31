@@ -17,5 +17,6 @@ import { MockPaymentProvider } from "./mock-payment.provider";
     MockPaymentCallbackController,
   ],
   providers: [CommerceService, IdempotencyService, MockPaymentProvider],
+  exports: [CommerceService, IdempotencyService],
 })
 export class CommerceModule {}

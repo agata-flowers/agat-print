@@ -9,6 +9,7 @@ import { CommerceModule } from "./commerce/commerce.module";
 import { HealthController } from "./health/health.controller";
 import { LayoutsModule } from "./layouts/layouts.module";
 import { MetricsModule } from "./metrics/metrics.module";
+import { MatchingModule } from "./matching/matching.module";
 import { PartnersModule } from "./partners/partners.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProfileModule } from "./profile/profile.module";
@@ -26,6 +27,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     UploadsModule,
     LayoutsModule,
     CommerceModule,
+    MatchingModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -51,7 +51,7 @@ export class OutboxDispatcherService implements OnModuleInit, OnModuleDestroy {
 
   async dispatchBatch(): Promise<number> {
     const events = await this.prisma.outboxEvent.findMany({
-      where: { publishedAt: null },
+      where: { publishedAt: null, eventType: "FILE_PROCESSING_REQUESTED" },
       orderBy: { createdAt: "asc" },
       take: 50,
     });
