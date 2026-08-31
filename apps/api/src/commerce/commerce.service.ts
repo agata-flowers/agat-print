@@ -302,7 +302,7 @@ export class CommerceService {
     if (this.env.paymentProvider !== "mock")
       throw new ConflictException({ code: "PAYMENT_PROVIDER_UNAVAILABLE" });
     const prepared = this.idempotency.prepare(
-      `payment:start:${userId}:${orderId}`,
+      `payment:start:${orderId}`,
       key,
       input,
     );
