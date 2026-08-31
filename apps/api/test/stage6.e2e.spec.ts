@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module";
+import { CommerceService } from "../src/commerce/commerce.service";
 import { MatchingQueueService } from "../src/matching/matching-queue.service";
 import { MatchingService } from "../src/matching/matching.service";
 import { PrismaService } from "../src/prisma/prisma.service";
@@ -433,6 +434,10 @@ describe.skipIf(!enabled)("stage 6 partner matching and production e2e", () => {
       (await prisma.order.findUniqueOrThrow({ where: { id: order.id } }))
         .status,
     ).toBe("READY");
+    const customerView = await app
+      .get(CommerceService)
+      .ownOrder(customerId, order.id);
+    expect(JSON.stringify(customerView)).not.toMatch(/payout|commission/i);
   });
 
   it("expires offers idempotently and requests exactly one refund after exhaustion", async () => {
