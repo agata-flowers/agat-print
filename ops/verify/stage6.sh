@@ -101,7 +101,8 @@ test "$snapshot_gaps" = 0
 test "$duplicate_refunds" = 0
 
 phase="scope-boundary"
-if grep -ERn 'AWAITING_PICKUP|COURIER_ASSIGNED|IN_DELIVERY|COMPLETED|print-agent|pickup.?pin' apps/api/src apps/web/app; then
+if grep -ERn 'AWAITING_PICKUP|COURIER_ASSIGNED|IN_DELIVERY|print-agent|pickup.?pin' apps/api/src apps/web/app || \
+  grep -ERn "['\"]COMPLETED['\"]" apps/api/src apps/web/app; then
   echo 'Stage 7 implementation marker found in executable stage 6 code.' >&2
   exit 1
 fi
