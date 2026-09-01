@@ -530,7 +530,7 @@ export class FulfillmentService {
       throw new UnauthorizedException({ code: "PIN_INVALID" });
     await this.audit.record("DELIVERY_HANDED_OFF", ownerId, "delivery", {
       status: "IN_DELIVERY",
-      operation: "PIN",
+      operation: "VERIFY",
     });
     return outcome.response;
   }

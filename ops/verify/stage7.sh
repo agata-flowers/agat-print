@@ -21,6 +21,7 @@ write_report running
 cleanup() {
   local status="$?"
   if [[ "$status" -ne 0 ]]; then
+    echo "Stage 7 verification failed during phase: $phase" >&2
     write_report failure
     "${compose[@]}" ps >&2 || true
     "${compose[@]}" logs --no-color --tail=150 api postgres redis minio >&2 || true
