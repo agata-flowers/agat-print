@@ -116,8 +116,25 @@ assigned private print-ready artifact, and manually move the order from
 refund request consumed through the stage 5 idempotent refund command. Run
 `bash ops/verify/stage6.sh` for the Docker/Redis/DB acceptance drill.
 
+## Printer-agent, pickup and delivery
+
+Stage 7 keeps the stage-6 manual production path and adds a branch-local agent
+that pulls only its branch job, leases it atomically and spools a validated PDF.
+Register an agent from `POST /api/v1/admin/branches/:id/printer-agents`; its
+token is returned once and only the HMAC digest is stored. Run the agent with
+`AGAT_API_ORIGIN`, `PRINTER_AGENT_ID`, `PRINTER_AGENT_TOKEN` and a protected
+`PRINTER_SPOOL_DIRECTORY`.
+
+An owner selects pickup or delivery only after `READY`. Completion and courier
+handoff use separate six-digit PINs derived from a secret + random nonce; the
+database stores digests, attempt counters and expiry only. Delivery addresses
+are AES-256-GCM encrypted and visible only to the assigned approved courier.
+The normal paths terminate at `COMPLETED`; unavailable/failed delivery reaches
+`DELIVERY_FAILED`. Run the complete Docker gate with
+`bash ops/verify/stage7.sh`.
+
 ## Scope boundary
 
-Do not begin stage 7. Direct printer integration, local print agents, pickup
-PINs, `AWAITING_PICKUP`, couriers, delivery and `COMPLETED` remain intentionally
-absent.
+Do not begin stage 8. Disputes, reprints, advanced courier optimization,
+marketplace expansion and later workflows remain out of scope until explicit
+approval.

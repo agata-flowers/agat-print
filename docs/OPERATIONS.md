@@ -117,3 +117,26 @@ duplicate-payment/refund integrity.
   matching, offer, assignment, payout or refund rows.
 - Partner production is manual through `READY`. There is no printer agent,
   pickup, courier or completion operation in stage 6.
+
+# Stage 7 printer and delivery operations
+
+- Register a branch-local agent only from the ADMIN endpoint and transfer its
+  ID/token once through the deployment secret channel. The database retains
+  only a token digest. Revoke or rotate the machine if its host is lost.
+- The agent validates PDF signature/size, writes an atomic mode-0600 file into
+  its configured OS spool boundary and never logs credentials or URLs. Its
+  container drops capabilities, is read-only and gets only a private spool
+  mount. Hardware/driver acceptance is outside the central API provider port.
+- `FULFILLMENT_DISPATCH_ENABLED` enables the PostgreSQL-outbox/BullMQ consumer.
+  Redis loss is recoverable by redispatch; `InboxOperation`, unique jobs and
+  aggregate CAS remain authoritative.
+- Pickup PIN TTL defaults to 24 hours with five attempts. Rotate
+  `PICKUP_PIN_SECRET` only with an explicit migration/expiry plan because live
+  PIN verification depends on it. `DELIVERY_DATA_KEY` must be a secret-store
+  supplied base64 256-bit key; loss makes active addresses unrecoverable.
+- Delivery uses the provider interface. `mock` is rejected in production.
+  A missing compatible active courier fails closed to `DELIVERY_FAILED`; direct
+  status SQL is prohibited.
+- Run `bash ops/verify/stage7.sh` on a Docker host and retain the generated
+  `stage7-verification-report.json` artifact without copying synthetic PINs,
+  addresses, agent credentials or object references into reports.

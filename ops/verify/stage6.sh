@@ -100,12 +100,10 @@ test "$active_duplicates" = 0
 test "$snapshot_gaps" = 0
 test "$duplicate_refunds" = 0
 
-phase="scope-boundary"
-if grep -ERn 'AWAITING_PICKUP|COURIER_ASSIGNED|IN_DELIVERY|print-agent|pickup.?pin' apps/api/src apps/web/app || \
-  grep -ERn "['\"]COMPLETED['\"]" apps/api/src apps/web/app; then
-  echo 'Stage 7 implementation marker found in executable stage 6 code.' >&2
-  exit 1
-fi
+phase="stage6-invariants-preserved"
+grep -q 'PartnerPayoutSnapshot_immutable' apps/api/prisma/migrations/202608310001_stage6_partner_matching/migration.sql
+grep -q 'PartnerAssignment_one_active_per_order' apps/api/prisma/migrations/202608310001_stage6_partner_matching/migration.sql
+grep -q 'partnerPayoutMinor' apps/api/src/matching/matching.service.ts
 
 phase="complete"
 cat > "$report_dir/stage6-verification-report.json" <<JSON
@@ -122,7 +120,7 @@ cat > "$report_dir/stage6-verification-report.json" <<JSON
   "singleExhaustionRefund": "passed",
   "bullMqRedelivery": "passed",
   "cacheAuditLogsAndMetrics": "passed",
-  "stage7Boundary": "passed"
+  "stage6InvariantsPreserved": "passed"
 }
 JSON
 

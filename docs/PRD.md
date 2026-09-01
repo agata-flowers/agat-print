@@ -4,7 +4,7 @@
 
 AGAT PRINT lets a customer prepare a print job remotely, know the price before payment, and route it to a capable nearby studio. The pilot serves Tashkent in Russian and Uzbek and is optimized for weak mobile connections.
 
-## Stage 1–5 release
+## Stage 1–7 release
 
 This release establishes secure identity, partner onboarding and protected file
 intake. An authenticated user can reserve quota, upload PDF, DOCX, JPG/JPEG or
@@ -14,6 +14,9 @@ Stage 4 adds preflight, immutable preview/print-ready versions, bounded manual
 review and latest-version customer approval. Stage 5 adds versioned UZS
 tariffs, order creation from that active approval, an immutable price snapshot,
 mock payment and an idempotent full-refund foundation.
+Stage 6 adds deterministic partner offers, immutable payout snapshots and
+manual production. Stage 7 adds a branch-local printer-agent option, protected
+pickup, basic courier assignment/delivery and terminal `COMPLETED`.
 
 ## MVP boundary
 
@@ -28,7 +31,8 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 | Customer           | Sign in by phone without a password  | OTP expires, is single-use, attempt-limited, and creates safe cookies |
 | Partner applicant  | Register a company and branch        | Record is pending and protected from partner-only access              |
 | Administrator      | Review and approve a partner         | Approval is audited and grants the partner role atomically            |
-| Courier            | Reserved role                        | No courier workflow exists before delivery stage                      |
+| Courier            | Deliver an assigned ready order      | Own active delivery, two-party handoff and customer PIN complete      |
+| Partner            | Hand off a ready order               | Own assignment only; customer/courier PIN is attempt-limited          |
 | Authenticated user | Upload one supported private file    | Quota, signature, AV and isolation controls pass before persistence   |
 | Customer           | Review and confirm the latest layout | Own private preview only; stale or concurrent approval is rejected    |
 | Administrator      | Decide an uncertain photo review     | ADMIN-only decision is CAS-protected and safely audited               |
@@ -48,8 +52,9 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 1. Secure file intake and isolated conversion foundation — implemented.
 2. Preflight, quality/manual review, preview, and approval — implemented.
 3. Pricing, order state machine, and mock payment/refund — implemented.
-4. Partner matching, offered payout snapshot, manual production.
-5. Pickup, courier assignment, delivery, disputes, and retention automation.
+4. Partner matching, offered payout snapshot, manual production — implemented.
+5. Printer-agent, pickup, courier assignment and basic delivery — implemented.
+6. Disputes, reprints and expanded retention automation — future approval.
 
 ## Legal decisions required before pilot
 

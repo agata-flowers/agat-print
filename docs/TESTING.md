@@ -70,3 +70,14 @@ Stage 5 explicitly excludes partner matching, `PARTNER_OFFERED`,
 `bash ops/verify/stage6.sh` verifies matching filters/order, TTL/retry, payout
 immutability, assignment race/ownership, manual production and exhaustion
 refund DB-E2E over PostgreSQL, Redis/BullMQ and private MinIO.
+
+# Stage 7 gate
+
+`bash ops/verify/stage7.sh` builds the API, PWA and branch printer-agent, applies
+clean/repeated migrations and runs DB-E2E for machine authentication, job
+lease/redelivery, manual/agent race exclusion, derived pickup/handoff PINs,
+attempt/expiry/one-time semantics, encrypted address storage, courier approval
+and deterministic isolation, `DELIVERY_FAILED`, final `COMPLETED`, immutable
+financial snapshots and customer payout isolation. It also checks Redis/BullMQ,
+no-store headers and absence of PINs, addresses, tokens, object identifiers,
+signed URLs or high-cardinality values in telemetry.

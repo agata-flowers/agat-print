@@ -101,3 +101,11 @@ jobs:
           name: stage6-verification-report
           path: outputs/stage6-verification-report.json
           if-no-files-found: error
+      - name: Run stage 7 printer-agent, pickup and delivery verification
+        run: bash ops/verify/stage7.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage7-verification-report
+          path: outputs/stage7-verification-report.json
+          if-no-files-found: error

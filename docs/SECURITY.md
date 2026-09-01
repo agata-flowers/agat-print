@@ -23,24 +23,32 @@
 | Price/payment tampering      | Integer UZS, immutable snapshot, signed callback, transition CAS and request hash               |
 | Duplicate charge/refund      | Hashed idempotency keys, provider replay ledger, unique payment/refund and transactional outbox |
 | Backup disclosure            | restic encryption, off-host access separation, 30-day expiry                                    |
+| Pickup PIN disclosure/guess  | HMAC digest only, separate nonce/context, TTL, attempt ceiling and one-time CAS                 |
+| Delivery address disclosure  | AES-256-GCM at rest, courier ownership checks and no telemetry/audit payload                    |
+| Printer-agent compromise     | One-time 256-bit token, HMAC digest, branch scope, revocation and bounded lease                 |
 
 ## RBAC
 
-| Capability                  | Customer | Pending partner | Approved partner | Courier | Admin          |
-| --------------------------- | -------- | --------------- | ---------------- | ------- | -------------- |
-| Own profile/session         | yes      | yes             | yes              | yes     | yes            |
-| Submit partner application  | yes      | n/a             | n/a              | no      | yes            |
-| Partner workspace           | no       | no              | yes, own         | no      | yes            |
-| Approve partner             | no       | no              | no               | no      | yes            |
-| Bootstrap admin             | no       | no              | no               | no      | CLI once only  |
-| Create/cancel own upload    | yes      | yes             | yes              | yes     | yes            |
-| Read upload object directly | no       | no              | no               | no      | no             |
-| Read own latest preview     | yes      | yes             | yes              | yes     | yes, own       |
-| Confirm own latest preview  | yes      | yes             | yes              | yes     | yes, own       |
-| Decide manual review        | no       | no              | no               | no      | yes            |
-| Create/read own order       | yes      | yes             | yes              | yes     | yes, own       |
-| Publish tariff versions     | no       | no              | no               | no      | yes            |
-| Request no-executor refund  | no       | no              | no               | no      | internal admin |
+| Capability                   | Customer | Pending partner | Approved partner | Courier  | Admin          |
+| ---------------------------- | -------- | --------------- | ---------------- | -------- | -------------- |
+| Own profile/session          | yes      | yes             | yes              | yes      | yes            |
+| Submit partner application   | yes      | n/a             | n/a              | no       | yes            |
+| Partner workspace            | no       | no              | yes, own         | no       | yes            |
+| Approve partner              | no       | no              | no               | no       | yes            |
+| Bootstrap admin              | no       | no              | no               | no       | CLI once only  |
+| Create/cancel own upload     | yes      | yes             | yes              | yes      | yes            |
+| Read upload object directly  | no       | no              | no               | no       | no             |
+| Read own latest preview      | yes      | yes             | yes              | yes      | yes, own       |
+| Confirm own latest preview   | yes      | yes             | yes              | yes      | yes, own       |
+| Decide manual review         | no       | no              | no               | no       | yes            |
+| Create/read own order        | yes      | yes             | yes              | yes      | yes, own       |
+| Publish tariff versions      | no       | no              | no               | no       | yes            |
+| Request no-executor refund   | no       | no              | no               | no       | internal admin |
+| Register printer-agent       | no       | no              | no               | no       | yes            |
+| Claim branch print job       | no       | no              | machine only     | no       | no             |
+| Complete customer pickup     | no       | no              | own assignment   | no       | no             |
+| Read active delivery/address | no       | no              | no               | own only | bounded admin  |
+| Complete delivery            | no       | no              | handoff only     | own only | no             |
 
 ## Retention
 
@@ -91,3 +99,13 @@ CAS and a partial unique assignment index prevent double acceptance; expired
 offers fail closed. Payout snapshots are immutable at both service and database
 layers and are never included in customer responses, logs, audit metadata or
 metrics. Signed print-ready URLs remain private, short-lived and no-store.
+
+# Stage 7 fulfillment controls
+
+Plaintext pickup/handoff PINs, printer-agent tokens and delivery addresses are
+never stored in idempotency responses, audit, logs or metrics. A fulfillment
+request reproduces its one-time display PIN from secret + nonce without
+persisting it. Wrong attempts commit their counter before returning a generic
+failure. Courier and partner object authorization uses database ownership, not
+UI state. `PriceSnapshot` and `PartnerPayoutSnapshot` are never updated or
+included in customer/courier delivery views.

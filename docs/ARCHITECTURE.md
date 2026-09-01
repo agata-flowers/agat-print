@@ -42,7 +42,9 @@ flowchart LR
   snapshots, idempotent mock payment callbacks and full refunds.
 - Matching: deterministic candidates, sequential TTL offers, immutable payout
   snapshots, one active assignment and manual production through READY.
-- Future ports: production payment acquisition and delivery.
+- Fulfillment: branch printer-agent leases, protected pickup, courier
+  onboarding/assignment, encrypted delivery data and completion.
+- Future ports: production payment acquisition and external dispatch.
 
 ## Stage 5 order aggregates
 
@@ -85,6 +87,13 @@ erDiagram
   PartnerOffer ||--|| PartnerPayoutSnapshot : freezes
   PartnerOffer ||--o| PartnerAssignment : accepts
   PartnerPayoutSnapshot ||--o| PartnerAssignment : binds
+  PartnerAssignment ||--o| PrintJob : prints
+  Branch ||--o{ PrinterAgent : authorizes
+  PrinterAgent ||--o{ PrintJob : leases
+  Order ||--o| OrderFulfillment : receives
+  User ||--o| CourierProfile : applies
+  OrderFulfillment ||--o| DeliveryTask : dispatches
+  CourierProfile ||--o{ DeliveryTask : carries
 ```
 
 `PermanentObjectReference` records the opaque object key, SHA-256 checksum,
@@ -118,7 +127,9 @@ Hard-filter by capability, equipment, format/material, volume, hours, inventory,
 1. Modular monolith before microservices: lowest coordination cost while retaining module boundaries.
 2. TypeScript domain core: shared contracts and one application type system; Python is restricted to the future processing sandbox.
 3. PostgreSQL is authoritative; Redis is disposable and never the only record of business state.
-4. Manual printing: approved production files are downloaded by the partner; no printer/device integration in MVP.
+4. Production adapter: manual partner download remains a compatible fallback;
+   stage 7 adds a branch-local pull agent with hashed machine credentials,
+   bounded leases and an OS spool boundary. Hardware drivers remain external.
 5. One partner per order: incompatible lines are split before payment.
 
 ## Stage 3 processing sandbox
@@ -190,3 +201,23 @@ durable outbox intent prevents any later offer. The consumer invokes the stage
 5 full-refund command with a stable key; provider confirmation remains required
 for `REFUNDED`. Partners receive only their assigned print-ready signed URL and
 manually transition `PARTNER_ACCEPTED → IN_PRODUCTION → READY`.
+
+## Stage 7 fulfillment invariants
+
+`PARTNER_ASSIGNED` creates at most one `PrintJob`. A branch-local agent uses a
+256-bit bearer credential whose HMAC digest is stored, atomically leases only
+its branch job and receives a freshly signed no-store URL. Agent and manual
+production cannot advance the same job concurrently; a manual start cancels an
+unclaimed agent job, while an active agent lease blocks the manual path.
+
+Only an owned `READY` order may create one `OrderFulfillment`. The completion
+PIN is deterministically derived from a deployment secret and random nonce;
+only its HMAC digest and bounded attempts/expiry are stored. Delivery addresses
+use AES-256-GCM and are decrypted only for the assigned approved courier.
+Delivery assignment is deterministic within the branch service zone and is
+committed with the order transition and outbox event. Partner/courier handoff
+uses a separate derived PIN. Normal terminal paths are
+`READY → AWAITING_PICKUP → COMPLETED` and
+`READY → AWAITING_PICKUP → COURIER_ASSIGNED → IN_DELIVERY → COMPLETED`.
+Provider or courier failure reaches `DELIVERY_FAILED`; reverse and skipped
+transitions are rejected.

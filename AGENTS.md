@@ -1,10 +1,10 @@
 # AGAT PRINT agent instructions
 
-- Current authorized scope is stages 1–6 only, including sequential partner
-  matching, immutable payout snapshots and manual production through READY.
-- Stage 6 was explicitly approved on 2026-08-31. Do not implement printer
-  agents, pickup/PIN, couriers, delivery or completion without explicit stage
-  7 approval.
+- Current authorized scope is stages 1–7 only, including branch-local printer
+  agents, pickup/PIN, courier delivery and completion.
+- Stage 7 was explicitly approved on 2026-08-31. Do not implement stage 8,
+  disputes, reprints, courier optimization or marketplace expansion without
+  separate approval.
 - Keep the domain core in the NestJS modular monolith. External capabilities use provider interfaces.
 - Never log OTPs, cookies, tokens, phone numbers, addresses, document contents, filenames, object keys, or signed URLs.
 - Metrics may use only bounded enums and route templates. Never use IDs, IPs, query strings, request IDs, or user-controlled text as labels.

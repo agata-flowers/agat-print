@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.4.0
+  version: 0.7.0
 servers:
   - url: /api/v1
 paths:
@@ -343,6 +343,185 @@ paths:
       responses:
         "200": { description: Safe matching history }
         "403": { description: Admin required }
+  /orders/{orderId}/fulfillment:
+    post:
+      summary: Select pickup or delivery for one owned READY order
+      description: Returns a derived one-time completion PIN; plaintext PIN is never persisted.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RequestFulfillment" }
+      responses:
+        "201": { description: Order moved to AWAITING_PICKUP }
+        "404": { description: Order not owned }
+        "409": { description: Order not READY or idempotency conflict }
+  /couriers:
+    post:
+      summary: Submit a courier application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourierApplication" }
+      responses:
+        "201": { description: Pending courier profile }
+  /couriers/me:
+    get:
+      summary: Read the authenticated user's courier application
+      responses:
+        "200": { description: Courier profile }
+        "404": { description: No courier profile }
+  /admin/couriers/{courierId}/approve:
+    post:
+      summary: Approve a courier and grant COURIER role atomically
+      parameters: [{ $ref: "#/components/parameters/CourierId" }]
+      responses:
+        "201": { description: Courier approved }
+        "403": { description: Admin required }
+        "409": { description: Courier already reviewed }
+  /admin/couriers:
+    get:
+      summary: List bounded courier applications and status (ADMIN only)
+      responses:
+        "200": { description: Courier moderation queue }
+        "403": { description: Admin required }
+  /admin/couriers/{courierId}/suspend:
+    post:
+      summary: Suspend an approved courier without an active delivery
+      parameters: [{ $ref: "#/components/parameters/CourierId" }]
+      responses:
+        "201": { description: Courier suspended }
+        "403": { description: Admin required }
+        "409": { description: Courier has an active delivery }
+  /admin/branches/{branchId}/printer-agents:
+    post:
+      summary: Register one branch-local printer-agent machine identity
+      description: Returns the 256-bit bearer token once; only its digest is stored.
+      parameters: [{ $ref: "#/components/parameters/BranchId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterPrinterAgent" }
+      responses:
+        "201": { description: One-time agent credential }
+        "403": { description: Admin required }
+  /printer-agent/jobs/claim:
+    post:
+      summary: Atomically lease the next branch print job
+      description: Machine-authenticated; the private PDF URL is short-lived and not persisted.
+      parameters:
+        - $ref: "#/components/parameters/PrinterAgentId"
+        - $ref: "#/components/parameters/PrinterAgentAuthorization"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Leased job with a no-store signed URL, or null }
+        "401": { description: Invalid or revoked agent credential }
+  /admin/printer-agents/{printerAgentId}/revoke:
+    post:
+      summary: Revoke an idle printer-agent machine credential
+      parameters: [{ $ref: "#/components/parameters/PrinterAgentPathId" }]
+      responses:
+        "201": { description: Agent revoked }
+        "403": { description: Admin required }
+        "409": { description: Agent has an active leased job }
+  /printer-agent/jobs/{printJobId}/status:
+    post:
+      summary: Report the next leased printer job transition
+      parameters:
+        - $ref: "#/components/parameters/PrintJobId"
+        - $ref: "#/components/parameters/PrinterAgentId"
+        - $ref: "#/components/parameters/PrinterAgentAuthorization"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PrinterJobStatus" }
+      responses:
+        "201": { description: Job and order transition committed }
+        "401": { description: Invalid agent credential }
+        "409": { description: Lease expired or invalid transition }
+  /partner/orders/{orderId}/pickup/complete:
+    post:
+      summary: Complete owned customer pickup with the one-time customer PIN
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmPin" }
+      responses:
+        "201": { description: Order moved to COMPLETED }
+        "401": { description: Invalid, expired or attempt-limited PIN }
+        "404": { description: Order assigned to another partner }
+  /partner/deliveries/{deliveryId}/handoff:
+    post:
+      summary: Confirm package handoff to the assigned courier using courier PIN
+      parameters:
+        - $ref: "#/components/parameters/DeliveryId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmPin" }
+      responses:
+        "201": { description: Order moved to IN_DELIVERY }
+        "401": { description: Invalid or attempt-limited PIN }
+        "404": { description: Delivery belongs to another partner }
+  /courier/deliveries/active:
+    get:
+      summary: Read only the approved courier's active delivery
+      responses:
+        "200":
+          {
+            description: Scoped delivery,
+            handoff PIN and decrypted destination,
+          }
+        "403": { description: Approved courier required }
+  /courier/deliveries/{deliveryId}/complete:
+    post:
+      summary: Complete an owned delivery using the customer's one-time PIN
+      parameters:
+        - $ref: "#/components/parameters/DeliveryId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmPin" }
+      responses:
+        "201": { description: Delivery and order moved to COMPLETED }
+        "401": { description: Invalid, expired or attempt-limited PIN }
+        "404": { description: Delivery assigned to another courier }
+  /courier/deliveries/{deliveryId}/fail:
+    post:
+      summary: Fail an owned active delivery with a bounded reason
+      parameters:
+        - $ref: "#/components/parameters/DeliveryId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliveryFailure" }
+      responses:
+        "201": { description: Order moved to DELIVERY_FAILED }
+        "404": { description: Delivery assigned to another courier }
+        "409": { description: Invalid or reverse transition }
+  /admin/fulfillment:
+    get:
+      summary: Read bounded printer, pickup and delivery operation statuses
+      responses:
+        "200": { description: Metadata-only operations view }
+        "403": { description: Admin required }
   /health/live:
     get:
       responses: { "200": { description: Process alive } }
@@ -386,6 +565,36 @@ components:
     OfferId:
       in: path
       name: offerId
+      required: true
+      schema: { type: string, format: uuid }
+    CourierId:
+      in: path
+      name: courierId
+      required: true
+      schema: { type: string, format: uuid }
+    DeliveryId:
+      in: path
+      name: deliveryId
+      required: true
+      schema: { type: string, format: uuid }
+    PrintJobId:
+      in: path
+      name: printJobId
+      required: true
+      schema: { type: string, format: uuid }
+    PrinterAgentId:
+      in: header
+      name: X-Printer-Agent-Id
+      required: true
+      schema: { type: string, format: uuid }
+    PrinterAgentAuthorization:
+      in: header
+      name: Authorization
+      required: true
+      schema: { type: string, pattern: "^Bearer [A-Za-z0-9_-]{43}$" }
+    PrinterAgentPathId:
+      in: path
+      name: printerAgentId
       required: true
       schema: { type: string, format: uuid }
     IdempotencyKey:
@@ -525,3 +734,50 @@ components:
       required: [status]
       properties:
         status: { type: string, enum: [IN_PRODUCTION, READY] }
+    RequestFulfillment:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [PICKUP, DELIVERY] }
+        deliveryAddress:
+          type: string
+          minLength: 8
+          maxLength: 500
+          description: Required only for DELIVERY; encrypted before persistence.
+    CourierApplication:
+      type: object
+      additionalProperties: false
+      required: [displayName, serviceZone]
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 160 }
+        serviceZone: { type: string, pattern: "^[A-Z0-9_-]{2,40}$" }
+    RegisterPrinterAgent:
+      type: object
+      additionalProperties: false
+      required: [label]
+      properties:
+        label: { type: string, minLength: 2, maxLength: 80 }
+    PrinterJobStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [PRINTING, COMPLETED, FAILED] }
+        failureCode:
+          type: string
+          enum: [DEVICE_UNAVAILABLE, PAPER_ERROR, OUTPUT_REJECTED]
+    ConfirmPin:
+      type: object
+      additionalProperties: false
+      required: [pin]
+      properties:
+        pin: { type: string, pattern: "^\\d{6}$" }
+    DeliveryFailure:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [RECIPIENT_UNAVAILABLE, ADDRESS_UNREACHABLE, PACKAGE_DAMAGED]
