@@ -555,25 +555,25 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
     const foreignActive = await foreignCourier.agent
       .get("/api/v1/courier/deliveries/active")
       .expect(200);
-    expect(foreignActive.body).toBeNull();
+    expect(foreignActive.body.delivery).toBeNull();
     const active = await courier.agent
       .get("/api/v1/courier/deliveries/active")
       .expect(200);
-    expect(active.body.deliveryAddress).toBe(address);
-    expect(active.body.handoffPin).toMatch(/^\d{6}$/);
+    expect(active.body.delivery.deliveryAddress).toBe(address);
+    expect(active.body.delivery.handoffPin).toMatch(/^\d{6}$/);
     await foreignPartner.agent
       .post(`/api/v1/partner/deliveries/${delivery.id}/handoff`)
       .set("Origin", origin)
       .set("X-CSRF-Token", foreignPartner.csrf)
       .set("Idempotency-Key", randomUUID())
-      .send({ pin: active.body.handoffPin })
+      .send({ pin: active.body.delivery.handoffPin })
       .expect(404);
     await partner.agent
       .post(`/api/v1/partner/deliveries/${delivery.id}/handoff`)
       .set("Origin", origin)
       .set("X-CSRF-Token", partner.csrf)
       .set("Idempotency-Key", randomUUID())
-      .send({ pin: active.body.handoffPin })
+      .send({ pin: active.body.delivery.handoffPin })
       .expect(201);
     expect(
       (await prisma.order.findUniqueOrThrow({ where: { id: seeded.order.id } }))

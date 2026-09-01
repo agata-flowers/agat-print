@@ -546,27 +546,29 @@ export class FulfillmentService {
       },
       orderBy: { assignedAt: "asc" },
     });
-    if (!delivery) return null;
+    if (!delivery) return { delivery: null };
     const fulfillment = delivery.fulfillment;
     return {
-      id: delivery.id,
-      orderStatus: delivery.order.status,
-      status: delivery.status,
-      branchName: delivery.branch.name,
-      handoffPin:
-        delivery.status === "ASSIGNED" && fulfillment.handoffNonce
-          ? this.crypto.pin("handoff", fulfillment.handoffNonce)
-          : undefined,
-      deliveryAddress:
-        fulfillment.addressCiphertext &&
-        fulfillment.addressIv &&
-        fulfillment.addressAuthTag
-          ? this.crypto.decryptAddress(
-              fulfillment.addressCiphertext,
-              fulfillment.addressIv,
-              fulfillment.addressAuthTag,
-            )
-          : undefined,
+      delivery: {
+        id: delivery.id,
+        orderStatus: delivery.order.status,
+        status: delivery.status,
+        branchName: delivery.branch.name,
+        handoffPin:
+          delivery.status === "ASSIGNED" && fulfillment.handoffNonce
+            ? this.crypto.pin("handoff", fulfillment.handoffNonce)
+            : undefined,
+        deliveryAddress:
+          fulfillment.addressCiphertext &&
+          fulfillment.addressIv &&
+          fulfillment.addressAuthTag
+            ? this.crypto.decryptAddress(
+                fulfillment.addressCiphertext,
+                fulfillment.addressIv,
+                fulfillment.addressAuthTag,
+              )
+            : undefined,
+      },
     };
   }
 

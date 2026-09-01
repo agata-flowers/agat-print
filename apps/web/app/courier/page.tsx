@@ -22,7 +22,8 @@ export default function CourierPage() {
   const load = useCallback(async () => {
     try {
       const response = await apiRequest("/courier/deliveries/active");
-      setDelivery((await response.json()) as Delivery);
+      const body = (await response.json()) as { delivery: Delivery };
+      setDelivery(body.delivery);
       setMessage("");
     } catch {
       setMessage("Подайте заявку или дождитесь одобрения администратора.");

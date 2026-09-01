@@ -481,10 +481,17 @@ paths:
       summary: Read only the approved courier's active delivery
       responses:
         "200":
-          {
-            description: Scoped delivery,
-            handoff PIN and decrypted destination,
-          }
+          description: Explicit wrapper containing the scoped delivery or null
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [delivery]
+                properties:
+                  delivery:
+                    oneOf:
+                      - { $ref: "#/components/schemas/CourierActiveDelivery" }
+                      - { type: "null" }
         "403": { description: Approved courier required }
   /courier/deliveries/{deliveryId}/complete:
     post:
@@ -767,6 +774,19 @@ components:
         failureCode:
           type: string
           enum: [DEVICE_UNAVAILABLE, PAPER_ERROR, OUTPUT_REJECTED]
+    CourierActiveDelivery:
+      type: object
+      additionalProperties: false
+      required: [id, orderStatus, status, branchName]
+      properties:
+        id: { type: string, format: uuid }
+        orderStatus:
+          type: string
+          enum: [COURIER_ASSIGNED, IN_DELIVERY]
+        status: { type: string, enum: [ASSIGNED, IN_DELIVERY] }
+        branchName: { type: string }
+        handoffPin: { type: string, pattern: "^\\d{6}$" }
+        deliveryAddress: { type: string }
     ConfirmPin:
       type: object
       additionalProperties: false
