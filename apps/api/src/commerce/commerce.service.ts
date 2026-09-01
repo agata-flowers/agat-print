@@ -61,6 +61,8 @@ const tariffView = (tariff: {
 const orderInclude = {
   priceSnapshot: true,
   payment: { include: { refunds: true } },
+  fulfillment: true,
+  deliveryTask: true,
 } satisfies Prisma.OrderInclude;
 
 type OrderWithFinance = Prisma.OrderGetPayload<{
@@ -93,6 +95,14 @@ const orderView = (order: OrderWithFinance) => ({
         amountMinor: order.payment.amountMinor.toString(),
         currency: order.payment.currency,
         refundStatus: order.payment.refunds[0]?.status ?? null,
+      }
+    : null,
+  fulfillment: order.fulfillment
+    ? {
+        mode: order.fulfillment.mode,
+        status: order.fulfillment.status,
+        expiresAt: order.fulfillment.completionExpiresAt,
+        deliveryStatus: order.deliveryTask?.status ?? null,
       }
     : null,
 });

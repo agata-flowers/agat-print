@@ -74,6 +74,14 @@ services:
       PARTNER_OFFER_TTL_SECONDS: ${PARTNER_OFFER_TTL_SECONDS:-180}
       PARTNER_PAYOUT_BASIS_POINTS: ${PARTNER_PAYOUT_BASIS_POINTS:-8000}
       PARTNER_PAYOUT_RULE_VERSION: ${PARTNER_PAYOUT_RULE_VERSION:-mvp-v1}
+      FULFILLMENT_DISPATCH_ENABLED: "true"
+      DELIVERY_PROVIDER: ${DELIVERY_PROVIDER:-mock}
+      PICKUP_PIN_SECRET: ${PICKUP_PIN_SECRET:-development-only-pickup-pin-secret}
+      PICKUP_PIN_TTL_SECONDS: ${PICKUP_PIN_TTL_SECONDS:-86400}
+      PICKUP_PIN_MAX_ATTEMPTS: ${PICKUP_PIN_MAX_ATTEMPTS:-5}
+      DELIVERY_DATA_KEY: ${DELIVERY_DATA_KEY:-ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ=}
+      PRINTER_AGENT_TOKEN_PEPPER: ${PRINTER_AGENT_TOKEN_PEPPER:-development-only-printer-agent-token-pepper}
+      PRINTER_AGENT_LEASE_SECONDS: ${PRINTER_AGENT_LEASE_SECONDS:-120}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -156,6 +164,19 @@ services:
       timeout: 3s
       retries: 10
     ports: ["3000:3000"]
+  printer-agent:
+    profiles: [printer-agent]
+    build: { context: ., dockerfile: apps/printer-agent/Dockerfile }
+    environment:
+      AGAT_API_ORIGIN: http://api:4000
+      PRINTER_AGENT_ID: ${PRINTER_AGENT_ID:-00000000-0000-0000-0000-000000000000}
+      PRINTER_AGENT_TOKEN: ${PRINTER_AGENT_TOKEN:-development-only}
+      PRINTER_SPOOL_DIRECTORY: /spool
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/spool:rw, nosuid, nodev, noexec, size=64m, uid=1000, gid=1000]
+    depends_on: { api: { condition: service_healthy } }
   backup:
     profiles: [backup]
     build: { context: ., dockerfile: ops/backup/Dockerfile }

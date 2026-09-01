@@ -18,6 +18,9 @@ export default function AdminPage() {
         <a className="button" href="/admin/matching">
           История подбора партнёров
         </a>
+        <a className="button" href="/admin/fulfillment">
+          Printer-agent, курьеры и выдача
+        </a>
       </div>
     </main>
   );

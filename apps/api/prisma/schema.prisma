@@ -89,8 +89,52 @@ enum OrderStatus {
   PARTNER_ACCEPTED
   IN_PRODUCTION
   READY
+  AWAITING_PICKUP
+  COURIER_ASSIGNED
+  IN_DELIVERY
+  DELIVERY_FAILED
+  COMPLETED
   REFUND_PENDING
   REFUNDED
+}
+
+enum CourierStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum FulfillmentMode {
+  PICKUP
+  DELIVERY
+}
+
+enum FulfillmentStatus {
+  AWAITING_HANDOFF
+  IN_DELIVERY
+  COMPLETED
+  FAILED
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  IN_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+enum PrinterAgentStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum PrintJobStatus {
+  PENDING
+  LEASED
+  PRINTING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
 
 enum CapabilityStatus {
@@ -148,6 +192,8 @@ model User {
   tariffVersions TariffVersion[] @relation("TariffAuthor")
   orders      Order[]
   capabilityVersions BranchCapabilityVersion[] @relation("CapabilityAuthor")
+  courierProfile CourierProfile?
+  printerAgentsCreated PrinterAgent[] @relation("PrinterAgentCreator")
 }
 
 model UserRole {
@@ -217,6 +263,9 @@ model Branch {
   capabilityVersions BranchCapabilityVersion[]
   offers PartnerOffer[]
   assignments PartnerAssignment[]
+  printerAgents PrinterAgent[]
+  printJobs PrintJob[]
+  deliveryTasks DeliveryTask[]
 }
 
 /// Immutable, versioned matching capabilities. Retiring a version never edits it.
@@ -469,9 +518,124 @@ model Order {
   matching            OrderMatching?
   partnerOffers       PartnerOffer[]
   assignments         PartnerAssignment[]
+  fulfillment         OrderFulfillment?
+  printJob            PrintJob?
+  deliveryTask        DeliveryTask?
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
+}
+
+/// Courier onboarding is role-gated independently from partner ownership.
+model CourierProfile {
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @unique @db.Uuid
+  displayName String        @db.VarChar(160)
+  serviceZone String        @db.VarChar(40)
+  status      CourierStatus @default(PENDING)
+  active      Boolean       @default(true)
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries DeliveryTask[]
+
+  @@index([status, active, serviceZone])
+}
+
+/// One fulfillment aggregate per order. PIN material is derived from a secret and opaque nonce.
+model OrderFulfillment {
+  id                    String            @id @default(uuid()) @db.Uuid
+  orderId               String            @unique @db.Uuid
+  mode                  FulfillmentMode
+  status                FulfillmentStatus @default(AWAITING_HANDOFF)
+  requestKeyDigest      String            @db.Char(64)
+  requestHash           String            @db.Char(64)
+  completionNonce       String            @db.Char(32)
+  completionPinDigest   String            @db.Char(64)
+  completionAttempts    Int               @default(0)
+  completionExpiresAt   DateTime
+  completionUsedAt      DateTime?
+  handoffNonce          String?           @db.Char(32)
+  handoffPinDigest      String?           @db.Char(64)
+  handoffAttempts       Int               @default(0)
+  handoffUsedAt         DateTime?
+  addressCiphertext     String?           @db.Text
+  addressIv             String?           @db.VarChar(24)
+  addressAuthTag        String?           @db.VarChar(32)
+  version               Int               @default(0)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  order                 Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  delivery              DeliveryTask?
+
+  @@unique([orderId, requestKeyDigest])
+  @@index([status, completionExpiresAt])
+}
+
+model DeliveryTask {
+  id                String         @id @default(uuid()) @db.Uuid
+  orderId           String         @unique @db.Uuid
+  fulfillmentId     String         @unique @db.Uuid
+  courierId         String         @db.Uuid
+  branchId          String         @db.Uuid
+  providerReference String         @unique @db.VarChar(160)
+  status            DeliveryStatus @default(ASSIGNED)
+  active            Boolean        @default(true)
+  version           Int            @default(0)
+  assignedAt        DateTime       @default(now())
+  pickedUpAt        DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  failureCode       String?        @db.VarChar(40)
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  fulfillment       OrderFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+  courier           CourierProfile @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  branch            Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([courierId, active, assignedAt])
+  @@index([status, assignedAt])
+}
+
+/// Machine identity for the branch-local printer agent. Only a token digest is stored.
+model PrinterAgent {
+  id          String             @id @default(uuid()) @db.Uuid
+  branchId    String             @db.Uuid
+  label       String             @db.VarChar(80)
+  tokenDigest String             @unique @db.Char(64)
+  status      PrinterAgentStatus @default(ACTIVE)
+  createdById String             @db.Uuid
+  createdAt   DateTime           @default(now())
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+  branch      Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy   User               @relation("PrinterAgentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  jobs        PrintJob[]
+
+  @@index([branchId, status])
+}
+
+model PrintJob {
+  id              String         @id @default(uuid()) @db.Uuid
+  orderId         String         @unique @db.Uuid
+  assignmentId    String         @unique @db.Uuid
+  branchId        String         @db.Uuid
+  agentId         String?        @db.Uuid
+  status          PrintJobStatus @default(PENDING)
+  version         Int            @default(0)
+  attempts        Int            @default(0)
+  leaseUntil      DateTime?
+  failureCode     String?        @db.VarChar(40)
+  createdAt       DateTime       @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  assignment      PartnerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  agent           PrinterAgent?  @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, status, createdAt])
+  @@index([agentId, status])
 }
 
 model OrderMatching {
@@ -541,6 +705,7 @@ model PartnerAssignment {
   partner          Partner          @relation(fields: [partnerId], references: [id], onDelete: Restrict)
   branch           Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
   payoutSnapshot   PartnerPayoutSnapshot @relation(fields: [payoutSnapshotId], references: [id], onDelete: Restrict)
+  printJob         PrintJob?
 
   @@index([orderId, active])
   @@index([partnerId, active])

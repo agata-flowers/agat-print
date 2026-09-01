@@ -17,6 +17,7 @@ backups/
 restore-work/
 work/
 outputs/
+.local/
 *.dump
 *.log
 .DS_Store

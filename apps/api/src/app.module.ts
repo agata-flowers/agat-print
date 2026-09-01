@@ -7,6 +7,7 @@ import { CacheControlInterceptor } from "./common/cache-control.interceptor";
 import { CsrfGuard } from "./common/csrf.guard";
 import { CommerceModule } from "./commerce/commerce.module";
 import { HealthController } from "./health/health.controller";
+import { FulfillmentModule } from "./fulfillment/fulfillment.module";
 import { LayoutsModule } from "./layouts/layouts.module";
 import { MetricsModule } from "./metrics/metrics.module";
 import { MatchingModule } from "./matching/matching.module";
@@ -28,6 +29,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     LayoutsModule,
     CommerceModule,
     MatchingModule,
+    FulfillmentModule,
   ],
   controllers: [HealthController],
   providers: [

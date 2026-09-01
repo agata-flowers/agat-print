@@ -328,8 +328,25 @@ export class MatchingService {
   async activeOrder(ownerId: string) {
     const partner = await this.requireApprovedPartner(ownerId);
     const assignment = await this.prisma.partnerAssignment.findFirst({
-      where: { partnerId: partner.id, active: true },
-      include: { order: true, branch: { select: { name: true } } },
+      where: {
+        partnerId: partner.id,
+        order: {
+          status: {
+            in: [
+              "PARTNER_ACCEPTED",
+              "IN_PRODUCTION",
+              "READY",
+              "AWAITING_PICKUP",
+              "COURIER_ASSIGNED",
+              "IN_DELIVERY",
+            ],
+          },
+        },
+      },
+      include: {
+        order: { include: { fulfillment: true, deliveryTask: true } },
+        branch: { select: { name: true } },
+      },
       orderBy: { acceptedAt: "asc" },
     });
     if (!assignment) return null;
@@ -338,6 +355,8 @@ export class MatchingService {
       status: assignment.order.status,
       branchName: assignment.branch.name,
       acceptedAt: assignment.acceptedAt,
+      fulfillmentMode: assignment.order.fulfillment?.mode ?? null,
+      deliveryId: assignment.order.deliveryTask?.id ?? null,
     };
   }
 
@@ -408,9 +427,14 @@ export class MatchingService {
         await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
         const assignment = await tx.partnerAssignment.findFirst({
           where: { orderId, partnerId: partner.id, active: true },
-          include: { order: true },
+          include: { order: { include: { printJob: true } } },
         });
         if (!assignment) throw new ForbiddenException();
+        if (
+          assignment.order.printJob &&
+          ["LEASED", "PRINTING"].includes(assignment.order.printJob.status)
+        )
+          throw new ConflictException({ code: "PRINTER_AGENT_ACTIVE" });
         const expected =
           input.status === "IN_PRODUCTION"
             ? "PARTNER_ACCEPTED"
@@ -429,6 +453,14 @@ export class MatchingService {
         });
         if (changed.count !== 1)
           throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+        if (
+          input.status === "IN_PRODUCTION" &&
+          assignment.order.printJob?.status === "PENDING"
+        )
+          await tx.printJob.update({
+            where: { id: assignment.order.printJob.id },
+            data: { status: "CANCELLED", version: { increment: 1 } },
+          });
         if (input.status === "READY")
           await tx.partnerAssignment.update({
             where: { id: assignment.id },

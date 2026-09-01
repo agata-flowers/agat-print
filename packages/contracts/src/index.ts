@@ -63,6 +63,17 @@ export const PAYMENT_STATUSES = [
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
+export const FULFILLMENT_MODES = ["PICKUP", "DELIVERY"] as const;
+export type FulfillmentMode = (typeof FULFILLMENT_MODES)[number];
+
+export const DELIVERY_STATUSES = [
+  "ASSIGNED",
+  "IN_DELIVERY",
+  "DELIVERED",
+  "FAILED",
+] as const;
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
 export interface CurrentUser {
   id: string;
   roles: UserRole[];

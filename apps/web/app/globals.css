@@ -185,6 +185,18 @@ h1 {
   font-size: 18px;
   background: white;
 }
+.pin {
+  border: 1px solid var(--wine);
+  border-radius: 8px;
+  padding: 14px;
+  letter-spacing: 0.08em;
+}
+.credential-once {
+  overflow-wrap: anywhere;
+  padding: 12px;
+  background: white;
+  border: 1px solid #cbbab2;
+}
 .auth-form p {
   min-height: 24px;
   margin: 0;

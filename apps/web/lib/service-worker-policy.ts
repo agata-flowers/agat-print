@@ -3,6 +3,8 @@ export const NEVER_CACHE_PATHS = [
   "/auth/",
   "/profile",
   "/partner",
+  "/courier",
+  "/printer-agent",
   "/admin",
   "/uploads/",
   "/layouts/",

@@ -37,6 +37,14 @@ export interface AppEnvironment {
   partnerOfferTtlSeconds: number;
   partnerPayoutBasisPoints: number;
   partnerPayoutRuleVersion: string;
+  fulfillmentDispatchEnabled: boolean;
+  deliveryProvider: string;
+  pickupPinSecret: string;
+  pickupPinTtlSeconds: number;
+  pickupPinMaxAttempts: number;
+  deliveryDataKey: string;
+  printerAgentTokenPepper: string;
+  printerAgentLeaseSeconds: number;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -95,6 +103,33 @@ export function loadEnvironment(
   );
   if (partnerPayoutBasisPoints > 10_000)
     throw new Error("PARTNER_PAYOUT_BASIS_POINTS must not exceed 10000");
+  const deliveryProvider = source.DELIVERY_PROVIDER ?? "mock";
+  const pickupPinSecret =
+    source.PICKUP_PIN_SECRET ?? "development-only-pickup-pin-secret";
+  const deliveryDataKey =
+    source.DELIVERY_DATA_KEY ?? Buffer.alloc(32, "d").toString("base64");
+  const printerAgentTokenPepper =
+    source.PRINTER_AGENT_TOKEN_PEPPER ??
+    "development-only-printer-agent-token-pepper";
+  const decodedDeliveryKey = Buffer.from(deliveryDataKey, "base64");
+  if (decodedDeliveryKey.length !== 32)
+    throw new Error("DELIVERY_DATA_KEY must be a base64-encoded 256-bit key");
+  if (pickupPinSecret.length < 32 || printerAgentTokenPepper.length < 32)
+    throw new Error(
+      "Stage 7 secret material must contain at least 32 characters",
+    );
+  if (nodeEnv === "production") {
+    if (deliveryProvider === "mock")
+      throw new Error("Mock delivery is forbidden in production");
+    for (const [name, value] of [
+      ["PICKUP_PIN_SECRET", pickupPinSecret],
+      ["DELIVERY_DATA_KEY", deliveryDataKey],
+      ["PRINTER_AGENT_TOKEN_PEPPER", printerAgentTokenPepper],
+    ] as const) {
+      if (forbiddenProductionValue(value))
+        throw new Error(`${name} must come from the production secret store`);
+    }
+  }
   return {
     nodeEnv,
     webOrigin,
@@ -147,6 +182,15 @@ export function loadEnvironment(
     partnerOfferTtlSeconds: integer(source.PARTNER_OFFER_TTL_SECONDS, 180),
     partnerPayoutBasisPoints,
     partnerPayoutRuleVersion: source.PARTNER_PAYOUT_RULE_VERSION ?? "mvp-v1",
+    fulfillmentDispatchEnabled:
+      (source.FULFILLMENT_DISPATCH_ENABLED ?? "false") === "true",
+    deliveryProvider,
+    pickupPinSecret,
+    pickupPinTtlSeconds: integer(source.PICKUP_PIN_TTL_SECONDS, 86_400),
+    pickupPinMaxAttempts: integer(source.PICKUP_PIN_MAX_ATTEMPTS, 5),
+    deliveryDataKey,
+    printerAgentTokenPepper,
+    printerAgentLeaseSeconds: integer(source.PRINTER_AGENT_LEASE_SECONDS, 120),
   };
 }
 

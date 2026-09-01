@@ -60,3 +60,11 @@ export interface DeliveryProvider {
     context: ProviderContext,
   ): Promise<{ reference: string }>;
 }
+
+export interface PrinterProvider {
+  submit(
+    jobReference: string,
+    document: AsyncIterable<Uint8Array>,
+    context: ProviderContext,
+  ): Promise<{ reference: string }>;
+}

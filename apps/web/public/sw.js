@@ -5,6 +5,8 @@ const NEVER_CACHE = [
   "/auth/",
   "/profile",
   "/partner",
+  "/courier",
+  "/printer-agent",
   "/admin",
   "/uploads/",
   "/layouts/",

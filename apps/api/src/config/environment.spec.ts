@@ -108,4 +108,30 @@ describe("environment validation", () => {
       }),
     ).toThrow(/secret store/);
   });
+  it("rejects mock delivery and stage-7 development secrets in production", () => {
+    const production = {
+      NODE_ENV: "production",
+      WEB_ORIGIN: "https://print.invalid",
+      OTP_PROVIDER: "sms",
+      PAYMENT_PROVIDER: "acquiring",
+      JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
+      MINIO_ACCESS_KEY: "prod-access-9A7b6C5d",
+      MINIO_SECRET_KEY: "prod-minio-9A7b6C5d4E3f2G1h",
+      PICKUP_PIN_SECRET: "9A7b6C5d4E3f2G1h8J7k6L5m4N3p2Q1r",
+      DELIVERY_DATA_KEY: Buffer.from(
+        "0123456789abcdef0123456789abcdef",
+      ).toString("base64"),
+      PRINTER_AGENT_TOKEN_PEPPER: "8J7k6L5m4N3p2Q1r9A7b6C5d4E3f2G1h",
+    };
+    expect(() =>
+      loadEnvironment({ ...production, DELIVERY_PROVIDER: "mock" }),
+    ).toThrow(/Mock delivery/);
+    expect(() =>
+      loadEnvironment({
+        ...production,
+        DELIVERY_PROVIDER: "dispatch",
+        PICKUP_PIN_SECRET: "development-only-pickup-pin-secret",
+      }),
+    ).toThrow(/PICKUP_PIN_SECRET/);
+  });
 });

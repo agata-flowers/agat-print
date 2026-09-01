@@ -30,6 +30,7 @@ export default function RootLayout({
           <nav>
             <Link href="/profile">Профиль</Link>
             <Link href="/partner">Партнёрам</Link>
+            <Link href="/courier">Курьерам</Link>
           </nav>
         </header>
         {children}
