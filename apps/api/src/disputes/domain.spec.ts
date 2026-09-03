@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { assertDisputeWindow, refundAmount } from "./domain";
+import { describe, expect, it, vi } from "vitest";
+import type { Prisma } from "@prisma/client";
+import { assertDisputeWindow, refundAmount, retentionLock } from "./domain";
 
 describe("stage 8 bounded dispute and refund rules", () => {
+  it("executes the retention lock without deserializing a PostgreSQL void result", async () => {
+    const execute = vi.fn().mockResolvedValue(1);
+    await retentionLock({
+      $executeRaw: execute,
+    } as unknown as Prisma.TransactionClient);
+    expect(execute).toHaveBeenCalledOnce();
+  });
   it("uses an immutable terminal timestamp and closes the window at exactly 72 hours", () => {
     const terminal = new Date("2026-09-01T00:00:00Z");
     expect(

@@ -16,7 +16,7 @@ export const holdExpiry = new Date("9999-01-01T00:00:00.000Z");
 // Serializes deletion intent against new holds/reprints. Order locks follow this
 // lock everywhere in aftercare; storage calls never occur inside the transaction.
 export async function retentionLock(tx: Prisma.TransactionClient) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(815008)`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(815008)`;
 }
 
 export function event(
