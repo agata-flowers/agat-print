@@ -109,3 +109,27 @@ persisting it. Wrong attempts commit their counter before returning a generic
 failure. Courier and partner object authorization uses database ownership, not
 UI state. `PriceSnapshot` and `PartnerPayoutSnapshot` are never updated or
 included in customer/courier delivery views.
+
+## Stage 8 aftercare threat model and RBAC
+
+- CUSTOMER may open/list only owned disputes and cancel only an unanswered one.
+  PARTNER must remain approved and assigned to that order; responses are
+  bounded enums, never arbitrary uploads. COURIER has no aftercare permissions.
+- ADMIN alone may resolve disputes or create/release manual legal holds.
+  Automatic dispute holds cannot be removed through the manual-hold endpoint.
+- All new mutations require Idempotency-Key, authenticated cookies, Origin and
+  CSRF. Actor/order/operation scopes prevent cross-actor replay. A different
+  payload conflicts; duplicate resolutions, refunds or cycles are constrained
+  in PostgreSQL, not just in application memory.
+- No evidence files are accepted. Optional comments are limited to 280
+  characters with a letters/numbers/punctuation allowlist, rendered as escaped
+  text and never copied into audit/logs/metrics.
+- Customer responses exclude payout, commission and allocation inputs.
+  Printer download rechecks the current cycle and live lease. Manual download
+  stores only an authorization receipt in idempotency, never a signed URL.
+- Legal hold and deletion intent serialize on one advisory lock. A later hold
+  cannot resurrect an already committed deletion. Restore merges the latest
+  encrypted tombstone ledger before permitting traffic.
+- Refund replay does not reserve or confirm money twice. Production still
+  rejects mock payment/delivery and development secrets; no real settlement
+  adapter is introduced by this stage.

@@ -95,7 +95,7 @@ fi
 phase="stage7-db-e2e"
 "${compose[@]}" run --rm \
   -e NODE_ENV=test \
-  -e RUN_STAGE7_E2E=1 \
+  -e RUN_STAGE7_E2E=1 -e AFTERCARE_DISPATCH_ENABLED=false \
   -e PROCESSING_DISPATCH_ENABLED=false \
   -e MATCHING_DISPATCH_ENABLED=false \
   -e FULFILLMENT_DISPATCH_ENABLED=false \

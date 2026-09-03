@@ -21,6 +21,16 @@ type OrderView = {
     deliveryStatus: string | null;
   };
 };
+type DisputeView = {
+  id: string;
+  category: string;
+  status: string;
+  resolution: null | {
+    type: string;
+    refundAmountMinor: string | null;
+    currency: string | null;
+  };
+};
 
 export default function OrderPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,10 +38,17 @@ export default function OrderPage() {
   const [message, setMessage] = useState("");
   const [address, setAddress] = useState("");
   const [completionPin, setCompletionPin] = useState("");
+  const [disputes, setDisputes] = useState<DisputeView[]>([]);
+  const [category, setCategory] = useState("PRINT_QUALITY");
   const load = useCallback(async () => {
     try {
       const response = await apiRequest(`/orders/${id}`);
       setOrder((await response.json()) as OrderView);
+      const disputeResponse = await apiRequest(`/orders/${id}/disputes`);
+      setDisputes(
+        ((await disputeResponse.json()) as { disputes: DisputeView[] })
+          .disputes,
+      );
     } catch {
       setMessage("Заказ недоступен или не принадлежит вам.");
     }
@@ -59,6 +76,31 @@ export default function OrderPage() {
       await load();
     } catch {
       setMessage("Оплата не завершена. Повторите безопасно с новой попыткой.");
+    }
+  };
+  const openDispute = async () => {
+    try {
+      await apiRequest(`/orders/${id}/disputes`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ category }),
+      });
+      setMessage("Спор открыт. Материалы заказа защищены legal hold.");
+      await load();
+    } catch {
+      setMessage("Спор недоступен или 72-часовое окно истекло.");
+    }
+  };
+  const cancelDispute = async (disputeId: string) => {
+    try {
+      await apiRequest(`/disputes/${disputeId}/cancel`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: "{}",
+      });
+      await load();
+    } catch {
+      setMessage("Спор уже рассматривается или недоступен.");
     }
   };
 
@@ -108,6 +150,15 @@ export default function OrderPage() {
           <p>Возврат ожидает подтверждения.</p>
         )}
         {order?.status === "REFUNDED" && <p>Полный возврат подтверждён.</p>}
+        {order?.status === "PARTIALLY_REFUNDED" && (
+          <p>Частичный возврат подтверждён.</p>
+        )}
+        {order?.status === "DISPUTED" && (
+          <p>Спор рассматривается оператором.</p>
+        )}
+        {order?.status === "REPRINT" && (
+          <p>Назначена повторная печать утверждённого макета.</p>
+        )}
         {order?.status === "READY" && (
           <div className="auth-form">
             <h2>Получение заказа</h2>
@@ -148,6 +199,44 @@ export default function OrderPage() {
         {order?.status === "IN_DELIVERY" && <p>Заказ в доставке.</p>}
         {order?.status === "DELIVERY_FAILED" && <p>Доставка не состоялась.</p>}
         {order?.status === "COMPLETED" && <p>Заказ успешно завершён.</p>}
+        {["COMPLETED", "DELIVERY_FAILED"].includes(order?.status ?? "") &&
+          !disputes.some((item) =>
+            ["OPEN", "PARTNER_RESPONDED"].includes(item.status),
+          ) && (
+            <div className="auth-form">
+              <h2>Сообщить о проблеме</h2>
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              >
+                <option value="PRINT_QUALITY">Качество печати</option>
+                <option value="WRONG_OUTPUT">Неверный результат</option>
+                <option value="DAMAGED">Повреждение</option>
+                <option value="MISSING_ITEMS">Не хватает материалов</option>
+                <option value="DELIVERY_FAILURE">Проблема доставки</option>
+              </select>
+              <button className="button secondary" onClick={openDispute}>
+                Открыть спор
+              </button>
+            </div>
+          )}
+        {disputes.map((item) => (
+          <article key={item.id}>
+            <strong>{item.category}</strong>
+            <p>
+              {item.status}
+              {item.resolution ? ` · ${item.resolution.type}` : ""}
+            </p>
+            {item.status === "OPEN" && (
+              <button
+                className="button secondary"
+                onClick={() => cancelDispute(item.id)}
+              >
+                Отменить обращение
+              </button>
+            )}
+          </article>
+        ))}
         <p aria-live="polite">{message}</p>
       </section>
     </main>

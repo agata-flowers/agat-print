@@ -80,7 +80,7 @@ fi
 phase="stage5-db-e2e"
 "${compose[@]}" run --rm \
   -e NODE_ENV=test \
-  -e RUN_STAGE5_E2E=1 \
+  -e RUN_STAGE5_E2E=1 -e AFTERCARE_DISPATCH_ENABLED=false \
   -e PROCESSING_DISPATCH_ENABLED=false \
   api pnpm --filter @agat/api exec vitest run test/stage5.e2e.spec.ts --no-file-parallelism
 

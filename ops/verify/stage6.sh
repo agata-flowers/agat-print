@@ -59,7 +59,7 @@ phase="clean-repeatable-migrations"
 phase="stage6-db-e2e"
 "${compose[@]}" run --rm \
   -e NODE_ENV=test \
-  -e RUN_STAGE6_E2E=1 \
+  -e RUN_STAGE6_E2E=1 -e AFTERCARE_DISPATCH_ENABLED=false \
   -e PROCESSING_DISPATCH_ENABLED=false \
   -e MATCHING_DISPATCH_ENABLED=false \
   api pnpm --filter @agat/api exec vitest run test/stage6.e2e.spec.ts --no-file-parallelism

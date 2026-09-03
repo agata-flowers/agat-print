@@ -54,13 +54,17 @@ jobs:
   infrastructure:
     needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Verify fresh checkout and standard Git index
         run: |
           test "$GIT_INDEX_FILE" = ""
           test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Initialize stage 8 diagnostic artifact
+        run: |
+          mkdir -p outputs
+          printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage8-verification-report.json
       - name: Run stage 2 Docker and recovery drill
         run: bash ops/verify/stage2.sh
       - uses: actions/upload-artifact@v4
@@ -108,4 +112,12 @@ jobs:
         with:
           name: stage7-verification-report
           path: outputs/stage7-verification-report.json
+          if-no-files-found: error
+      - name: Run stage 8 disputes, reprint, refund and retention verification
+        run: bash ops/verify/stage8.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage8-verification-report
+          path: outputs/stage8-verification-report.json
           if-no-files-found: error

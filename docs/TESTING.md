@@ -81,3 +81,28 @@ and deterministic isolation, `DELIVERY_FAILED`, final `COMPLETED`, immutable
 financial snapshots and customer payout isolation. It also checks Redis/BullMQ,
 no-store headers and absence of PINs, addresses, tokens, object identifiers,
 signed URLs or high-cardinality values in telemetry.
+
+## Stage 8 gate (not yet accepted)
+
+Run pnpm install --frozen-lockfile, pnpm db:generate and pnpm run ci. Note that
+pnpm ci is the package-manager clean-install alias, not the repository gate.
+The Stage 8 DB scenarios reuse the Stage 7 synthetic fixture suite:
+RUN_STAGE8_E2E=1 enables both original Stage 7 cases and the aftercare cases.
+Run them against a clean database; do not disable immutable triggers to reuse
+old fixture data.
+
+bash ops/verify/stage8.sh applies migrations twice, builds/runs infrastructure,
+executes disputes/reprint/refund/retention DB-E2E, checks queue/cache/privacy,
+backs up held objects, simulates source-object loss and restores to isolated
+PostgreSQL/MinIO. RPO/RTO include the integrity verification. Its JSON report
+is initialized before work and written on failure; exit status is preserved.
+GitHub Actions uploads stage8-verification-report with if: always(), including
+a not_run diagnostic if an earlier regression fails.
+
+Required acceptance additionally includes all Stage 2–7 verification scripts:
+OTP/session/RBAC, upload/AV/sandbox, preflight/approval, commerce, matching,
+machine-agent/PIN/courier flows. Existing checks are not replaced by the new
+suite. Explicitly verify real BullMQ redelivery/crash recovery, concurrent
+refund reservations, legal-hold/deletion races and an old snapshot restored
+with a newer deletion ledger before claiming Stage 8 acceptance. Tests skipped
+because PostgreSQL/Redis/MinIO are absent are not passing DB-E2E.

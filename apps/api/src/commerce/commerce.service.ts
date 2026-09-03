@@ -60,9 +60,12 @@ const tariffView = (tariff: {
 
 const orderInclude = {
   priceSnapshot: true,
-  payment: { include: { refunds: true } },
-  fulfillment: true,
-  deliveryTask: true,
+  payment: {
+    include: { refunds: { orderBy: { createdAt: "desc" as const } } },
+  },
+  productionCycles: { orderBy: { sequence: "desc" as const }, take: 1 },
+  fulfillments: { orderBy: { createdAt: "desc" as const }, take: 1 },
+  deliveryTasks: { orderBy: { assignedAt: "desc" as const }, take: 1 },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithFinance = Prisma.OrderGetPayload<{
@@ -97,14 +100,16 @@ const orderView = (order: OrderWithFinance) => ({
         refundStatus: order.payment.refunds[0]?.status ?? null,
       }
     : null,
-  fulfillment: order.fulfillment
-    ? {
-        mode: order.fulfillment.mode,
-        status: order.fulfillment.status,
-        expiresAt: order.fulfillment.completionExpiresAt,
-        deliveryStatus: order.deliveryTask?.status ?? null,
-      }
-    : null,
+  fulfillment:
+    order.fulfillments[0] &&
+    order.fulfillments[0].productionCycleId === order.productionCycles[0]?.id
+      ? {
+          mode: order.fulfillments[0].mode,
+          status: order.fulfillments[0].status,
+          expiresAt: order.fulfillments[0].completionExpiresAt,
+          deliveryStatus: order.deliveryTasks[0]?.status ?? null,
+        }
+      : null,
 });
 
 @Injectable()
@@ -411,7 +416,7 @@ export class CommerceService {
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findFirst({
+        const located = await tx.payment.findFirst({
           where: {
             OR: [
               { providerPaymentReference: input.paymentReference },
@@ -424,12 +429,34 @@ export class CommerceService {
           },
           include: { order: true, refunds: true },
         });
-        if (!payment) throw new NotFoundException();
+        if (!located) throw new NotFoundException();
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${located.orderId}::uuid FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${located.id}::uuid FOR UPDATE`;
+        const prior = await tx.providerCallback.findUnique({
+          where: {
+            provider_eventId: { provider: "mock", eventId: input.eventId },
+          },
+        });
+        if (prior) {
+          if (prior.payloadHash !== payloadHash)
+            throw new ConflictException({ code: "CALLBACK_REPLAY_CONFLICT" });
+          return prior.result;
+        }
+        const payment = await tx.payment.findUniqueOrThrow({
+          where: { id: located.id },
+          include: { order: true, refunds: true },
+        });
+        if (
+          input.outcome !== "REFUND_SUCCEEDED" &&
+          payment.providerPaymentReference !== input.paymentReference
+        )
+          throw new ConflictException({ code: "INVALID_PAYMENT_REFERENCE" });
         let paymentStatus: PaymentStatus;
         let orderStatus:
           | "AWAITING_PAYMENT"
           | "PAID"
           | "REFUND_PENDING"
+          | "PARTIALLY_REFUNDED"
           | "REFUNDED";
         let eventType: string;
         if (input.outcome === "PAYMENT_SUCCEEDED") {
@@ -455,7 +482,11 @@ export class CommerceService {
           orderStatus = "AWAITING_PAYMENT";
           eventType = "PAYMENT_FAILED";
         } else {
-          const refund = payment.refunds[0];
+          const refund = payment.refunds.find(
+            (item) => item.providerRefundReference === input.paymentReference,
+          );
+          if (refund?.status === "CONFIRMED")
+            return this.storeRepeatedCallback(tx, input, payloadHash, payment);
           if (
             !refund ||
             refund.providerRefundReference !== input.paymentReference ||
@@ -463,8 +494,14 @@ export class CommerceService {
             payment.order.status !== "REFUND_PENDING"
           )
             throw new ConflictException({ code: "INVALID_REFUND_TRANSITION" });
-          paymentStatus = "REFUNDED";
-          orderStatus = "REFUNDED";
+          const confirmedTotal =
+            payment.refunds
+              .filter((item) => item.status === "CONFIRMED")
+              .reduce((sum, item) => sum + item.amountMinor, 0n) +
+            refund.amountMinor;
+          const fullyRefunded = confirmedTotal >= payment.amountMinor;
+          paymentStatus = fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED";
+          orderStatus = fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED";
           eventType = "REFUND_CONFIRMED";
           await tx.refundOperation.update({
             where: { id: refund.id },
@@ -472,11 +509,19 @@ export class CommerceService {
           });
         }
         const changedPayment = await tx.payment.update({
-          where: { id: payment.id },
+          where: {
+            id: payment.id,
+            version: payment.version,
+            status: payment.status,
+          },
           data: { status: paymentStatus, version: { increment: 1 } },
         });
         const changedOrder = await tx.order.update({
-          where: { id: payment.orderId },
+          where: {
+            id: payment.orderId,
+            version: payment.order.version,
+            status: payment.order.status,
+          },
           data: { status: orderStatus, version: { increment: 1 } },
         });
         await tx.outboxEvent.create({
@@ -644,6 +689,63 @@ export class CommerceService {
         createdAt: true,
       },
     });
+  }
+
+  async dispatchRefundOperation(operationId: string) {
+    const operation = await this.prisma.refundOperation.findUnique({
+      where: { id: operationId },
+      include: { payment: true },
+    });
+    if (!operation) throw new NotFoundException();
+    if (!operation.payment.providerPaymentReference)
+      throw new ConflictException({ code: "PAYMENT_REFERENCE_MISSING" });
+    const provider = operation.providerRefundReference
+      ? { reference: operation.providerRefundReference }
+      : await this.payments.refund(
+          operation.payment.providerPaymentReference,
+          operation.amountMinor,
+          {
+            idempotencyKey: operation.triggerDedupKey,
+            correlationId: operation.paymentId,
+          },
+        );
+    await this.prisma.$transaction(async (tx) => {
+      await tx.refundOperation.updateMany({
+        where: { id: operation.id, providerRefundReference: null },
+        data: { providerRefundReference: provider.reference },
+      });
+      const next = outbox(
+        "refund",
+        operation.id,
+        1,
+        "AFTERCARE_MOCK_REFUND_CALLBACK",
+      );
+      await tx.outboxEvent.upsert({
+        where: { dedupKey: next.dedupKey },
+        create: next,
+        update: {},
+      });
+    });
+    return { dispatched: true };
+  }
+
+  async confirmMockRefund(operationId: string) {
+    if (
+      this.env.nodeEnv === "production" ||
+      this.env.paymentProvider !== "mock"
+    )
+      throw new ForbiddenException({ code: "MOCK_PROVIDER_FORBIDDEN" });
+    const refund = await this.prisma.refundOperation.findUniqueOrThrow({
+      where: { id: operationId },
+    });
+    if (!refund.providerRefundReference)
+      throw new ConflictException({ code: "REFUND_NOT_DISPATCHED" });
+    const input: PaymentCallbackDto = {
+      eventId: operationId,
+      paymentReference: refund.providerRefundReference,
+      outcome: "REFUND_SUCCEEDED",
+    };
+    return this.callback(input, this.payments.sign(JSON.stringify(input)));
   }
 
   private async handleIdempotencyRace(

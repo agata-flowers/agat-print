@@ -140,3 +140,40 @@ duplicate-payment/refund integrity.
 - Run `bash ops/verify/stage7.sh` on a Docker host and retain the generated
   `stage7-verification-report.json` artifact without copying synthetic PINs,
   addresses, agent credentials or object references into reports.
+
+## Stage 8 disputes, reprints and retention
+
+AFTERCARE_DISPATCH_ENABLED enables the aftercare queue/worker. It publishes
+refund intents and synthetic provider confirmations, sends bounded provider
+notifications and schedules a retention sweep every minute. Database job
+leases renew every 30 seconds; five failed attempts produce DEAD_LETTER.
+Investigate using bounded error codes and the protected database console.
+Never repair financial state or immutable resolutions with direct status SQL.
+
+Retention policy v1 is originals 7 days, derivatives/previews/print-ready 30
+days after terminal state; active production and legal holds protect objects.
+Releasing a hold restarts the applicable object retention period. Unfinished
+uploads keep the existing 24-hour cleanup. Technical access-audit policy is
+90 days; Stage 8 does not purge order/payment/payout/refund/dispute records or
+financial/legal audit records. Deletion attempts stop after five storage errors
+and require operator investigation, not tombstone removal.
+
+Backup now exports one serializable snapshot for pg_dump and manifest while
+holding deletion exclusion. Active-hold objects remain referenced/nonexpired
+and are included. A separate encrypted restic tag, agat-retention-ledger, stores
+the deletion ledger. Old data restores require this latest ledger, even when
+RESTIC_SNAPSHOT_ID selects an earlier data snapshot. Missing ledger fails
+closed. Older pre-Stage-8 backups need a separately available current ledger;
+do not silently skip this requirement. RESTIC_LEDGER_SNAPSHOT_ID is only for
+controlled forensic recovery and must never be used to bypass later deletions.
+
+Restore into isolated PostgreSQL/MinIO with all API/workers disabled. Merge the
+ledger, restore manifest objects, replay all tombstones (including stale target
+objects), verify SHA-256 and holds, then inspect retained financial/legal
+records and reset/reconcile expired job leases through normal workers.
+Only then enable API traffic. Snapshot/ledger backup RPO remains <=24 hours;
+post-backup deletions still require a current ledger within that RPO. Run a
+monthly isolated drill and record measured RPO/RTO, not target values as facts.
+The same-host backup-minio in compose.verify.yaml is only a test stand-in;
+production requires an independently managed off-host endpoint and encryption
+secret held separately.

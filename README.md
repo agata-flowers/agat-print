@@ -138,3 +138,13 @@ The normal paths terminate at `COMPLETED`; unavailable/failed delivery reaches
 Do not begin stage 8. Disputes, reprints, advanced courier optimization,
 marketplace expansion and later workflows remain out of scope until explicit
 approval.
+
+## Stage 8 work in progress
+
+Aftercare endpoints and schema extend the Stage 7 baseline with disputes,
+production cycles, partial/full refunds and retention holds. See
+[architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md),
+[operations](docs/OPERATIONS.md), [OpenAPI](docs/api/openapi.yaml) and
+[test gate](docs/TESTING.md). Stage 8 is not accepted until the full regression
+and infrastructure suites pass and GitHub Actions quality/infrastructure plus
+the verification artifact are confirmed. Do not deploy unverified migrations.

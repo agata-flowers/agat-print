@@ -15,6 +15,7 @@ import { PartnersModule } from "./partners/partners.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProfileModule } from "./profile/profile.module";
 import { UploadsModule } from "./uploads/uploads.module";
+import { DisputesModule } from "./disputes/disputes.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     CommerceModule,
     MatchingModule,
     FulfillmentModule,
+    DisputesModule,
   ],
   controllers: [HealthController],
   providers: [

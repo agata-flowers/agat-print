@@ -21,6 +21,9 @@ export default function AdminPage() {
         <a className="button" href="/admin/fulfillment">
           Printer-agent, курьеры и выдача
         </a>
+        <a className="button" href="/admin/disputes">
+          Споры, повторная печать и retention
+        </a>
       </div>
     </main>
   );

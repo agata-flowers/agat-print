@@ -18,6 +18,12 @@ type ActiveOrder = null | {
   fulfillmentMode: "PICKUP" | "DELIVERY" | null;
   deliveryId: string | null;
 };
+type Dispute = {
+  id: string;
+  category: string;
+  status: string;
+  responses: { responseCode: string }[];
+};
 
 export default function PartnerPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -25,14 +31,18 @@ export default function PartnerPage() {
   const [now, setNow] = useState(Date.now());
   const [message, setMessage] = useState("");
   const [pin, setPin] = useState("");
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
   const load = useCallback(async () => {
     try {
-      const [offersResponse, activeResponse] = await Promise.all([
-        apiRequest("/partner/offers"),
-        apiRequest("/partner/orders/active"),
-      ]);
+      const [offersResponse, activeResponse, disputeResponse] =
+        await Promise.all([
+          apiRequest("/partner/offers"),
+          apiRequest("/partner/orders/active"),
+          apiRequest("/partner/disputes"),
+        ]);
       setOffers((await offersResponse.json()) as Offer[]);
       setActive((await activeResponse.json()) as ActiveOrder);
+      setDisputes((await disputeResponse.json()) as Dispute[]);
     } catch {
       setMessage("Войдите как одобренный партнёр.");
     }
@@ -48,6 +58,17 @@ export default function PartnerPage() {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ decision }),
+    });
+    await load();
+  };
+  const respondDispute = async (
+    id: string,
+    responseCode: "ACKNOWLEDGED" | "DISAGREES" | "REPRINT_ACCEPTED",
+  ) => {
+    await apiRequest(`/partner/disputes/${id}/response`, {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ responseCode }),
     });
     await load();
   };
@@ -129,14 +150,14 @@ export default function PartnerPage() {
           <article>
             <p>Филиал: {active.branchName}</p>
             <p>Статус: {active.status}</p>
-            {["PARTNER_ACCEPTED", "IN_PRODUCTION", "READY"].includes(
+            {["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION", "READY"].includes(
               active.status,
             ) && (
               <button className="button secondary" onClick={download}>
                 Скачать для печати
               </button>
             )}{" "}
-            {active.status === "PARTNER_ACCEPTED" && (
+            {["PARTNER_ACCEPTED", "REPRINT"].includes(active.status) && (
               <button
                 className="button primary"
                 onClick={() => updateStatus("IN_PRODUCTION")}
@@ -181,6 +202,29 @@ export default function PartnerPage() {
         ) : (
           <p>Активного заказа нет.</p>
         )}
+        <h2>Споры по назначенным заказам</h2>
+        {disputes.map((item) => (
+          <article key={item.id}>
+            <strong>{item.category}</strong>
+            <p>{item.status}</p>
+            {item.responses.length === 0 && (
+              <>
+                <button
+                  className="button primary"
+                  onClick={() => respondDispute(item.id, "ACKNOWLEDGED")}
+                >
+                  Признать
+                </button>{" "}
+                <button
+                  className="button secondary"
+                  onClick={() => respondDispute(item.id, "DISAGREES")}
+                >
+                  Возразить
+                </button>
+              </>
+            )}
+          </article>
+        ))}
         <p aria-live="polite">{message}</p>
       </section>
     </main>

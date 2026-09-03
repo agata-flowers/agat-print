@@ -94,8 +94,47 @@ enum OrderStatus {
   IN_DELIVERY
   DELIVERY_FAILED
   COMPLETED
+  DISPUTED
+  REPRINT
   REFUND_PENDING
+  PARTIALLY_REFUNDED
   REFUNDED
+}
+
+enum DisputeCategory {
+  PRINT_QUALITY
+  WRONG_OUTPUT
+  DAMAGED
+  MISSING_ITEMS
+  DELIVERY_FAILURE
+}
+
+enum DisputeStatus {
+  OPEN
+  PARTNER_RESPONDED
+  RESOLVED
+  CANCELLED
+}
+
+enum DisputeResolutionType {
+  NO_ACTION
+  REPRINT
+  PARTIAL_REFUND
+  FULL_REFUND
+}
+
+enum ProductionCycleKind {
+  ORIGINAL
+  REPRINT
+}
+
+enum ProductionCycleStatus {
+  CREATED
+  IN_PRODUCTION
+  READY
+  FULFILLING
+  COMPLETED
+  FAILED
 }
 
 enum CourierStatus {
@@ -165,7 +204,13 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   REFUND_PENDING
+  PARTIALLY_REFUNDED
   REFUNDED
+}
+
+enum RefundKind {
+  FULL
+  PARTIAL
 }
 
 enum RefundStatus {
@@ -173,27 +218,64 @@ enum RefundStatus {
   CONFIRMED
 }
 
+enum RetentionScheduleStatus {
+  ACTIVE
+  HELD
+  SUPERSEDED
+  COMPLETED
+}
+
+enum TombstoneApplyStatus {
+  PENDING
+  APPLIED
+}
+
+enum AftercareJobStatus {
+  PENDING
+  RUNNING
+  DONE
+  DEAD_LETTER
+}
+
+model AftercareJob {
+  dedupKey String @id @db.Char(64)
+  eventId String @unique @db.Uuid
+  status AftercareJobStatus @default(PENDING)
+  attempts Int @default(0)
+  leaseUntil DateTime?
+  leaseOwner String? @db.Uuid
+  lastErrorCode String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([status, leaseUntil])
+}
+
 model User {
-  id          String         @id @default(uuid()) @db.Uuid
-  phone       String         @unique @db.VarChar(32)
-  locale      String         @default("ru") @db.VarChar(8)
-  displayName String?        @db.VarChar(160)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  roles       UserRole[]
-  sessions    Session[]
-  challenges OtpChallenge[]
-  partner     Partner?
-  auditEvents AuditEvent[]   @relation("AuditActor")
-  uploads     UploadSession[]
-  layouts     LayoutRequest[]
-  layoutApprovals LayoutApproval[]
-  manualReviews ManualReview[] @relation("ManualReviewOperator")
-  tariffVersions TariffVersion[] @relation("TariffAuthor")
-  orders      Order[]
-  capabilityVersions BranchCapabilityVersion[] @relation("CapabilityAuthor")
-  courierProfile CourierProfile?
-  printerAgentsCreated PrinterAgent[] @relation("PrinterAgentCreator")
+  id                   String                    @id @default(uuid()) @db.Uuid
+  phone                String                    @unique @db.VarChar(32)
+  locale               String                    @default("ru") @db.VarChar(8)
+  displayName          String?                   @db.VarChar(160)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  roles                UserRole[]
+  sessions             Session[]
+  challenges           OtpChallenge[]
+  partner              Partner?
+  auditEvents          AuditEvent[]              @relation("AuditActor")
+  uploads              UploadSession[]
+  layouts              LayoutRequest[]
+  layoutApprovals      LayoutApproval[]
+  manualReviews        ManualReview[]            @relation("ManualReviewOperator")
+  tariffVersions       TariffVersion[]           @relation("TariffAuthor")
+  orders               Order[]
+  capabilityVersions   BranchCapabilityVersion[] @relation("CapabilityAuthor")
+  courierProfile       CourierProfile?
+  printerAgentsCreated PrinterAgent[]            @relation("PrinterAgentCreator")
+  disputesOpened       DisputeCase[]             @relation("DisputeOpener")
+  disputeResponses     DisputeResponse[]         @relation("DisputeResponder")
+  disputeResolutions   DisputeResolution[]       @relation("DisputeResolver")
+  legalHoldsCreated    LegalHold[]               @relation("LegalHoldCreator")
+  legalHoldsReleased   LegalHold[]               @relation("LegalHoldReleaser")
 }
 
 model UserRole {
@@ -221,51 +303,51 @@ model OtpChallenge {
 }
 
 model Session {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @db.Uuid
-  familyId         String    @db.Uuid
-  refreshDigest    String    @db.Char(64)
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  replacedById     String?   @db.Uuid
-  reuseDetectedAt  DateTime?
-  createdAt        DateTime  @default(now())
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @db.Uuid
+  familyId        String    @db.Uuid
+  refreshDigest   String    @db.Char(64)
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  replacedById    String?   @db.Uuid
+  reuseDetectedAt DateTime?
+  createdAt       DateTime  @default(now())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, familyId])
 }
 
 model Partner {
-  id          String        @id @default(uuid()) @db.Uuid
-  ownerId     String        @unique @db.Uuid
-  displayName String        @db.VarChar(180)
-  status      PartnerStatus @default(PENDING)
+  id          String              @id @default(uuid()) @db.Uuid
+  ownerId     String              @unique @db.Uuid
+  displayName String              @db.VarChar(180)
+  status      PartnerStatus       @default(PENDING)
   approvedAt  DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  owner       User                @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   branches    Branch[]
   offers      PartnerOffer[]
   assignments PartnerAssignment[]
 }
 
 model Branch {
-  id        String   @id @default(uuid()) @db.Uuid
-  partnerId String   @db.Uuid
-  name      String   @db.VarChar(180)
-  city      String   @default("Tashkent") @db.VarChar(100)
-  district  String?  @db.VarChar(120)
-  locationCode String @default("TASHKENT") @db.VarChar(40)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id                 String                    @id @default(uuid()) @db.Uuid
+  partnerId          String                    @db.Uuid
+  name               String                    @db.VarChar(180)
+  city               String                    @default("Tashkent") @db.VarChar(100)
+  district           String?                   @db.VarChar(120)
+  locationCode       String                    @default("TASHKENT") @db.VarChar(40)
+  active             Boolean                   @default(true)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  partner            Partner                   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   capabilityVersions BranchCapabilityVersion[]
-  offers PartnerOffer[]
-  assignments PartnerAssignment[]
-  printerAgents PrinterAgent[]
-  printJobs PrintJob[]
-  deliveryTasks DeliveryTask[]
+  offers             PartnerOffer[]
+  assignments        PartnerAssignment[]
+  printerAgents      PrinterAgent[]
+  printJobs          PrintJob[]
+  deliveryTasks      DeliveryTask[]
 }
 
 /// Immutable, versioned matching capabilities. Retiring a version never edits it.
@@ -311,134 +393,140 @@ model BootstrapState {
 
 /// Infrastructure record used by backup/retention. It does not expose uploads.
 model PermanentObjectReference {
-  objectKey      String               @id @db.VarChar(1024)
-  checksum       String               @db.Char(64)
+  objectKey      String                    @id @db.VarChar(1024)
+  checksum       String                    @db.Char(64)
   retentionClass ObjectRetentionClass
   expiresAt      DateTime
   deletedAt      DateTime?
-  createdAt      DateTime             @default(now())
+  createdAt      DateTime                  @default(now())
+  schedules      RetentionScheduleObject[]
 
   @@index([expiresAt, deletedAt])
 }
 
 /// Deletion marker replayed before restored object storage is exposed.
 model RetentionTombstone {
-  objectKey String   @id @db.VarChar(1024)
-  deletedAt DateTime @default(now())
-  reason    String?  @db.VarChar(80)
+  objectKey     String               @id @db.VarChar(1024)
+  deletedAt     DateTime             @default(now())
+  reason        String?              @db.VarChar(80)
+  applyStatus   TombstoneApplyStatus @default(PENDING)
+  appliedAt     DateTime?
+  attempts      Int                  @default(0)
+  leaseUntil    DateTime?
+  lastErrorCode String?              @db.VarChar(80)
 
   @@index([deletedAt])
 }
 
 /// A quota reservation and lifecycle record. Original filenames are never stored.
 model UploadSession {
-  id                  String         @id @default(uuid()) @db.Uuid
-  fileVersion         String         @unique @default(uuid()) @db.Uuid
-  userId              String         @db.Uuid
+  id                  String             @id @default(uuid()) @db.Uuid
+  fileVersion         String             @unique @default(uuid()) @db.Uuid
+  userId              String             @db.Uuid
   fileKind            UploadFileKind
-  declaredMime        String         @db.VarChar(100)
+  declaredMime        String             @db.VarChar(100)
   expectedSizeBytes   BigInt
   actualSizeBytes     BigInt?
-  sha256              String?        @db.Char(64)
+  sha256              String?            @db.Char(64)
   pageCount           Int?
   pixelCount          BigInt?
-  status              UploadStatus   @default(CREATED)
-  quarantineObjectKey String         @unique @db.VarChar(160)
-  permanentObjectKey  String?        @unique @db.VarChar(160)
-  version             Int            @default(0)
+  status              UploadStatus       @default(CREATED)
+  quarantineObjectKey String             @unique @db.VarChar(160)
+  permanentObjectKey  String?            @unique @db.VarChar(160)
+  version             Int                @default(0)
   expiresAt           DateTime
   cancelledAt         DateTime?
   completedAt         DateTime?
-  rejectionCode       String?        @db.VarChar(80)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  user                User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  rejectionCode       String?            @db.VarChar(80)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  user                User               @relation(fields: [userId], references: [id], onDelete: Restrict)
   processingJobs      ProcessingJob[]
   processingResults   ProcessingResult[]
-  layout               LayoutRequest?
+  layout              LayoutRequest?
 
   @@index([userId, status])
   @@index([status, expiresAt])
 }
 
 model ProcessingJob {
-  id           String              @id @default(uuid()) @db.Uuid
-  uploadId     String              @db.Uuid
-  operation    ProcessingOperation
-  settingsHash String              @db.Char(64)
-  dedupKey     String              @unique @db.Char(64)
-  resultObjectKey String           @unique @db.VarChar(160)
-  status       ProcessingJobStatus @default(PENDING)
+  id               String              @id @default(uuid()) @db.Uuid
+  uploadId         String              @db.Uuid
+  operation        ProcessingOperation
+  settingsHash     String              @db.Char(64)
+  dedupKey         String              @unique @db.Char(64)
+  resultObjectKey  String              @unique @db.VarChar(160)
+  status           ProcessingJobStatus @default(PENDING)
   aggregateVersion Int
-  attempts     Int                 @default(0)
-  leaseOwner   String?             @db.VarChar(100)
-  leaseUntil   DateTime?
-  lastErrorCode String?            @db.VarChar(80)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  upload       UploadSession       @relation(fields: [uploadId], references: [id], onDelete: Restrict)
-  result       ProcessingResult?
+  attempts         Int                 @default(0)
+  leaseOwner       String?             @db.VarChar(100)
+  leaseUntil       DateTime?
+  lastErrorCode    String?             @db.VarChar(80)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  upload           UploadSession       @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  result           ProcessingResult?
 
   @@index([status, leaseUntil])
 }
 
 model ProcessingResult {
-  id         String          @id @default(uuid()) @db.Uuid
-  jobId      String          @unique @db.Uuid
-  uploadId   String          @db.Uuid
-  objectKey  String          @unique @db.VarChar(160)
-  checksum   String          @db.Char(64)
-  sizeBytes  BigInt
-  pageCount  Int
-  createdAt  DateTime        @default(now())
-  job        ProcessingJob   @relation(fields: [jobId], references: [id], onDelete: Restrict)
-  upload     UploadSession   @relation(fields: [uploadId], references: [id], onDelete: Restrict)
-  previewVersions PreviewVersion[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  jobId              String              @unique @db.Uuid
+  uploadId           String              @db.Uuid
+  objectKey          String              @unique @db.VarChar(160)
+  checksum           String              @db.Char(64)
+  sizeBytes          BigInt
+  pageCount          Int
+  createdAt          DateTime            @default(now())
+  job                ProcessingJob       @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  upload             UploadSession       @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  previewVersions    PreviewVersion[]
   printReadyVersions PrintReadyVersion[]
 }
 
 /// Mutable pointer to the current layout revision; immutable artifacts live below.
 model LayoutRequest {
-  id                   String       @id @default(uuid()) @db.Uuid
-  uploadId             String       @unique @db.Uuid
-  userId               String       @db.Uuid
-  sourceFileVersion    String       @db.Uuid
-  settingsHash         String       @db.Char(64)
-  settings             Json
-  status               LayoutStatus @default(PROCESSING)
-  version              Int          @default(0)
-  latestPreviewId      String?      @db.Uuid
-  latestPrintReadyId   String?      @db.Uuid
-  currentApprovalId    String?      @db.Uuid
-  qualityCode          String?      @db.VarChar(80)
-  manualReviewReason   String?      @db.VarChar(80)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  upload               UploadSession @relation(fields: [uploadId], references: [id], onDelete: Restrict)
-  user                 User         @relation(fields: [userId], references: [id], onDelete: Restrict)
-  previews             PreviewVersion[]
-  printReadyVersions   PrintReadyVersion[]
-  approvals            LayoutApproval[]
-  manualReviews        ManualReview[]
-  orders               Order[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  uploadId           String              @unique @db.Uuid
+  userId             String              @db.Uuid
+  sourceFileVersion  String              @db.Uuid
+  settingsHash       String              @db.Char(64)
+  settings           Json
+  status             LayoutStatus        @default(PROCESSING)
+  version            Int                 @default(0)
+  latestPreviewId    String?             @db.Uuid
+  latestPrintReadyId String?             @db.Uuid
+  currentApprovalId  String?             @db.Uuid
+  qualityCode        String?             @db.VarChar(80)
+  manualReviewReason String?             @db.VarChar(80)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  upload             UploadSession       @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  previews           PreviewVersion[]
+  printReadyVersions PrintReadyVersion[]
+  approvals          LayoutApproval[]
+  manualReviews      ManualReview[]
+  orders             Order[]
 
   @@index([userId, status])
   @@index([status, updatedAt])
 }
 
 model PreviewVersion {
-  id                       String   @id @default(uuid()) @db.Uuid
-  layoutId                 String   @db.Uuid
+  id                       String           @id @default(uuid()) @db.Uuid
+  layoutId                 String           @db.Uuid
   version                  Int
-  objectKey                String   @unique @db.VarChar(160)
-  checksum                 String   @db.Char(64)
+  objectKey                String           @unique @db.VarChar(160)
+  checksum                 String           @db.Char(64)
   sizeBytes                BigInt
-  sourceFileVersion        String   @db.Uuid
-  settingsHash             String   @db.Char(64)
-  originProcessingResultId String   @db.Uuid
+  sourceFileVersion        String           @db.Uuid
+  settingsHash             String           @db.Char(64)
+  originProcessingResultId String           @db.Uuid
   pageCount                Int
-  createdAt                DateTime @default(now())
-  layout                   LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  createdAt                DateTime         @default(now())
+  layout                   LayoutRequest    @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   originProcessingResult   ProcessingResult @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
   approvals                LayoutApproval[]
   manualReview             ManualReview?
@@ -448,35 +536,36 @@ model PreviewVersion {
 }
 
 model PrintReadyVersion {
-  id                       String   @id @default(uuid()) @db.Uuid
-  layoutId                 String   @db.Uuid
+  id                       String            @id @default(uuid()) @db.Uuid
+  layoutId                 String            @db.Uuid
   version                  Int
-  objectKey                String   @unique @db.VarChar(160)
-  checksum                 String   @db.Char(64)
+  objectKey                String            @unique @db.VarChar(160)
+  checksum                 String            @db.Char(64)
   sizeBytes                BigInt
-  sourceFileVersion        String   @db.Uuid
-  settingsHash             String   @db.Char(64)
-  originProcessingResultId String   @db.Uuid
+  sourceFileVersion        String            @db.Uuid
+  settingsHash             String            @db.Char(64)
+  originProcessingResultId String            @db.Uuid
   pageCount                Int
-  createdAt                DateTime @default(now())
-  layout                   LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  originProcessingResult   ProcessingResult @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
+  createdAt                DateTime          @default(now())
+  layout                   LayoutRequest     @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  originProcessingResult   ProcessingResult  @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
   orders                   Order[]
+  productionCycles         ProductionCycle[]
 
   @@unique([layoutId, version])
   @@unique([layoutId, sourceFileVersion, settingsHash])
 }
 
 model LayoutApproval {
-  id               String   @id @default(uuid()) @db.Uuid
-  layoutId         String   @db.Uuid
-  previewVersionId String   @db.Uuid
-  userId           String   @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
+  layoutId         String         @db.Uuid
+  previewVersionId String         @db.Uuid
+  userId           String         @db.Uuid
   layoutVersion    Int
-  createdAt        DateTime @default(now())
-  layout           LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  createdAt        DateTime       @default(now())
+  layout           LayoutRequest  @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
-  user             User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   order            Order?
 
   @@unique([layoutId, previewVersionId])
@@ -484,43 +573,48 @@ model LayoutApproval {
 }
 
 model TariffVersion {
-  id                String       @id @default(uuid()) @db.Uuid
-  version           Int          @unique
-  status            TariffStatus @default(ACTIVE)
-  currency          String       @default("UZS") @db.Char(3)
+  id                String          @id @default(uuid()) @db.Uuid
+  version           Int             @unique
+  status            TariffStatus    @default(ACTIVE)
+  currency          String          @default("UZS") @db.Char(3)
   basePriceMinor    BigInt
   perPagePriceMinor BigInt
-  createdById       String       @db.Uuid
-  createdAt         DateTime     @default(now())
+  createdById       String          @db.Uuid
+  createdAt         DateTime        @default(now())
   retiredAt         DateTime?
-  createdBy         User         @relation("TariffAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy         User            @relation("TariffAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   priceSnapshots    PriceSnapshot[]
 
   @@index([status, version])
 }
 
 model Order {
-  id                  String      @id @default(uuid()) @db.Uuid
-  userId              String      @db.Uuid
-  layoutId            String      @db.Uuid
-  layoutApprovalId    String      @unique @db.Uuid
-  printReadyVersionId String      @db.Uuid
-  status              OrderStatus @default(AWAITING_PAYMENT)
-  version             Int         @default(0)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-  user                User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  layout              LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  layoutApproval      LayoutApproval @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
-  printReadyVersion   PrintReadyVersion @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  id                  String              @id @default(uuid()) @db.Uuid
+  userId              String              @db.Uuid
+  layoutId            String              @db.Uuid
+  layoutApprovalId    String              @unique @db.Uuid
+  printReadyVersionId String              @db.Uuid
+  status              OrderStatus         @default(AWAITING_PAYMENT)
+  version             Int                 @default(0)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  disputeEligibleAt   DateTime?
+  user                User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  layout              LayoutRequest       @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval      LayoutApproval      @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion   @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
   priceSnapshot       PriceSnapshot?
   payment             Payment?
   matching            OrderMatching?
   partnerOffers       PartnerOffer[]
   assignments         PartnerAssignment[]
-  fulfillment         OrderFulfillment?
-  printJob            PrintJob?
-  deliveryTask        DeliveryTask?
+  fulfillments        OrderFulfillment[]
+  printJobs           PrintJob[]
+  deliveryTasks       DeliveryTask[]
+  productionCycles    ProductionCycle[]
+  disputes            DisputeCase[]
+  retentionSchedules  RetentionSchedule[]
+  legalHolds          LegalHold[]
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
@@ -528,70 +622,72 @@ model Order {
 
 /// Courier onboarding is role-gated independently from partner ownership.
 model CourierProfile {
-  id          String        @id @default(uuid()) @db.Uuid
-  userId      String        @unique @db.Uuid
-  displayName String        @db.VarChar(160)
-  serviceZone String        @db.VarChar(40)
-  status      CourierStatus @default(PENDING)
-  active      Boolean       @default(true)
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @unique @db.Uuid
+  displayName String         @db.VarChar(160)
+  serviceZone String         @db.VarChar(40)
+  status      CourierStatus  @default(PENDING)
+  active      Boolean        @default(true)
   approvedAt  DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  user        User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  deliveries DeliveryTask[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  user        User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries  DeliveryTask[]
 
   @@index([status, active, serviceZone])
 }
 
 /// One fulfillment aggregate per order. PIN material is derived from a secret and opaque nonce.
 model OrderFulfillment {
-  id                    String            @id @default(uuid()) @db.Uuid
-  orderId               String            @unique @db.Uuid
-  mode                  FulfillmentMode
-  status                FulfillmentStatus @default(AWAITING_HANDOFF)
-  requestKeyDigest      String            @db.Char(64)
-  requestHash           String            @db.Char(64)
-  completionNonce       String            @db.Char(32)
-  completionPinDigest   String            @db.Char(64)
-  completionAttempts    Int               @default(0)
-  completionExpiresAt   DateTime
-  completionUsedAt      DateTime?
-  handoffNonce          String?           @db.Char(32)
-  handoffPinDigest      String?           @db.Char(64)
-  handoffAttempts       Int               @default(0)
-  handoffUsedAt         DateTime?
-  addressCiphertext     String?           @db.Text
-  addressIv             String?           @db.VarChar(24)
-  addressAuthTag        String?           @db.VarChar(32)
-  version               Int               @default(0)
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  order                 Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  delivery              DeliveryTask?
+  id                  String            @id @default(uuid()) @db.Uuid
+  orderId             String            @db.Uuid
+  productionCycleId   String            @unique @db.Uuid
+  mode                FulfillmentMode
+  status              FulfillmentStatus @default(AWAITING_HANDOFF)
+  requestKeyDigest    String            @db.Char(64)
+  requestHash         String            @db.Char(64)
+  completionNonce     String            @db.Char(32)
+  completionPinDigest String            @db.Char(64)
+  completionAttempts  Int               @default(0)
+  completionExpiresAt DateTime
+  completionUsedAt    DateTime?
+  handoffNonce        String?           @db.Char(32)
+  handoffPinDigest    String?           @db.Char(64)
+  handoffAttempts     Int               @default(0)
+  handoffUsedAt       DateTime?
+  addressCiphertext   String?           @db.Text
+  addressIv           String?           @db.VarChar(24)
+  addressAuthTag      String?           @db.VarChar(32)
+  version             Int               @default(0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  order               Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productionCycle     ProductionCycle   @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
+  delivery            DeliveryTask?
 
-  @@unique([orderId, requestKeyDigest])
+  @@unique([productionCycleId, requestKeyDigest])
   @@index([status, completionExpiresAt])
 }
 
 model DeliveryTask {
-  id                String         @id @default(uuid()) @db.Uuid
-  orderId           String         @unique @db.Uuid
-  fulfillmentId     String         @unique @db.Uuid
-  courierId         String         @db.Uuid
-  branchId          String         @db.Uuid
-  providerReference String         @unique @db.VarChar(160)
-  status            DeliveryStatus @default(ASSIGNED)
-  active            Boolean        @default(true)
-  version           Int            @default(0)
-  assignedAt        DateTime       @default(now())
+  id                String           @id @default(uuid()) @db.Uuid
+  orderId           String           @db.Uuid
+  fulfillmentId     String           @unique @db.Uuid
+  courierId         String           @db.Uuid
+  branchId          String           @db.Uuid
+  providerReference String           @unique @db.VarChar(160)
+  status            DeliveryStatus   @default(ASSIGNED)
+  active            Boolean          @default(true)
+  version           Int              @default(0)
+  assignedAt        DateTime         @default(now())
   pickedUpAt        DateTime?
   completedAt       DateTime?
   failedAt          DateTime?
-  failureCode       String?        @db.VarChar(40)
-  order             Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  failureCode       String?          @db.VarChar(40)
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
   fulfillment       OrderFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
-  courier           CourierProfile @relation(fields: [courierId], references: [id], onDelete: Restrict)
-  branch            Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  courier           CourierProfile   @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  branch            Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   @@index([courierId, active, assignedAt])
   @@index([status, assignedAt])
@@ -616,23 +712,25 @@ model PrinterAgent {
 }
 
 model PrintJob {
-  id              String         @id @default(uuid()) @db.Uuid
-  orderId         String         @unique @db.Uuid
-  assignmentId    String         @unique @db.Uuid
-  branchId        String         @db.Uuid
-  agentId         String?        @db.Uuid
-  status          PrintJobStatus @default(PENDING)
-  version         Int            @default(0)
-  attempts        Int            @default(0)
-  leaseUntil      DateTime?
-  failureCode     String?        @db.VarChar(40)
-  createdAt       DateTime       @default(now())
-  startedAt       DateTime?
-  completedAt     DateTime?
-  order           Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  assignment      PartnerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  agent           PrinterAgent?  @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  id                String            @id @default(uuid()) @db.Uuid
+  orderId           String            @db.Uuid
+  productionCycleId String            @unique @db.Uuid
+  assignmentId      String            @db.Uuid
+  branchId          String            @db.Uuid
+  agentId           String?           @db.Uuid
+  status            PrintJobStatus    @default(PENDING)
+  version           Int               @default(0)
+  attempts          Int               @default(0)
+  leaseUntil        DateTime?
+  failureCode       String?           @db.VarChar(40)
+  createdAt         DateTime          @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productionCycle   ProductionCycle   @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
+  assignment        PartnerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  branch            Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  agent             PrinterAgent?     @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   @@index([branchId, status, createdAt])
   @@index([agentId, status])
@@ -650,20 +748,20 @@ model OrderMatching {
 }
 
 model PartnerOffer {
-  id                  String             @id @default(uuid()) @db.Uuid
-  orderId             String             @db.Uuid
-  partnerId           String             @db.Uuid
-  branchId            String             @db.Uuid
-  capabilityVersionId String             @db.Uuid
+  id                  String                  @id @default(uuid()) @db.Uuid
+  orderId             String                  @db.Uuid
+  partnerId           String                  @db.Uuid
+  branchId            String                  @db.Uuid
+  capabilityVersionId String                  @db.Uuid
   candidateRank       Int
-  status              PartnerOfferStatus @default(PENDING)
-  version             Int                @default(0)
+  status              PartnerOfferStatus      @default(PENDING)
+  version             Int                     @default(0)
   expiresAt           DateTime
   decidedAt           DateTime?
-  createdAt           DateTime           @default(now())
-  order               Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  partner             Partner            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  branch              Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdAt           DateTime                @default(now())
+  order               Order                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  partner             Partner                 @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  branch              Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
   capabilityVersion   BranchCapabilityVersion @relation(fields: [capabilityVersionId], references: [id], onDelete: Restrict)
   payoutSnapshot      PartnerPayoutSnapshot?
   assignment          PartnerAssignment?
@@ -675,71 +773,72 @@ model PartnerOffer {
 
 /// Financial terms are append-only and never updated after offer creation.
 model PartnerPayoutSnapshot {
-  id                   String   @id @default(uuid()) @db.Uuid
-  offerId              String   @unique @db.Uuid
-  customerAmountMinor  BigInt
-  partnerPayoutMinor   BigInt
-  agatCommissionMinor  BigInt
-  currency             String   @default("UZS") @db.Char(3)
-  ruleVersion          String   @db.VarChar(40)
-  calculationInputs    Json
-  createdAt            DateTime @default(now())
-  offer                PartnerOffer @relation(fields: [offerId], references: [id], onDelete: Restrict)
-  assignment           PartnerAssignment?
+  id                  String             @id @default(uuid()) @db.Uuid
+  offerId             String             @unique @db.Uuid
+  customerAmountMinor BigInt
+  partnerPayoutMinor  BigInt
+  agatCommissionMinor BigInt
+  currency            String             @default("UZS") @db.Char(3)
+  ruleVersion         String             @db.VarChar(40)
+  calculationInputs   Json
+  createdAt           DateTime           @default(now())
+  offer               PartnerOffer       @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  assignment          PartnerAssignment?
 }
 
 model PartnerAssignment {
-  id               String           @id @default(uuid()) @db.Uuid
-  orderId          String           @db.Uuid
-  offerId          String           @unique @db.Uuid
-  partnerId        String           @db.Uuid
-  branchId         String           @db.Uuid
-  payoutSnapshotId String           @unique @db.Uuid
-  status           AssignmentStatus @default(ACTIVE)
-  active           Boolean          @default(true)
-  version          Int              @default(0)
-  acceptedAt       DateTime         @default(now())
+  id               String                @id @default(uuid()) @db.Uuid
+  orderId          String                @db.Uuid
+  offerId          String                @unique @db.Uuid
+  partnerId        String                @db.Uuid
+  branchId         String                @db.Uuid
+  payoutSnapshotId String                @unique @db.Uuid
+  status           AssignmentStatus      @default(ACTIVE)
+  active           Boolean               @default(true)
+  version          Int                   @default(0)
+  acceptedAt       DateTime              @default(now())
   readyAt          DateTime?
-  order            Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  offer            PartnerOffer     @relation(fields: [offerId], references: [id], onDelete: Restrict)
-  partner          Partner          @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  branch           Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order            Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  offer            PartnerOffer          @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  partner          Partner               @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  branch           Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
   payoutSnapshot   PartnerPayoutSnapshot @relation(fields: [payoutSnapshotId], references: [id], onDelete: Restrict)
-  printJob         PrintJob?
+  printJobs        PrintJob[]
+  productionCycles ProductionCycle[]
 
   @@index([orderId, active])
   @@index([partnerId, active])
 }
 
 model PriceSnapshot {
-  id                String   @id @default(uuid()) @db.Uuid
-  orderId           String   @unique @db.Uuid
-  tariffVersionId   String   @db.Uuid
-  tariffVersion     Int
-  sourceParameters  Json
-  lineItems         Json
-  quantity          Int
-  subtotalMinor     BigInt
-  discountMinor     BigInt   @default(0)
-  totalMinor        BigInt
-  currency          String   @db.Char(3)
-  createdAt         DateTime @default(now())
-  order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  tariff            TariffVersion @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+  id               String        @id @default(uuid()) @db.Uuid
+  orderId          String        @unique @db.Uuid
+  tariffVersionId  String        @db.Uuid
+  tariffVersion    Int
+  sourceParameters Json
+  lineItems        Json
+  quantity         Int
+  subtotalMinor    BigInt
+  discountMinor    BigInt        @default(0)
+  totalMinor       BigInt
+  currency         String        @db.Char(3)
+  createdAt        DateTime      @default(now())
+  order            Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  tariff           TariffVersion @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
 }
 
 model Payment {
-  id                       String        @id @default(uuid()) @db.Uuid
-  orderId                  String        @unique @db.Uuid
-  provider                 String        @db.VarChar(30)
-  providerPaymentReference String?       @unique @db.VarChar(160)
+  id                       String            @id @default(uuid()) @db.Uuid
+  orderId                  String            @unique @db.Uuid
+  provider                 String            @db.VarChar(30)
+  providerPaymentReference String?           @unique @db.VarChar(160)
   amountMinor              BigInt
-  currency                 String        @db.Char(3)
-  status                   PaymentStatus @default(PENDING)
-  version                  Int           @default(0)
-  createdAt                DateTime      @default(now())
-  updatedAt                DateTime      @updatedAt
-  order                    Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  currency                 String            @db.Char(3)
+  status                   PaymentStatus     @default(PENDING)
+  version                  Int               @default(0)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  order                    Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
   refunds                  RefundOperation[]
 
   @@index([status, updatedAt])
@@ -747,7 +846,9 @@ model Payment {
 
 model RefundOperation {
   id                      String       @id @default(uuid()) @db.Uuid
-  paymentId               String       @unique @db.Uuid
+  paymentId               String       @db.Uuid
+  disputeId               String?      @unique @db.Uuid
+  kind                    RefundKind   @default(FULL)
   triggerDedupKey         String       @unique @db.Char(64)
   providerRefundReference String?      @unique @db.VarChar(160)
   amountMinor             BigInt
@@ -755,6 +856,142 @@ model RefundOperation {
   createdAt               DateTime     @default(now())
   confirmedAt             DateTime?
   payment                 Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  dispute                 DisputeCase? @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId, status])
+}
+
+model DisputeCase {
+  id                String             @id @default(uuid()) @db.Uuid
+  orderId           String             @db.Uuid
+  sequence          Int
+  openedById        String             @db.Uuid
+  category          DisputeCategory
+  structuredComment String?            @db.VarChar(280)
+  status            DisputeStatus      @default(OPEN)
+  openedFromStatus  OrderStatus
+  expiresAt         DateTime
+  version           Int                @default(0)
+  createdAt         DateTime           @default(now())
+  resolvedAt        DateTime?
+  cancelledAt       DateTime?
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  openedBy          User               @relation("DisputeOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  responses         DisputeResponse[]
+  resolution        DisputeResolution?
+  refunds           RefundOperation?
+  legalHold         LegalHold?
+
+  @@unique([orderId, sequence])
+  @@index([orderId, status])
+  @@index([status, createdAt])
+}
+
+model DisputeResponse {
+  id           String      @id @default(uuid()) @db.Uuid
+  disputeId    String      @db.Uuid
+  responderId  String      @db.Uuid
+  responseCode String      @db.VarChar(40)
+  createdAt    DateTime    @default(now())
+  dispute      DisputeCase @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  responder    User        @relation("DisputeResponder", fields: [responderId], references: [id], onDelete: Restrict)
+
+  @@unique([disputeId, responderId])
+}
+
+/// Append-only decision. Database triggers reject updates and deletes.
+model DisputeResolution {
+  id                String                @id @default(uuid()) @db.Uuid
+  disputeId         String                @unique @db.Uuid
+  resolverId        String                @db.Uuid
+  type              DisputeResolutionType
+  refundAmountMinor BigInt?
+  currency          String?               @db.Char(3)
+  ruleVersion       String                @db.VarChar(40)
+  allocationInputs  Json
+  createdAt         DateTime              @default(now())
+  dispute           DisputeCase           @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  resolver          User                  @relation("DisputeResolver", fields: [resolverId], references: [id], onDelete: Restrict)
+  productionCycle   ProductionCycle?
+}
+
+model ProductionCycle {
+  id                  String                @id @default(uuid()) @db.Uuid
+  orderId             String                @db.Uuid
+  sequence            Int
+  kind                ProductionCycleKind
+  status              ProductionCycleStatus @default(CREATED)
+  printReadyVersionId String                @db.Uuid
+  assignmentId        String                @db.Uuid
+  resolutionId        String?               @unique @db.Uuid
+  version             Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  completedAt         DateTime?
+  order               Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion     @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  assignment          PartnerAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  resolution          DisputeResolution?    @relation(fields: [resolutionId], references: [id], onDelete: Restrict)
+  printJob            PrintJob?
+  fulfillment         OrderFulfillment?
+
+  @@unique([orderId, sequence])
+  @@index([orderId, status])
+}
+
+model RetentionPolicy {
+  id             String              @id @default(uuid()) @db.Uuid
+  version        Int                 @unique
+  originalDays   Int
+  derivativeDays Int
+  auditDays      Int
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  schedules      RetentionSchedule[]
+}
+
+model RetentionSchedule {
+  id              String                    @id @default(uuid()) @db.Uuid
+  orderId         String                    @db.Uuid
+  policyId        String                    @db.Uuid
+  terminalVersion Int
+  status          RetentionScheduleStatus   @default(ACTIVE)
+  terminalAt      DateTime
+  createdAt       DateTime                  @default(now())
+  completedAt     DateTime?
+  order           Order                     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  policy          RetentionPolicy           @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  objects         RetentionScheduleObject[]
+
+  @@unique([orderId, terminalVersion])
+  @@index([status, terminalAt])
+}
+
+model RetentionScheduleObject {
+  scheduleId String                   @db.Uuid
+  objectKey  String                   @db.VarChar(1024)
+  expiresAt  DateTime
+  schedule   RetentionSchedule        @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  object     PermanentObjectReference @relation(fields: [objectKey], references: [objectKey], onDelete: Restrict)
+
+  @@id([scheduleId, objectKey])
+  @@index([expiresAt])
+}
+
+model LegalHold {
+  id           String       @id @default(uuid()) @db.Uuid
+  orderId      String       @db.Uuid
+  disputeId    String?      @unique @db.Uuid
+  reasonCode   String       @db.VarChar(40)
+  createdById  String       @db.Uuid
+  createdAt    DateTime     @default(now())
+  releasedById String?      @db.Uuid
+  releasedAt   DateTime?
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  dispute      DisputeCase? @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  createdBy    User         @relation("LegalHoldCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  releasedBy   User?        @relation("LegalHoldReleaser", fields: [releasedById], references: [id], onDelete: Restrict)
+
+  @@index([orderId, releasedAt])
 }
 
 model IdempotencyRecord {
@@ -792,22 +1029,22 @@ model ManualReview {
   decisionAt       DateTime?
   version          Int                @default(0)
   createdAt        DateTime           @default(now())
-  layout           LayoutRequest @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
-  reviewer         User? @relation("ManualReviewOperator", fields: [reviewerId], references: [id], onDelete: SetNull)
+  layout           LayoutRequest      @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  previewVersion   PreviewVersion     @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
+  reviewer         User?              @relation("ManualReviewOperator", fields: [reviewerId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
 }
 
 model OutboxEvent {
-  id               String   @id @default(uuid()) @db.Uuid
-  aggregateType    String   @db.VarChar(50)
-  aggregateId      String   @db.Uuid
+  id               String    @id @default(uuid()) @db.Uuid
+  aggregateType    String    @db.VarChar(50)
+  aggregateId      String    @db.Uuid
   aggregateVersion Int
-  eventType        String   @db.VarChar(80)
-  dedupKey         String   @unique @db.Char(64)
+  eventType        String    @db.VarChar(80)
+  dedupKey         String    @unique @db.Char(64)
   payload          Json
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
   publishedAt      DateTime?
 
   @@index([publishedAt, createdAt])

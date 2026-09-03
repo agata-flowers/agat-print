@@ -63,3 +63,17 @@ Excluded until separate approval: marketplace, essays/presentations, restoration
 - Official-photo disclaimers and accepted document templates.
 - Payment tokenization, fiscal receipts, refunds, reconciliation, and partner payouts.
 - Partner/courier contracts and responsibility for confidential print materials.
+
+## Stage 8 approved boundary
+
+Aftercare covers a 72-hour dispute window after COMPLETED or DELIVERY_FAILED,
+one active dispute and one immutable decision. Decisions are exclusively
+NO_ACTION, REPRINT, PARTIAL_REFUND or FULL_REFUND. No evidence-file uploads;
+only bounded categories and optional restricted text. Reprint reuses the
+approved artifact and original partner with a new production/fulfillment
+cycle. It never combines with a refund in one decision.
+
+Automate only already-defined object retention; financial/legal records wait
+for separately approved legal periods. Marketplace expansion, rematching,
+GPS/route optimization, real payout settlement/reconciliation, new external
+providers and all next-stage work remain outside this approval.

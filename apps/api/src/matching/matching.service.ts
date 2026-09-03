@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, type OrderStatus } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { IdempotencyService } from "../commerce/idempotency.service";
 import type { AppEnvironment } from "../config/environment";
@@ -339,12 +339,18 @@ export class MatchingService {
               "AWAITING_PICKUP",
               "COURIER_ASSIGNED",
               "IN_DELIVERY",
+              "REPRINT",
             ],
           },
         },
       },
       include: {
-        order: { include: { fulfillment: true, deliveryTask: true } },
+        order: {
+          include: {
+            fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
+            deliveryTasks: { orderBy: { assignedAt: "desc" }, take: 1 },
+          },
+        },
         branch: { select: { name: true } },
       },
       orderBy: { acceptedAt: "asc" },
@@ -355,8 +361,8 @@ export class MatchingService {
       status: assignment.order.status,
       branchName: assignment.branch.name,
       acceptedAt: assignment.acceptedAt,
-      fulfillmentMode: assignment.order.fulfillment?.mode ?? null,
-      deliveryId: assignment.order.deliveryTask?.id ?? null,
+      fulfillmentMode: assignment.order.fulfillments[0]?.mode ?? null,
+      deliveryId: assignment.order.deliveryTasks[0]?.id ?? null,
     };
   }
 
@@ -367,20 +373,19 @@ export class MatchingService {
   ) {
     const partner = await this.requireApprovedPartner(ownerId);
     const prepared = this.idempotency.prepare(
-      `partner-download:${orderId}`,
+      `download:${createHash("sha256").update(`${ownerId}:${orderId}`).digest("hex")}`,
       key,
       {},
     );
     const replay =
       await this.idempotency.replay<Record<string, unknown>>(prepared);
-    if (replay) return replay;
     const assignment = await this.prisma.partnerAssignment.findFirst({
       where: { orderId, partnerId: partner.id },
       include: { order: { include: { printReadyVersion: true } } },
     });
     if (
       !assignment ||
-      !["PARTNER_ACCEPTED", "IN_PRODUCTION", "READY"].includes(
+      !["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION", "READY"].includes(
         assignment.order.status,
       )
     )
@@ -392,9 +397,17 @@ export class MatchingService {
       ),
       expiresInSeconds: this.env.previewSignedUrlTtlSeconds,
     };
-    await this.prisma.idempotencyRecord.create({
-      data: this.idempotency.data(prepared, value as Prisma.InputJsonValue),
-    });
+    if (!replay)
+      await this.prisma.idempotencyRecord.upsert({
+        where: {
+          scope_keyDigest: {
+            scope: prepared.scope,
+            keyDigest: prepared.keyDigest,
+          },
+        },
+        create: this.idempotency.data(prepared, { authorized: true }),
+        update: {},
+      });
     await this.audit.record(
       "PARTNER_PRINT_READY_DOWNLOADED",
       ownerId,
@@ -414,8 +427,13 @@ export class MatchingService {
     input: ProductionStatusDto,
   ) {
     const partner = await this.requireApprovedPartner(ownerId);
+    const cycle = await this.prisma.productionCycle.findFirst({
+      where: { orderId, assignment: { partnerId: partner.id } },
+      orderBy: { sequence: "desc" },
+    });
+    if (!cycle) throw new ForbiddenException();
     const prepared = this.idempotency.prepare(
-      `partner-status:${orderId}`,
+      `partner-status:${cycle.id}`,
       key,
       input,
     );
@@ -425,21 +443,46 @@ export class MatchingService {
     const value = await this.prisma.$transaction(
       async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
+        const latest = await tx.productionCycle.findFirst({
+          where: { orderId },
+          orderBy: { sequence: "desc" },
+        });
+        if (latest?.id !== cycle.id)
+          throw new ConflictException({ code: "STALE_PRODUCTION_CYCLE" });
+        const insideReplay = await tx.idempotencyRecord.findUnique({
+          where: {
+            scope_keyDigest: {
+              scope: prepared.scope,
+              keyDigest: prepared.keyDigest,
+            },
+          },
+        });
+        if (insideReplay)
+          return this.idempotency.assertCompatible(
+            insideReplay,
+            prepared,
+          ) as Record<string, unknown>;
         const assignment = await tx.partnerAssignment.findFirst({
           where: { orderId, partnerId: partner.id, active: true },
-          include: { order: { include: { printJob: true } } },
+          include: {
+            order: {
+              include: {
+                printJobs: { orderBy: { createdAt: "desc" }, take: 1 },
+              },
+            },
+          },
         });
         if (!assignment) throw new ForbiddenException();
         if (
-          assignment.order.printJob &&
-          ["LEASED", "PRINTING"].includes(assignment.order.printJob.status)
+          assignment.order.printJobs[0] &&
+          ["LEASED", "PRINTING"].includes(assignment.order.printJobs[0].status)
         )
           throw new ConflictException({ code: "PRINTER_AGENT_ACTIVE" });
-        const expected =
+        const expected: OrderStatus[] =
           input.status === "IN_PRODUCTION"
-            ? "PARTNER_ACCEPTED"
-            : "IN_PRODUCTION";
-        if (assignment.order.status !== expected)
+            ? ["PARTNER_ACCEPTED", "REPRINT"]
+            : ["IN_PRODUCTION"];
+        if (!expected.includes(assignment.order.status))
           throw new ConflictException({
             code: "INVALID_PRODUCTION_TRANSITION",
           });
@@ -447,7 +490,7 @@ export class MatchingService {
           where: {
             id: orderId,
             version: assignment.order.version,
-            status: expected,
+            status: { in: expected },
           },
           data: { status: input.status, version: { increment: 1 } },
         });
@@ -455,10 +498,10 @@ export class MatchingService {
           throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
         if (
           input.status === "IN_PRODUCTION" &&
-          assignment.order.printJob?.status === "PENDING"
+          assignment.order.printJobs[0]?.status === "PENDING"
         )
           await tx.printJob.update({
-            where: { id: assignment.order.printJob.id },
+            where: { id: assignment.order.printJobs[0].id },
             data: { status: "CANCELLED", version: { increment: 1 } },
           });
         if (input.status === "READY")
@@ -468,6 +511,18 @@ export class MatchingService {
               status: "READY",
               active: false,
               readyAt: new Date(),
+              version: { increment: 1 },
+            },
+          });
+        const currentCycle = await tx.productionCycle.findFirst({
+          where: { orderId },
+          orderBy: { sequence: "desc" },
+        });
+        if (currentCycle)
+          await tx.productionCycle.update({
+            where: { id: currentCycle.id },
+            data: {
+              status: input.status === "READY" ? "READY" : "IN_PRODUCTION",
               version: { increment: 1 },
             },
           });
@@ -577,6 +632,15 @@ export class MatchingService {
         partnerId: offer.partnerId,
         branchId: offer.branchId,
         payoutSnapshotId: offer.payoutSnapshot.id,
+      },
+    });
+    await tx.productionCycle.create({
+      data: {
+        orderId: offer.orderId,
+        sequence: 1,
+        kind: "ORIGINAL",
+        assignmentId: assignment.id,
+        printReadyVersionId: offer.order.printReadyVersionId,
       },
     });
     await tx.orderMatching.update({

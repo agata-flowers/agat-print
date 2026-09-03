@@ -56,7 +56,7 @@ echo 'Applying migrations to a clean database twice.'
 "${compose[@]}" run --rm api pnpm --filter @agat/api exec prisma migrate deploy
 
 echo 'Running all database E2E tests.'
-"${compose[@]}" run --rm -e NODE_ENV=test -e RUN_DB_E2E=1 api \
+"${compose[@]}" run --rm -e NODE_ENV=test -e RUN_DB_E2E=1 -e AFTERCARE_DISPATCH_ENABLED=false api \
   pnpm --filter @agat/api test -- foundation.e2e.spec.ts
 
 echo 'Verifying production rejection of mock OTP and development secrets.'

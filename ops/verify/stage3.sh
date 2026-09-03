@@ -74,7 +74,7 @@ echo 'Running stage 3 database, MinIO, ClamAV and idempotency E2E tests.'
 phase="stage3-e2e"
 "${compose[@]}" run --rm \
   -e NODE_ENV=test \
-  -e RUN_STAGE3_E2E=1 \
+  -e RUN_STAGE3_E2E=1 -e AFTERCARE_DISPATCH_ENABLED=false \
   -e PROCESSING_DISPATCH_ENABLED=false \
   api pnpm --filter @agat/api exec vitest run test/stage3.e2e.spec.ts \
     --no-file-parallelism

@@ -44,6 +44,8 @@ flowchart LR
   snapshots, one active assignment and manual production through READY.
 - Fulfillment: branch printer-agent leases, protected pickup, courier
   onboarding/assignment, encrypted delivery data and completion.
+- Aftercare: bounded disputes and immutable resolutions, same-partner reprint
+  cycles, cumulative refund reservation, legal holds and durable object deletion.
 - Future ports: production payment acquisition and external dispatch.
 
 ## Stage 5 order aggregates
@@ -79,7 +81,7 @@ erDiagram
   Order ||--|| PriceSnapshot : freezes
   TariffVersion ||--o{ PriceSnapshot : sources
   Order ||--o| Payment : pays
-  Payment ||--o| RefundOperation : refunds
+  Payment ||--o{ RefundOperation : refunds
   Branch ||--o{ BranchCapabilityVersion : versions
   Order ||--o| OrderMatching : matches
   Order ||--o{ PartnerOffer : offers
@@ -87,10 +89,24 @@ erDiagram
   PartnerOffer ||--|| PartnerPayoutSnapshot : freezes
   PartnerOffer ||--o| PartnerAssignment : accepts
   PartnerPayoutSnapshot ||--o| PartnerAssignment : binds
-  PartnerAssignment ||--o| PrintJob : prints
+  PartnerAssignment ||--o{ ProductionCycle : executes
+  ProductionCycle ||--o| PrintJob : prints
+  PrintReadyVersion ||--o{ ProductionCycle : immutable_source
   Branch ||--o{ PrinterAgent : authorizes
   PrinterAgent ||--o{ PrintJob : leases
-  Order ||--o| OrderFulfillment : receives
+  Order ||--o{ ProductionCycle : cycles
+  ProductionCycle ||--o| OrderFulfillment : receives
+  Order ||--o{ DisputeCase : aftercare
+  DisputeCase ||--o{ DisputeResponse : responds
+  DisputeCase ||--o| DisputeResolution : resolves_once
+  DisputeCase ||--o| RefundOperation : refund_intent
+  DisputeResolution ||--o| ProductionCycle : reprints_once
+  Order ||--o{ LegalHold : protects
+  Order ||--o{ RetentionSchedule : schedules
+  RetentionPolicy ||--o{ RetentionSchedule : governs
+  RetentionSchedule ||--o{ RetentionScheduleObject : selects
+  PermanentObjectReference ||--o{ RetentionScheduleObject : referenced
+  OutboxEvent ||--o| AftercareJob : dispatches
   User ||--o| CourierProfile : applies
   OrderFulfillment ||--o| DeliveryTask : dispatches
   CourierProfile ||--o{ DeliveryTask : carries
@@ -221,3 +237,34 @@ uses a separate derived PIN. Normal terminal paths are
 `READY → AWAITING_PICKUP → COURIER_ASSIGNED → IN_DELIVERY → COMPLETED`.
 Provider or courier failure reaches `DELIVERY_FAILED`; reverse and skipped
 transitions are rejected.
+
+## ADR 8: aftercare is append-only history over an existing paid order
+
+Stage 7 remains the baseline. Stage 8 changes the database cardinality from
+one fulfillment/job per order to one per ProductionCycle, without changing the
+stage 7 endpoint paths. Migration backfills ORIGINAL cycles for historical
+assignments, including inactive completed assignments. Reprint cycles keep the
+same assignment and immutable PrintReadyVersion; no matching, new approval,
+price recalculation or new partner payout occurs.
+
+Orders enter DISPUTED only within 72 hours of disputeEligibleAt, which is set
+by COMPLETED or DELIVERY_FAILED. Cancelling or resolving NO_ACTION returns the
+prior status without extending that timestamp. REPRINT creates a new cycle/job
+and follows REPRINT → IN_PRODUCTION → READY, then existing pickup/delivery
+transitions. Each new fulfillment has a fresh PIN; old PINs and old printer
+leases cannot authorize the new cycle.
+
+Resolution choices are NO_ACTION, REPRINT, PARTIAL_REFUND and FULL_REFUND.
+Refund decisions reserve the amount and move order/payment to REFUND_PENDING;
+only the signed provider callback sets PARTIALLY_REFUNDED or REFUNDED.
+PostgreSQL locks the payment before checking all reserved/confirmed amounts.
+PriceSnapshot, PartnerPayoutSnapshot, DisputeResolution and DisputeResponse are
+immutable; cycle source/assignment lineage is immutable too.
+
+Aftercare commands acquire the retention advisory lock before the order lock,
+re-read idempotency, apply aggregate CAS and commit outbox + safe audit in one
+transaction. The aftercare BullMQ queue is a transport; AftercareJob leases,
+five-attempt limit, inbox and idempotent provider calls are authoritative.
+A periodic durable retention sweep excludes active holds and nonterminal
+orders. Tombstone intent commits before storage deletion and remains retryable
+after a crash. Legal/financial database records are not automatically purged.

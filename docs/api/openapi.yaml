@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.7.0
+  version: 0.8.0
 servers:
   - url: /api/v1
 paths:
@@ -542,8 +542,171 @@ paths:
   /metrics:
     get:
       responses: { "200": { description: Prometheus text format } }
+  /orders/{orderId}/disputes:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+    get:
+      summary: Customer-owned dispute history; no payout or allocation data
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200":
+          {
+            description: Private no-store history with bounded responses and resolutions,
+          }
+        "404": { description: Order unavailable or belongs to another customer }
+    post:
+      summary: Open one active dispute within 72 hours of COMPLETED or DELIVERY_FAILED
+      description: Requires CUSTOMER, Origin and X-CSRF-Token; atomically protects referenced objects with a legal hold. Evidence uploads are forbidden.
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OpenDispute" }
+      responses:
+        "201": { description: Dispute opened or identical command replayed }
+        "403": { description: Role or CSRF rejected }
+        "404": { description: Foreign or missing order }
+        "409":
+          {
+            description: Window expired,
+            active dispute,
+            state or idempotency conflict,
+          }
+  /disputes/{disputeId}/cancel:
+    post:
+      summary: Customer cancels only an owned unanswered OPEN dispute
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DisputeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          {
+            description: Previous order status restored and dispute hold released,
+          }
+        "409":
+          { description: Already answered or resolved; window is not extended }
+  /partner/disputes:
+    get:
+      summary: Approved partner sees disputes only for assigned orders
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Private no-store bounded dispute history }
+        "403": { description: Approved PARTNER required }
+  /partner/disputes/{disputeId}/response:
+    post:
+      summary: Record an immutable bounded response without free text
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DisputeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PartnerDisputeResponse" }
+      responses:
+        "201": { description: Partner response recorded or replayed }
+        "404": { description: Foreign or missing dispute }
+        "409": { description: Already answered, decided or conflicting key }
+  /admin/disputes:
+    get:
+      summary: ADMIN dispute queue with bounded metadata
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200":
+          {
+            description: Most recent 100 disputes; no document keys or provider references,
+          }
+  /admin/disputes/{disputeId}:
+    get:
+      summary: ADMIN dispute details, remaining refundable amount and production history
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DisputeId"
+      responses:
+        "200":
+          { description: Protected details; structured comment is never logged }
+        "404": { description: Missing dispute }
+  /admin/disputes/{disputeId}/decision:
+    post:
+      summary: One immutable ADMIN resolution per dispute
+      description: REPRINT reuses the existing print-ready and partner without new payment or payout. Refund remains pending until authenticated provider confirmation. All mutations require Origin and CSRF.
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DisputeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResolveDispute" }
+      responses:
+        "201":
+          {
+            description: Immutable resolution and outbox committed; replay returns the original response,
+          }
+        "409":
+          {
+            description: Already decided,
+            stale state,
+            invalid amount,
+            unavailable partner or retained file,
+          }
+  /admin/orders/{orderId}/retention-holds:
+    post:
+      summary: ADMIN prevents future deletion; cannot resurrect committed tombstones
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLegalHold" }
+      responses:
+        "201":
+          {
+            description: Hold created transactionally with retention exclusion and outbox,
+          }
+  /admin/orders/{orderId}/retention-holds/{holdId}:
+    delete:
+      summary: ADMIN releases a manual hold; open-dispute holds require dispute resolution or cancellation
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - {
+            in: path,
+            name: holdId,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: Hold released or original result replayed }
+        "409": { description: Open-dispute hold or idempotency conflict }
+  /admin/retention:
+    get:
+      summary: ADMIN bounded schedule/hold/deletion counts and active holds
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Private no-store status without object keys }
 components:
+  securitySchemes:
+    AccessCookie:
+      type: apiKey
+      in: cookie
+      name: agat_access
   parameters:
+    DisputeId:
+      in: path
+      name: disputeId
+      required: true
+      schema: { type: string, format: uuid }
     UploadId:
       in: path
       name: uploadId
@@ -610,6 +773,54 @@ components:
       required: true
       schema: { type: string, minLength: 16, maxLength: 200 }
   schemas:
+    OpenDispute:
+      type: object
+      additionalProperties: false
+      required: [category]
+      properties:
+        category:
+          type: string
+          enum:
+            [
+              PRINT_QUALITY,
+              WRONG_OUTPUT,
+              DAMAGED,
+              MISSING_ITEMS,
+              DELIVERY_FAILURE,
+            ]
+        structuredComment:
+          type: string
+          maxLength: 280
+          description: Letters, numbers, spaces and bounded punctuation only. No markup, files or control characters. Never copied into telemetry.
+    PartnerDisputeResponse:
+      type: object
+      additionalProperties: false
+      required: [responseCode]
+      properties:
+        responseCode:
+          type: string
+          enum:
+            [ACKNOWLEDGED, DISAGREES, REPRINT_ACCEPTED, DELIVERY_NOT_PARTNER]
+    ResolveDispute:
+      type: object
+      additionalProperties: false
+      required: [resolution]
+      properties:
+        resolution:
+          type: string
+          enum: [NO_ACTION, REPRINT, PARTIAL_REFUND, FULL_REFUND]
+        refundAmountMinor:
+          type: string
+          pattern: "^[0-9]{1,15}$"
+          description: Required only for PARTIAL_REFUND; positive integer strictly below remaining paid amount. FULL_REFUND calculates remaining amount. UZS minor units; no float.
+    CreateLegalHold:
+      type: object
+      additionalProperties: false
+      required: [reasonCode]
+      properties:
+        reasonCode:
+          type: string
+          enum: [LEGAL_REQUEST, SECURITY_INCIDENT, REGULATORY_REVIEW]
     CreateUploadSession:
       type: object
       additionalProperties: false

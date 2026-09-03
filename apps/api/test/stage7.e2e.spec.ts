@@ -11,8 +11,14 @@ import { FulfillmentQueueService } from "../src/fulfillment/fulfillment-queue.se
 import { FulfillmentService } from "../src/fulfillment/fulfillment.service";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { PrivateObjectStorageService } from "../src/uploads/private-object-storage.service";
+import { RetentionWorkerService } from "../src/disputes/retention-worker.service";
+import { AftercareQueueService } from "../src/disputes/aftercare-queue.service";
+import { CommerceService } from "../src/commerce/commerce.service";
+import { MockPaymentProvider } from "../src/commerce/mock-payment.provider";
+import { Queue, QueueEvents, Worker } from "bullmq";
 
-const enabled = process.env.RUN_STAGE7_E2E === "1";
+const enabled =
+  process.env.RUN_STAGE7_E2E === "1" || process.env.RUN_STAGE8_E2E === "1";
 const origin = "http://localhost:3000";
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -66,6 +72,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       prisma.printerAgent.deleteMany(),
       prisma.deliveryTask.deleteMany(),
       prisma.orderFulfillment.deleteMany(),
+      prisma.productionCycle.deleteMany(),
       prisma.courierProfile.deleteMany(),
       prisma.partnerAssignment.deleteMany(),
       prisma.partnerPayoutSnapshot.deleteMany(),
@@ -241,6 +248,9 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       },
     });
     const printReadyKey = `print-ready/${opaque()}`;
+    const syntheticPdf = Buffer.from(
+      "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF",
+    );
     const printReady = await prisma.printReadyVersion.create({
       data: {
         layoutId: layout.id,
@@ -254,10 +264,24 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
         pageCount: 1,
       },
     });
-    await storage.putDocument(
-      printReadyKey,
-      Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF"),
-    );
+    await storage.putDocument(printReadyKey, syntheticPdf);
+    await storage.putPermanent(upload.permanentObjectKey!, syntheticPdf);
+    await prisma.permanentObjectReference.createMany({
+      data: [
+        {
+          objectKey: printReadyKey,
+          checksum: createHash("sha256").update(syntheticPdf).digest("hex"),
+          retentionClass: "PRINT_READY",
+          expiresAt: new Date(Date.now() + 30 * 86400000),
+        },
+        {
+          objectKey: upload.permanentObjectKey!,
+          checksum: createHash("sha256").update(syntheticPdf).digest("hex"),
+          retentionClass: "ORIGINAL",
+          expiresAt: new Date(Date.now() + 7 * 86400000),
+        },
+      ],
+    });
     const approval = await prisma.layoutApproval.create({
       data: {
         layoutId: layout.id,
@@ -366,7 +390,17 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
         readyAt: status === "READY" ? new Date() : null,
       },
     });
-    return { order, assignment, payout };
+    await prisma.productionCycle.create({
+      data: {
+        orderId: order.id,
+        sequence: 1,
+        kind: "ORIGINAL",
+        assignmentId: assignment.id,
+        printReadyVersionId: printReady.id,
+        status: status === "READY" ? "READY" : "CREATED",
+      },
+    });
+    return { order, assignment, payout, printReady, upload };
   }
 
   const customerPost = (
@@ -492,7 +526,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       .expect(401);
     expect(
       (
-        await prisma.orderFulfillment.findUniqueOrThrow({
+        await prisma.orderFulfillment.findFirstOrThrow({
           where: { orderId: seeded.order.id },
         })
       ).completionAttempts,
@@ -513,7 +547,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       (await prisma.order.findUniqueOrThrow({ where: { id: seeded.order.id } }))
         .status,
     ).toBe("COMPLETED");
-    const fulfillmentRow = await prisma.orderFulfillment.findUniqueOrThrow({
+    const fulfillmentRow = await prisma.orderFulfillment.findFirstOrThrow({
       where: { orderId: seeded.order.id },
     });
     expect(JSON.stringify(fulfillmentRow)).not.toContain(
@@ -531,7 +565,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       randomUUID(),
       { mode: "DELIVERY", deliveryAddress: address },
     ).expect(201);
-    const fulfillmentRow = await prisma.orderFulfillment.findUniqueOrThrow({
+    const fulfillmentRow = await prisma.orderFulfillment.findFirstOrThrow({
       where: { orderId: seeded.order.id },
     });
     expect(fulfillmentRow.addressCiphertext).not.toContain(address);
@@ -547,7 +581,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       (await fulfillment.assignDelivery(seeded.order.id, event.dedupKey))
         .duplicate,
     ).toBe(true);
-    const delivery = await prisma.deliveryTask.findUniqueOrThrow({
+    const delivery = await prisma.deliveryTask.findFirstOrThrow({
       where: { orderId: seeded.order.id },
     });
     expect(delivery.courierId).toBe(courier.courierId);
@@ -635,4 +669,584 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
     ).rejects.toThrow();
     expect(await queue.dispatchBatch()).toBeGreaterThanOrEqual(0);
   });
+
+  describe.skipIf(process.env.RUN_STAGE8_E2E !== "1")(
+    "stage 8 aftercare DB-E2E",
+    () => {
+      const partnerPost = (
+        path: string,
+        key: string,
+        body: Record<string, unknown>,
+      ) =>
+        partner.agent
+          .post(path)
+          .set("Origin", origin)
+          .set("X-CSRF-Token", partner.csrf)
+          .set("Idempotency-Key", key)
+          .send(body);
+      const adminPost = (
+        path: string,
+        key: string,
+        body: Record<string, unknown>,
+      ) =>
+        admin.agent
+          .post(path)
+          .set("Origin", origin)
+          .set("X-CSRF-Token", admin.csrf)
+          .set("Idempotency-Key", key)
+          .send(body);
+      const open = (orderId: string, key = randomUUID()) =>
+        customerPost(`/api/v1/orders/${orderId}/disputes`, key, {
+          category: "PRINT_QUALITY",
+          structuredComment: "Synthetic bounded comment",
+        });
+      const decide = (
+        id: string,
+        resolution: string,
+        amount?: string,
+        key = randomUUID(),
+      ) =>
+        adminPost(`/api/v1/admin/disputes/${id}/decision`, key, {
+          resolution,
+          ...(amount ? { refundAmountMinor: amount } : {}),
+        });
+
+      async function completedOrder() {
+        const seeded = await assignedOrder("READY");
+        const requested = await customerPost(
+          `/api/v1/orders/${seeded.order.id}/fulfillment`,
+          randomUUID(),
+          { mode: "PICKUP" },
+        ).expect(201);
+        await partnerPost(
+          `/api/v1/partner/orders/${seeded.order.id}/pickup/complete`,
+          randomUUID(),
+          { pin: requested.body.completionPin },
+        ).expect(201);
+        return { ...seeded, oldPin: requested.body.completionPin as string };
+      }
+
+      it("enforces the 72-hour boundary, ownership, roles and conflicting keys", async () => {
+        const seeded = await completedOrder();
+        await customer.agent
+          .post(`/api/v1/orders/${seeded.order.id}/disputes`)
+          .set("Origin", origin)
+          .set("X-CSRF-Token", customer.csrf)
+          .send({ category: "PRINT_QUALITY" })
+          .expect(409);
+        await customer.agent
+          .post(`/api/v1/orders/${seeded.order.id}/disputes`)
+          .set("Origin", "https://foreign.invalid")
+          .set("X-CSRF-Token", customer.csrf)
+          .set("Idempotency-Key", randomUUID())
+          .send({ category: "PRINT_QUALITY" })
+          .expect(403);
+        const key = randomUUID();
+        const [first, replay] = await Promise.all([
+          open(seeded.order.id, key).expect(201),
+          open(seeded.order.id, key).expect(201),
+        ]);
+        expect(first.body).toEqual(replay.body);
+        await customerPost(`/api/v1/orders/${seeded.order.id}/disputes`, key, {
+          category: "DAMAGED",
+        }).expect(409);
+        await foreignPartner.agent
+          .post(`/api/v1/orders/${seeded.order.id}/disputes`)
+          .set("Origin", origin)
+          .set("X-CSRF-Token", foreignPartner.csrf)
+          .set("Idempotency-Key", key)
+          .send({ category: "PRINT_QUALITY" })
+          .expect(404);
+        await customerPost(
+          `/api/v1/admin/disputes/${first.body.disputeId}/decision`,
+          randomUUID(),
+          { resolution: "NO_ACTION" },
+        ).expect(403);
+        await partnerPost(
+          `/api/v1/partner/disputes/${first.body.disputeId}/response`,
+          randomUUID(),
+          { responseCode: "ACKNOWLEDGED" },
+        ).expect(201);
+        await foreignPartner.agent
+          .post(`/api/v1/partner/disputes/${first.body.disputeId}/response`)
+          .set("Origin", origin)
+          .set("X-CSRF-Token", foreignPartner.csrf)
+          .set("Idempotency-Key", randomUUID())
+          .send({ responseCode: "DISAGREES" })
+          .expect(404);
+        const results = await Promise.all([
+          decide(first.body.disputeId, "NO_ACTION"),
+          decide(first.body.disputeId, "NO_ACTION"),
+        ]);
+        expect(results.map((x) => x.status).sort()).toEqual([201, 409]);
+        const row = await prisma.order.findUniqueOrThrow({
+          where: { id: seeded.order.id },
+        });
+        expect(row.disputeEligibleAt).not.toBeNull();
+        await prisma.order.update({
+          where: { id: seeded.order.id },
+          data: { disputeEligibleAt: new Date(Date.now() - 72 * 3600000) },
+        });
+        await open(seeded.order.id).expect(409);
+        expect(
+          await prisma.disputeResolution.count({
+            where: { disputeId: first.body.disputeId },
+          }),
+        ).toBe(1);
+        await expect(
+          prisma.disputeResolution.update({
+            where: { disputeId: first.body.disputeId },
+            data: { type: "REPRINT" },
+          }),
+        ).rejects.toThrow();
+      });
+
+      it("resolves partial/full refunds only through signed callbacks, with replay and DB amount guards", async () => {
+        for (const resolution of ["PARTIAL_REFUND", "FULL_REFUND"]) {
+          const seeded = await completedOrder();
+          const dispute = await open(seeded.order.id).expect(201);
+          const decision = await decide(
+            dispute.body.disputeId,
+            resolution,
+            resolution === "PARTIAL_REFUND" ? "250" : undefined,
+          ).expect(201);
+          expect(decision.body.orderStatus).toBe("REFUND_PENDING");
+          const refund = await prisma.refundOperation.findUniqueOrThrow({
+            where: { id: decision.body.refundOperationId },
+          });
+          expect(refund.providerRefundReference).toBeNull();
+          const commerce = app.get(CommerceService);
+          await Promise.all([
+            commerce.dispatchRefundOperation(refund.id),
+            commerce.dispatchRefundOperation(refund.id),
+          ]);
+          const dispatched = await prisma.refundOperation.findUniqueOrThrow({
+            where: { id: refund.id },
+          });
+          const callback = {
+            eventId: randomUUID(),
+            paymentReference: dispatched.providerRefundReference!,
+            outcome: "REFUND_SUCCEEDED" as const,
+          };
+          const provider = app.get(MockPaymentProvider);
+          await request(app.getHttpServer())
+            .post("/api/v1/payments/mock/callback")
+            .set("X-Provider-Signature", "0".repeat(64))
+            .send(callback)
+            .expect(403);
+          const send = () =>
+            request(app.getHttpServer())
+              .post("/api/v1/payments/mock/callback")
+              .set(
+                "X-Provider-Signature",
+                provider.sign(JSON.stringify(callback)),
+              )
+              .send(callback)
+              .expect(201);
+          const confirmed = await Promise.all([send(), send()]);
+          expect(confirmed[0].body).toEqual(confirmed[1].body);
+          expect(confirmed[0].body.orderStatus).toBe(
+            resolution === "FULL_REFUND" ? "REFUNDED" : "PARTIALLY_REFUNDED",
+          );
+          expect(
+            await prisma.refundOperation.count({
+              where: { disputeId: dispute.body.disputeId },
+            }),
+          ).toBe(1);
+          await expect(
+            prisma.refundOperation.create({
+              data: {
+                paymentId: refund.paymentId,
+                amountMinor: 1251n,
+                triggerDedupKey: digest(randomUUID()),
+              },
+            }),
+          ).rejects.toThrow();
+          await expect(
+            prisma.priceSnapshot.update({
+              where: { orderId: seeded.order.id },
+              data: { totalMinor: 1n },
+            }),
+          ).rejects.toThrow();
+        }
+      });
+
+      it.each(["MANUAL", "AGENT"])(
+        "reprints the immutable layout via %s with a fresh cycle and PIN",
+        async (mode) => {
+          const seeded = await completedOrder();
+          const dispute = await open(seeded.order.id).expect(201);
+          await decide(dispute.body.disputeId, "REPRINT", "1").expect(409);
+          const key = randomUUID();
+          const [first, repeated] = await Promise.all([
+            decide(dispute.body.disputeId, "REPRINT", undefined, key).expect(
+              201,
+            ),
+            decide(dispute.body.disputeId, "REPRINT", undefined, key).expect(
+              201,
+            ),
+          ]);
+          expect(first.body).toEqual(repeated.body);
+          const cycles = await prisma.productionCycle.findMany({
+            where: { orderId: seeded.order.id },
+            orderBy: { sequence: "asc" },
+          });
+          expect(cycles).toHaveLength(2);
+          expect(cycles[1]!.printReadyVersionId).toBe(seeded.printReady.id);
+          expect(
+            await prisma.printJob.count({
+              where: { productionCycleId: cycles[1]!.id },
+            }),
+          ).toBe(1);
+          if (mode === "MANUAL") {
+            await partnerPost(
+              `/api/v1/partner/orders/${seeded.order.id}/status`,
+              randomUUID(),
+              { status: "IN_PRODUCTION" },
+            ).expect(201);
+            await partnerPost(
+              `/api/v1/partner/orders/${seeded.order.id}/status`,
+              randomUUID(),
+              { status: "READY" },
+            ).expect(201);
+          } else {
+            const registered = await admin.agent
+              .post(
+                `/api/v1/admin/branches/${partner.branch.id}/printer-agents`,
+              )
+              .set("Origin", origin)
+              .set("X-CSRF-Token", admin.csrf)
+              .send({ label: "Synthetic reprint agent" })
+              .expect(201);
+            const machine = (
+              path: string,
+              body: Record<string, unknown> = {},
+            ) =>
+              request(app.getHttpServer())
+                .post(path)
+                .set("X-Printer-Agent-Id", registered.body.agentId)
+                .set("Authorization", "Bearer " + registered.body.token)
+                .set("Idempotency-Key", randomUUID())
+                .send(body);
+            const claimed = await machine(
+              "/api/v1/printer-agent/jobs/claim",
+            ).expect(201);
+            expect(claimed.body.jobId).toBe(
+              (
+                await prisma.printJob.findUniqueOrThrow({
+                  where: { productionCycleId: cycles[1]!.id },
+                })
+              ).id,
+            );
+            await machine(
+              `/api/v1/printer-agent/jobs/${claimed.body.jobId}/status`,
+              { status: "PRINTING" },
+            ).expect(201);
+            await machine(
+              `/api/v1/printer-agent/jobs/${claimed.body.jobId}/status`,
+              { status: "COMPLETED" },
+            ).expect(201);
+          }
+          const requested = await customerPost(
+            `/api/v1/orders/${seeded.order.id}/fulfillment`,
+            randomUUID(),
+            { mode: "PICKUP" },
+          ).expect(201);
+          await partnerPost(
+            `/api/v1/partner/orders/${seeded.order.id}/pickup/complete`,
+            randomUUID(),
+            { pin: seeded.oldPin },
+          ).expect(401);
+          await partnerPost(
+            `/api/v1/partner/orders/${seeded.order.id}/pickup/complete`,
+            randomUUID(),
+            { pin: requested.body.completionPin },
+          ).expect(201);
+          expect(
+            await prisma.orderFulfillment.count({
+              where: { orderId: seeded.order.id },
+            }),
+          ).toBe(2);
+          expect(
+            (
+              await prisma.order.findUniqueOrThrow({
+                where: { id: seeded.order.id },
+              })
+            ).status,
+          ).toBe("COMPLETED");
+          expect(
+            (
+              await prisma.partnerPayoutSnapshot.findUniqueOrThrow({
+                where: { id: seeded.payout.id },
+              })
+            ).partnerPayoutMinor,
+          ).toBe(seeded.payout.partnerPayoutMinor);
+        },
+      );
+
+      it("delivers a reprint through a fresh courier fulfillment without reusing the old PIN", async () => {
+        const seeded = await completedOrder();
+        const dispute = await open(seeded.order.id).expect(201);
+        await decide(dispute.body.disputeId, "REPRINT").expect(201);
+        await partnerPost(
+          `/api/v1/partner/orders/${seeded.order.id}/status`,
+          randomUUID(),
+          { status: "IN_PRODUCTION" },
+        ).expect(201);
+        await partnerPost(
+          `/api/v1/partner/orders/${seeded.order.id}/status`,
+          randomUUID(),
+          { status: "READY" },
+        ).expect(201);
+        const courier = await createCourier("+998000000079");
+        const requested = await customerPost(
+          `/api/v1/orders/${seeded.order.id}/fulfillment`,
+          randomUUID(),
+          {
+            mode: "DELIVERY",
+            deliveryAddress: "Synthetic reprint delivery address",
+          },
+        ).expect(201);
+        const event = await prisma.outboxEvent.findFirstOrThrow({
+          where: {
+            aggregateId: seeded.order.id,
+            eventType: "DELIVERY_REQUESTED",
+          },
+          orderBy: { aggregateVersion: "desc" },
+        });
+        await fulfillment.assignDelivery(seeded.order.id, event.dedupKey);
+        expect(
+          (await fulfillment.assignDelivery(seeded.order.id, event.dedupKey))
+            .duplicate,
+        ).toBe(true);
+        const active = await courier.agent
+          .get("/api/v1/courier/deliveries/active")
+          .expect(200);
+        await partnerPost(
+          `/api/v1/partner/deliveries/${active.body.delivery.id}/handoff`,
+          randomUUID(),
+          { pin: active.body.delivery.handoffPin },
+        ).expect(201);
+        const complete = (pin: string, key: string) =>
+          courier.agent
+            .post(
+              `/api/v1/courier/deliveries/${active.body.delivery.id}/complete`,
+            )
+            .set("Origin", origin)
+            .set("X-CSRF-Token", courier.csrf)
+            .set("Idempotency-Key", key)
+            .send({ pin });
+        await complete(seeded.oldPin, randomUUID()).expect(401);
+        const key = randomUUID();
+        const responses = await Promise.all([
+          complete(requested.body.completionPin, key).expect(201),
+          complete(requested.body.completionPin, key).expect(201),
+        ]);
+        expect(responses[0].body).toEqual(responses[1].body);
+        expect(
+          (
+            await prisma.order.findUniqueOrThrow({
+              where: { id: seeded.order.id },
+            })
+          ).status,
+        ).toBe("COMPLETED");
+        expect(
+          await prisma.productionCycle.count({
+            where: { orderId: seeded.order.id, status: "COMPLETED" },
+          }),
+        ).toBe(2);
+      });
+
+      it("cancels only an unanswered dispute and protects a manual legal hold with RBAC and replay", async () => {
+        const seeded = await completedOrder();
+        const dispute = await open(seeded.order.id).expect(201);
+        const key = randomUUID();
+        await customerPost(
+          `/api/v1/disputes/${dispute.body.disputeId}/cancel`,
+          key,
+          {},
+        ).expect(201);
+        await customerPost(
+          `/api/v1/disputes/${dispute.body.disputeId}/cancel`,
+          key,
+          {},
+        ).expect(201);
+        const path = `/api/v1/admin/orders/${seeded.order.id}/retention-holds`;
+        await customerPost(path, randomUUID(), {
+          reasonCode: "LEGAL_REQUEST",
+        }).expect(403);
+        const holdKey = randomUUID();
+        const create = () =>
+          admin.agent
+            .post(path)
+            .set("Origin", origin)
+            .set("X-CSRF-Token", admin.csrf)
+            .set("Idempotency-Key", holdKey)
+            .send({ reasonCode: "LEGAL_REQUEST" })
+            .expect(201);
+        const held = await create();
+        expect((await create()).body).toEqual(held.body);
+        const releaseKey = randomUUID();
+        const release = () =>
+          admin.agent
+            .delete(path + "/" + held.body.holdId)
+            .set("Origin", origin)
+            .set("X-CSRF-Token", admin.csrf)
+            .set("Idempotency-Key", releaseKey)
+            .expect(200);
+        expect((await release()).body).toEqual((await release()).body);
+        expect(
+          await prisma.legalHold.count({
+            where: { orderId: seeded.order.id, releasedAt: null },
+          }),
+        ).toBe(0);
+      });
+
+      it("serializes cumulative refund reservations at the database boundary", async () => {
+        const seeded = await completedOrder();
+        const payment = await prisma.payment.findUniqueOrThrow({
+          where: { orderId: seeded.order.id },
+        });
+        const reserve = () =>
+          prisma.refundOperation.create({
+            data: {
+              paymentId: payment.id,
+              amountMinor: payment.amountMinor - 1n,
+              kind: "PARTIAL",
+              triggerDedupKey: digest(randomUUID()),
+            },
+          });
+        const results = await Promise.allSettled([reserve(), reserve()]);
+        expect(
+          results.filter((result) => result.status === "fulfilled"),
+        ).toHaveLength(1);
+        expect(
+          results.filter((result) => result.status === "rejected"),
+        ).toHaveLength(1);
+        const refunds = await prisma.refundOperation.findMany({
+          where: { paymentId: payment.id },
+        });
+        expect(
+          refunds.reduce((sum, refund) => sum + refund.amountMinor, 0n),
+        ).toBeLessThanOrEqual(payment.amountMinor);
+      });
+
+      it("holds objects, supersedes deletion schedules and retries durable tombstones", async () => {
+        const seeded = await completedOrder();
+        const retention = app.get(RetentionWorkerService);
+        await retention.reconcileOrder(seeded.order.id);
+        const dispute = await open(seeded.order.id).expect(201);
+        await retention.run(new Date(Date.now() + 100 * 86400000));
+        expect(await storage.exists(seeded.printReady.objectKey)).toBe(true);
+        expect(
+          await prisma.retentionTombstone.findUnique({
+            where: { objectKey: seeded.printReady.objectKey },
+          }),
+        ).toBeNull();
+        await decide(dispute.body.disputeId, "NO_ACTION").expect(201);
+        await retention.reconcileOrder(seeded.order.id);
+        await retention.applyDue(new Date(Date.now() + 100 * 86400000));
+        // Intent commits before the external delete. A restarted worker uses the tombstone.
+        expect(
+          (
+            await prisma.retentionTombstone.findUniqueOrThrow({
+              where: { objectKey: seeded.printReady.objectKey },
+            })
+          ).applyStatus,
+        ).toBe("PENDING");
+        await retention.retryTombstones();
+        await retention.retryTombstones();
+        expect(await storage.exists(seeded.printReady.objectKey)).toBe(false);
+        expect(
+          (
+            await prisma.retentionTombstone.findUniqueOrThrow({
+              where: { objectKey: seeded.printReady.objectKey },
+            })
+          ).applyStatus,
+        ).toBe("APPLIED");
+        expect(
+          await prisma.disputeCase.count({
+            where: { id: dispute.body.disputeId },
+          }),
+        ).toBe(1);
+        expect(
+          await prisma.payment.count({ where: { orderId: seeded.order.id } }),
+        ).toBe(1);
+      });
+
+      it("deduplicates aftercare queue delivery and keeps customer/audit representations private", async () => {
+        const seeded = await completedOrder();
+        const dispute = await open(seeded.order.id).expect(201);
+        const aftercare = app.get(AftercareQueueService);
+        await aftercare.dispatchBatch();
+        const event = await prisma.outboxEvent.findFirstOrThrow({
+          where: {
+            aggregateId: dispute.body.disputeId,
+            eventType: "DISPUTE_OPENED",
+          },
+        });
+        expect((await aftercare.handle(event.dedupKey)).duplicate).toBe(false);
+        expect((await aftercare.handle(event.dedupKey)).duplicate).toBe(true);
+        const redis = new URL(
+          process.env.REDIS_URL ?? "redis://localhost:6379",
+        );
+        const connection = {
+          host: redis.hostname,
+          port: Number(redis.port || 6379),
+          ...(redis.password
+            ? { password: decodeURIComponent(redis.password) }
+            : {}),
+        };
+        const redisQueue = new Queue("aftercare", { connection });
+        const events = new QueueEvents("aftercare", { connection });
+        const worker = new Worker(
+          "aftercare",
+          (job) => aftercare.handle(job.data.dedupKey as string),
+          { connection },
+        );
+        worker.on("error", () => undefined);
+        try {
+          await events.waitUntilReady();
+          const repeated = await redisQueue.add(
+            "DISPUTE_OPENED",
+            { dedupKey: event.dedupKey },
+            { jobId: digest(randomUUID()) },
+          );
+          expect(await repeated.waitUntilFinished(events, 30000)).toEqual({
+            duplicate: true,
+          });
+          expect(
+            await prisma.inboxOperation.count({
+              where: { dedupKey: event.dedupKey },
+            }),
+          ).toBe(1);
+        } finally {
+          await worker.close();
+          await events.close();
+          await redisQueue.close();
+        }
+        const customerView = await customer.agent
+          .get(`/api/v1/orders/${seeded.order.id}/disputes`)
+          .expect(200);
+        expect(customerView.headers["cache-control"]).toBe("no-store, private");
+        expect(JSON.stringify(customerView.body)).not.toMatch(
+          /payout|commission|allocationInputs|objectKey|providerReference/,
+        );
+        const audit = await prisma.auditEvent.findMany({
+          where: { eventType: "AFTERCARE_COMMAND" },
+          select: { metadata: true },
+        });
+        expect(JSON.stringify(audit)).not.toMatch(
+          /Synthetic|998|objectKey|X-Amz|pin|address|provider|amount|currency/i,
+        );
+        expect(
+          JSON.stringify(
+            await prisma.idempotencyRecord.findMany({
+              select: { response: true },
+            }),
+          ),
+        ).not.toContain("X-Amz-Signature");
+      });
+    },
+  );
 });

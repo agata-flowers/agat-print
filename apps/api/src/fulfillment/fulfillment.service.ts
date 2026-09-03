@@ -71,19 +71,39 @@ export class FulfillmentService {
       (input.mode === "PICKUP" && input.deliveryAddress)
     )
       throw new ConflictException({ code: "FULFILLMENT_INPUT_INVALID" });
+    const currentCycle = await this.prisma.productionCycle.findFirst({
+      where: { orderId, order: { userId } },
+      orderBy: { sequence: "desc" },
+    });
+    if (!currentCycle) throw new NotFoundException();
     const prepared = this.idempotency.prepare(
-      `order-fulfillment:${orderId}`,
+      `order-fulfillment:${currentCycle.id}`,
       key,
       input,
     );
-    const existing = await this.prisma.orderFulfillment.findUnique({
-      where: { orderId },
+    const existing = await this.prisma.orderFulfillment.findFirst({
+      where: { productionCycleId: currentCycle.id },
       include: { order: { select: { userId: true, status: true } } },
     });
     if (existing) return this.replayFulfillment(userId, existing, prepared);
 
-    const completionNonce = this.crypto.nonce();
-    const completionPin = this.crypto.pin("completion", completionNonce);
+    // A new cycle must never accept any previously issued completion PIN,
+    // including the rare collision between two independently generated PINs.
+    const previous = await this.prisma.orderFulfillment.findMany({
+      where: { orderId },
+      select: { completionNonce: true },
+    });
+    const oldPins = new Set(
+      previous.map((f) => this.crypto.pin("completion", f.completionNonce)),
+    );
+    let completionNonce = this.crypto.nonce();
+    let completionPin = this.crypto.pin("completion", completionNonce);
+    for (let attempt = 0; oldPins.has(completionPin); attempt++) {
+      if (attempt >= 32)
+        throw new ConflictException({ code: "PIN_GENERATION_UNAVAILABLE" });
+      completionNonce = this.crypto.nonce();
+      completionPin = this.crypto.pin("completion", completionNonce);
+    }
     const handoffNonce = input.mode === "DELIVERY" ? this.crypto.nonce() : null;
     const address = input.deliveryAddress
       ? this.crypto.encryptAddress(input.deliveryAddress)
@@ -92,25 +112,31 @@ export class FulfillmentService {
       const value = await this.prisma.$transaction(
         async (tx) => {
           await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
-          const insideExisting = await tx.orderFulfillment.findUnique({
-            where: { orderId },
+          const insideExisting = await tx.orderFulfillment.findFirst({
+            where: { productionCycleId: currentCycle.id },
             include: { order: { select: { userId: true, status: true } } },
           });
           if (insideExisting)
             return this.replayFulfillment(userId, insideExisting, prepared);
           const order = await tx.order.findFirst({
             where: { id: orderId, userId },
-            include: { assignments: { orderBy: { acceptedAt: "desc" } } },
+            include: {
+              assignments: { orderBy: { acceptedAt: "desc" } },
+              productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
+            },
           });
           if (!order) throw new NotFoundException();
           if (
             order.status !== "READY" ||
+            !order.productionCycles[0] ||
+            order.productionCycles[0].id !== currentCycle.id ||
             order.assignments[0]?.status !== "READY"
           )
             throw new ConflictException({ code: "ORDER_NOT_READY" });
           const created = await tx.orderFulfillment.create({
             data: {
               orderId,
+              productionCycleId: order.productionCycles[0].id,
               mode: input.mode,
               requestKeyDigest: prepared.keyDigest,
               requestHash: prepared.requestHash,
@@ -140,6 +166,10 @@ export class FulfillmentService {
           });
           if (changed.count !== 1)
             throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+          await tx.productionCycle.update({
+            where: { id: order.productionCycles[0].id },
+            data: { status: "FULFILLING", version: { increment: 1 } },
+          });
           await tx.outboxEvent.create({
             data: outbox(
               "order",
@@ -171,8 +201,8 @@ export class FulfillmentService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         ["P2002", "P2034"].includes(error.code)
       ) {
-        const raced = await this.prisma.orderFulfillment.findUnique({
-          where: { orderId },
+        const raced = await this.prisma.orderFulfillment.findFirst({
+          where: { productionCycleId: currentCycle.id },
           include: { order: { select: { userId: true, status: true } } },
         });
         if (raced) return this.replayFulfillment(userId, raced, prepared);
@@ -271,14 +301,15 @@ export class FulfillmentService {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        fulfillment: true,
+        fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
         assignments: {
           include: { branch: true },
           orderBy: { acceptedAt: "desc" },
         },
       },
     });
-    if (!order?.fulfillment || order.fulfillment.mode !== "DELIVERY")
+    const fulfillment = order?.fulfillments[0];
+    if (!order || !fulfillment || fulfillment.mode !== "DELIVERY")
       throw new NotFoundException();
     const assignment = order.assignments[0];
     if (!assignment)
@@ -293,11 +324,7 @@ export class FulfillmentService {
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     if (!courier)
-      return this.failNoCourier(
-        orderId,
-        order.fulfillment.id,
-        deliveryDedupKey,
-      );
+      return this.failNoCourier(orderId, fulfillment.id, deliveryDedupKey);
     const provider = await this.deliveryProvider.createDelivery(orderId, {
       idempotencyKey: deliveryDedupKey,
       correlationId: orderId,
@@ -312,6 +339,9 @@ export class FulfillmentService {
         if (prior) return { duplicate: true };
         const current = await tx.order.findUniqueOrThrow({
           where: { id: orderId },
+          include: {
+            productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
+          },
         });
         const currentCourier = await tx.courierProfile.findFirst({
           where: {
@@ -321,12 +351,16 @@ export class FulfillmentService {
             deliveries: { none: { active: true } },
           },
         });
-        if (!currentCourier || current.status !== "AWAITING_PICKUP")
+        if (
+          !currentCourier ||
+          current.status !== "AWAITING_PICKUP" ||
+          current.productionCycles[0]?.id !== fulfillment.productionCycleId
+        )
           throw new ConflictException({ code: "DELIVERY_ASSIGNMENT_CONFLICT" });
         const delivery = await tx.deliveryTask.create({
           data: {
             orderId,
-            fulfillmentId: order.fulfillment!.id,
+            fulfillmentId: fulfillment.id,
             courierId: courier.id,
             branchId: assignment.branchId,
             providerReference: provider.reference,
@@ -382,7 +416,7 @@ export class FulfillmentService {
         );
         if (!owned) throw new NotFoundException();
         if (
-          order.fulfillment?.mode !== "PICKUP" ||
+          order.fulfillments[0]?.mode !== "PICKUP" ||
           order.status !== "AWAITING_PICKUP"
         )
           throw new ConflictException({ code: "INVALID_PICKUP_TRANSITION" });
@@ -397,8 +431,14 @@ export class FulfillmentService {
     input: ConfirmPinDto,
   ) {
     const partner = await this.requireApprovedPartner(ownerId);
+    if (
+      !(await this.prisma.deliveryTask.findFirst({
+        where: { id: deliveryId, branch: { partnerId: partner.id } },
+      }))
+    )
+      throw new NotFoundException();
     const prepared = this.idempotency.prepare(
-      `delivery-handoff:${deliveryId}`,
+      `handoff:${sha256(`${ownerId}:${deliveryId}`)}`,
       key,
       input,
     );
@@ -591,9 +631,9 @@ export class FulfillmentService {
       input.pin,
       (_tx, order) => {
         if (
-          order.fulfillment?.mode !== "DELIVERY" ||
+          order.fulfillments[0]?.mode !== "DELIVERY" ||
           order.status !== "IN_DELIVERY" ||
-          order.deliveryTask?.id !== deliveryId
+          order.deliveryTasks[0]?.id !== deliveryId
         )
           throw new ConflictException({ code: "INVALID_DELIVERY_TRANSITION" });
       },
@@ -608,8 +648,14 @@ export class FulfillmentService {
     input: DeliveryFailureDto,
   ) {
     const courier = await this.requireApprovedCourier(userId);
+    if (
+      !(await this.prisma.deliveryTask.findFirst({
+        where: { id: deliveryId, courierId: courier.id },
+      }))
+    )
+      throw new NotFoundException();
     const prepared = this.idempotency.prepare(
-      `delivery-fail:${deliveryId}`,
+      `delivery-fail:${sha256(`${userId}:${deliveryId}`)}`,
       key,
       input,
     );
@@ -656,13 +702,21 @@ export class FulfillmentService {
             version: { increment: 1 },
           },
         });
-        await tx.orderFulfillment.update({
+        const failedFulfillment = await tx.orderFulfillment.update({
           where: { id: delivery.fulfillmentId },
+          data: { status: "FAILED", version: { increment: 1 } },
+        });
+        await tx.productionCycle.update({
+          where: { id: failedFulfillment.productionCycleId },
           data: { status: "FAILED", version: { increment: 1 } },
         });
         await tx.order.update({
           where: { id: delivery.orderId },
-          data: { status: "DELIVERY_FAILED", version: { increment: 1 } },
+          data: {
+            status: "DELIVERY_FAILED",
+            disputeEligibleAt: new Date(),
+            version: { increment: 1 },
+          },
         });
         const value = { deliveryId, orderStatus: "DELIVERY_FAILED" };
         await tx.idempotencyRecord.create({
@@ -753,10 +807,22 @@ export class FulfillmentService {
       });
       if (!assignment || assignment.order.status !== "PARTNER_ACCEPTED")
         throw new ConflictException({ code: "PRINT_JOB_NOT_ELIGIBLE" });
-      const job = await tx.printJob.upsert({
-        where: { orderId },
+      const cycle = await tx.productionCycle.upsert({
+        where: { orderId_sequence: { orderId, sequence: 1 } },
         create: {
           orderId,
+          sequence: 1,
+          kind: "ORIGINAL",
+          printReadyVersionId: assignment.order.printReadyVersionId,
+          assignmentId: assignment.id,
+        },
+        update: {},
+      });
+      const job = await tx.printJob.upsert({
+        where: { productionCycleId: cycle.id },
+        create: {
+          orderId,
+          productionCycleId: cycle.id,
           assignmentId: assignment.id,
           branchId: assignment.branchId,
         },
@@ -804,7 +870,11 @@ export class FulfillmentService {
                 { status: "PENDING" },
                 { status: "LEASED", leaseUntil: { lt: new Date() } },
               ],
-              order: { status: { in: ["PARTNER_ACCEPTED", "IN_PRODUCTION"] } },
+              order: {
+                status: {
+                  in: ["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION"],
+                },
+              },
             },
             orderBy: { createdAt: "asc" },
             take: 1,
@@ -864,6 +934,12 @@ export class FulfillmentService {
     key: string | undefined,
     input: PrinterJobStatusDto,
   ) {
+    if (
+      !(await this.prisma.printJob.findFirst({
+        where: { id: jobId, agentId: agent.id },
+      }))
+    )
+      throw new NotFoundException();
     const prepared = this.idempotency.prepare(
       `printer-job:${jobId}`,
       key,
@@ -896,8 +972,17 @@ export class FulfillmentService {
             ) as Record<string, unknown>;
           const job = await tx.printJob.findUniqueOrThrow({
             where: { id: jobId },
-            include: { order: true, assignment: true },
+            include: {
+              order: {
+                include: {
+                  productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
+                },
+              },
+              assignment: true,
+            },
           });
+          if (job.productionCycleId !== job.order.productionCycles[0]?.id)
+            throw new ConflictException({ code: "STALE_PRODUCTION_CYCLE" });
           if (
             job.agentId !== agent.id ||
             !job.leaseUntil ||
@@ -933,7 +1018,9 @@ export class FulfillmentService {
             });
           if (
             input.status === "PRINTING" &&
-            !["PARTNER_ACCEPTED", "IN_PRODUCTION"].includes(job.order.status)
+            !["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION"].includes(
+              job.order.status,
+            )
           )
             throw new ConflictException({
               code: "INVALID_PRODUCTION_TRANSITION",
@@ -959,12 +1046,16 @@ export class FulfillmentService {
           let nextOrderVersion: number | undefined;
           if (
             input.status === "PRINTING" &&
-            job.order.status === "PARTNER_ACCEPTED"
+            ["PARTNER_ACCEPTED", "REPRINT"].includes(job.order.status)
           ) {
             orderStatus = "IN_PRODUCTION";
             nextOrderVersion = job.order.version + 1;
             await tx.order.update({
               where: { id: job.orderId },
+              data: { status: "IN_PRODUCTION", version: { increment: 1 } },
+            });
+            await tx.productionCycle.update({
+              where: { id: job.productionCycleId },
               data: { status: "IN_PRODUCTION", version: { increment: 1 } },
             });
           }
@@ -983,6 +1074,10 @@ export class FulfillmentService {
                 readyAt: new Date(),
                 version: { increment: 1 },
               },
+            });
+            await tx.productionCycle.update({
+              where: { id: job.productionCycleId },
+              data: { status: "READY", version: { increment: 1 } },
             });
           }
           const value = { jobId, status: input.status, orderStatus };
@@ -1023,18 +1118,22 @@ export class FulfillmentService {
 
   async adminFulfillment() {
     const orders = await this.prisma.order.findMany({
-      where: { fulfillment: { isNot: null } },
-      include: { fulfillment: true, deliveryTask: true, printJob: true },
+      where: { fulfillments: { some: {} } },
+      include: {
+        fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
+        deliveryTasks: { orderBy: { assignedAt: "desc" }, take: 1 },
+        printJobs: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
       orderBy: { updatedAt: "desc" },
       take: 100,
     });
     return orders.map((order) => ({
       orderId: order.id,
       orderStatus: order.status,
-      mode: order.fulfillment?.mode,
-      fulfillmentStatus: order.fulfillment?.status,
-      deliveryStatus: order.deliveryTask?.status ?? null,
-      printJobStatus: order.printJob?.status ?? null,
+      mode: order.fulfillments[0]?.mode,
+      fulfillmentStatus: order.fulfillments[0]?.status,
+      deliveryStatus: order.deliveryTasks[0]?.status ?? null,
+      printJobStatus: order.printJobs[0]?.status ?? null,
     }));
   }
 
@@ -1077,14 +1176,23 @@ export class FulfillmentService {
     authorize: (
       tx: Prisma.TransactionClient,
       order: Prisma.OrderGetPayload<{
-        include: { fulfillment: true; assignments: true; deliveryTask: true };
+        include: { fulfillments: true; assignments: true; deliveryTasks: true };
       }>,
     ) => void | Promise<void>,
     deliveryId?: string,
   ) {
-    const prepared = this.idempotency.prepare(`${scope}:${orderId}`, key, {
-      pin,
+    const currentCycle = await this.prisma.productionCycle.findFirst({
+      where: { orderId },
+      orderBy: { sequence: "desc" },
     });
+    if (!currentCycle) throw new NotFoundException();
+    const prepared = this.idempotency.prepare(
+      `completion:${sha256(`${scope}:${actorId}:${currentCycle.id}`)}`,
+      key,
+      {
+        pin,
+      },
+    );
     const replay =
       await this.idempotency.replay<Record<string, unknown>>(prepared);
     if (replay) {
@@ -1115,11 +1223,17 @@ export class FulfillmentService {
         }
         const order = await tx.order.findUnique({
           where: { id: orderId },
-          include: { fulfillment: true, assignments: true, deliveryTask: true },
+          include: {
+            fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
+            assignments: true,
+            deliveryTasks: { orderBy: { assignedAt: "desc" }, take: 1 },
+          },
         });
-        if (!order?.fulfillment) throw new NotFoundException();
+        if (!order?.fulfillments[0]) throw new NotFoundException();
         await authorize(tx, order);
-        const fulfillment = order.fulfillment;
+        const fulfillment = order.fulfillments[0];
+        if (fulfillment.productionCycleId !== currentCycle.id)
+          throw new ConflictException({ code: "FULFILLMENT_CYCLE_CHANGED" });
         if (
           fulfillment.completionUsedAt ||
           fulfillment.completionExpiresAt <= new Date() ||
@@ -1166,6 +1280,14 @@ export class FulfillmentService {
             version: { increment: 1 },
           },
         });
+        await tx.productionCycle.update({
+          where: { id: fulfillment.productionCycleId },
+          data: {
+            status: "COMPLETED",
+            completedAt: new Date(),
+            version: { increment: 1 },
+          },
+        });
         if (deliveryId)
           await tx.deliveryTask.update({
             where: { id: deliveryId },
@@ -1178,7 +1300,11 @@ export class FulfillmentService {
           });
         const changed = await tx.order.updateMany({
           where: { id: orderId, version: order.version, status: order.status },
-          data: { status: "COMPLETED", version: { increment: 1 } },
+          data: {
+            status: "COMPLETED",
+            disputeEligibleAt: new Date(),
+            version: { increment: 1 },
+          },
         });
         if (changed.count !== 1)
           throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
@@ -1212,9 +1338,25 @@ export class FulfillmentService {
   private async printJobDownload(agentId: string, jobId: string) {
     const job = await this.prisma.printJob.findFirst({
       where: { id: jobId, agentId },
-      include: { order: { include: { printReadyVersion: true } } },
+      include: {
+        order: {
+          include: {
+            printReadyVersion: true,
+            productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
+          },
+        },
+      },
     });
-    if (!job || !["LEASED", "PRINTING"].includes(job.status))
+    if (
+      !job ||
+      !["LEASED", "PRINTING"].includes(job.status) ||
+      !job.leaseUntil ||
+      job.leaseUntil <= new Date() ||
+      job.productionCycleId !== job.order.productionCycles[0]?.id ||
+      !["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION"].includes(
+        job.order.status,
+      )
+    )
       throw new ConflictException({ code: "PRINT_JOB_NOT_CLAIMED" });
     return {
       jobId: job.id,
@@ -1246,10 +1388,18 @@ export class FulfillmentService {
         throw new ConflictException({ code: "INVALID_DELIVERY_TRANSITION" });
       await tx.order.update({
         where: { id: orderId },
-        data: { status: "DELIVERY_FAILED", version: { increment: 1 } },
+        data: {
+          status: "DELIVERY_FAILED",
+          disputeEligibleAt: new Date(),
+          version: { increment: 1 },
+        },
       });
-      await tx.orderFulfillment.update({
+      const failedFulfillment = await tx.orderFulfillment.update({
         where: { id: fulfillmentId },
+        data: { status: "FAILED", version: { increment: 1 } },
+      });
+      await tx.productionCycle.update({
+        where: { id: failedFulfillment.productionCycleId },
         data: { status: "FAILED", version: { increment: 1 } },
       });
       await tx.inboxOperation.create({
