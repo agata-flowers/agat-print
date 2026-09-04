@@ -39,7 +39,7 @@ while IFS= read -r line <&"${db_snapshot[0]}"; do
   if [[ "$line" == SNAPSHOT:* ]]; then snapshot="${line#SNAPSHOT:}"; break; fi
 done
 [[ "$snapshot" =~ ^[0-9A-Fa-f-]+$ ]] || { echo 'Snapshot export failed' >&2; exit 3; }
-pg_dump --format=custom --serializable-deferrable --snapshot="$snapshot" --file="$work_dir/postgres.dump"
+pg_dump --format=custom --snapshot="$snapshot" --file="$work_dir/postgres.dump"
 printf 'object_key\tchecksum\n' > "$work_dir/minio-manifest.tsv"
 psql -XAtqF $'\t' -v ON_ERROR_STOP=1 <<SQL >> "$work_dir/minio-manifest.tsv"
 BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY;

@@ -9,7 +9,10 @@ injects secrets outside Compose source.
 
 ## Backup scope
 
-- PostgreSQL: consistent custom-format `pg_dump --serializable-deferrable`.
+- PostgreSQL: consistent custom-format `pg_dump` imports a snapshot exported by a
+  long-lived `SERIALIZABLE READ ONLY DEFERRABLE` transaction. PostgreSQL does not
+  permit an importing transaction to also be declared `DEFERRABLE`, so that
+  property is established by the snapshot exporter rather than a `pg_dump` flag.
 - MinIO: permanent, non-expired objects referenced by the database backup
   manifest, including originals, derivatives, immutable previews and
   print-ready objects.
