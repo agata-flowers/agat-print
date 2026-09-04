@@ -46,7 +46,9 @@ flowchart LR
   onboarding/assignment, encrypted delivery data and completion.
 - Aftercare: bounded disputes and immutable resolutions, same-partner reprint
   cycles, cumulative refund reservation, legal holds and durable object deletion.
-- Future ports: production payment acquisition and external dispatch.
+- Finance operations: production provider selection, immutable fiscal records,
+  append-only partner ledger, settlement batches and explicit reconciliation.
+- Future ports: vendor-specific payment/fiscal integrations and external dispatch.
 
 ## Stage 5 order aggregates
 

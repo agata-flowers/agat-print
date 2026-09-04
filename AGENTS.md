@@ -1,10 +1,12 @@
 # AGAT PRINT agent instructions
 
-- Current authorized scope is stages 1–8: disputes (72-hour window, no evidence
-  uploads), same-partner reprint cycles, full/partial refunds and object retention.
-- Stage 7 baseline is c2865205180b9db913de97d3abcab8a8262440bb (Actions 33517487126).
-- Stage 8 is explicitly approved. Do not start stage 9, marketplace expansion,
-  new matching, route optimization or real payout settlement without approval.
+- Current authorized scope is stages 1–9. Stage 9 is Production Pilot Readiness:
+  production OTP/payment adapter boundaries, fiscal operations, partner payout
+  ledger/settlement batches and financial reconciliation.
+- Stage 8 baseline is c32f6ad92eefd5c35c9dc4beb751e081a35e127e
+  (Actions 33881277674).
+- Stage 9 is explicitly approved. Do not start stage 10, marketplace expansion,
+  new matching, route optimization or unrelated product features without approval.
 - Keep the domain core in the NestJS modular monolith. External capabilities use provider interfaces.
 - Never log OTPs, cookies, tokens, phone numbers, addresses, document contents, filenames, object keys, or signed URLs.
 - Metrics may use only bounded enums and route templates. Never use IDs, IPs, query strings, request IDs, or user-controlled text as labels.

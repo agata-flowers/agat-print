@@ -77,3 +77,30 @@ Automate only already-defined object retention; financial/legal records wait
 for separately approved legal periods. Marketplace expansion, rematching,
 GPS/route optimization, real payout settlement/reconciliation, new external
 providers and all next-stage work remain outside this approval.
+
+## Stage 9 approved boundary — Production Pilot Readiness
+
+Stage 9 introduces fail-closed production OTP, payment and fiscal provider
+boundaries while retaining mock adapters exclusively for development and tests.
+Provider credentials and merchant contracts are deployment prerequisites and
+are never represented by repository defaults. Payment webhooks are signed,
+replay-safe, idempotent and tolerant of duplicate or out-of-order delivery.
+
+Fiscal operations are immutable records linked to payments, orders and refunds,
+with durable retry and reconciliation states. Partner earnings are recorded in
+an append-only UZS ledger derived from the accepted payout snapshot. Settlement
+batches reserve eligible entries exactly once and retain explicit reconciliation
+mismatches instead of silently modifying financial history. Refunds and disputes
+produce traceable ledger adjustments; cumulative money remains integer minor
+units and cannot exceed the underlying payment or earning.
+
+Acceptance requires production configuration to fail closed without real
+provider endpoints and secrets; explicit finance-admin RBAC; transactional
+outbox/inbox and idempotency for mutations and jobs; concurrency tests for
+payment, refund and payout reservation; signed webhook replay tests; fiscal and
+payout reconciliation mismatch/retry tests; clean migrations; the complete
+Stage 1–8 regression suite; Docker infrastructure verification; and a published
+Stage 9 verification artifact.
+
+Marketplace expansion, new matching, advanced routing, document editing and
+unrelated customer functionality are outside Stage 9.
