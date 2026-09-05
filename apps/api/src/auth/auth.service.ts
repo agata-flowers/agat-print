@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import {
   HttpException,
   HttpStatus,
@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import type { Role } from "@prisma/client";
+import type { OtpProvider } from "@agat/providers";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { loadEnvironment } from "../config/environment";
@@ -17,7 +18,7 @@ import {
   randomToken,
   safeDigestEqual,
 } from "./auth.crypto";
-import { MockOtpProvider } from "./mock-otp.provider";
+import { OTP_PROVIDER } from "../providers/provider-tokens";
 
 interface SessionResult {
   accessToken: string;
@@ -31,7 +32,7 @@ export class AuthService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(JwtService) private readonly jwt: JwtService,
-    @Inject(MockOtpProvider) private readonly otp: MockOtpProvider,
+    @Inject(OTP_PROVIDER) private readonly otp: OtpProvider,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
@@ -49,7 +50,10 @@ export class AuthService {
         "OTP rate limit exceeded",
         HttpStatus.TOO_MANY_REQUESTS,
       );
-    const code = env.mockOtpCode;
+    const code =
+      env.otpProvider === "mock"
+        ? env.mockOtpCode
+        : String(randomInt(100000, 1000000));
     const challenge = await this.prisma.otpChallenge.create({
       data: {
         phone,

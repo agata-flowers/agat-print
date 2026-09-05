@@ -7,8 +7,11 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  RawBodyRequest,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import { AccessGuard } from "../auth/access.guard";
 import { CurrentUser } from "../common/current-user.decorator";
 import { PublicWebhook } from "../common/public-webhook.decorator";
@@ -62,6 +65,15 @@ export class CommerceController {
   ) {
     return this.commerce.startPayment(user.id, id, key, input);
   }
+
+  @Post("orders/:id/payment/confirm")
+  confirmPayment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+  ) {
+    return this.commerce.confirmPayment(user.id, id, key);
+  }
 }
 
 @Controller("admin")
@@ -113,6 +125,25 @@ export class MockPaymentCallbackController {
     @Headers("x-provider-signature") signature: string | undefined,
     @Body() input: PaymentCallbackDto,
   ) {
-    return this.commerce.callback(input, signature);
+    return this.commerce.mockCallback(input, signature);
+  }
+}
+
+@Controller("payments")
+export class PaymentWebhookController {
+  constructor(
+    @Inject(CommerceService) private readonly commerce: CommerceService,
+  ) {}
+
+  @Post("webhook")
+  @PublicWebhook()
+  webhook(
+    @Headers("x-provider-signature") signature: string | undefined,
+    @Req() request: RawBodyRequest<Request>,
+  ) {
+    return this.commerce.callbackRaw(
+      request.rawBody?.toString("utf8") ?? "",
+      signature,
+    );
   }
 }

@@ -12,6 +12,7 @@ enum Role {
   PARTNER
   COURIER
   ADMIN
+  FINANCE_ADMIN
 }
 
 enum PartnerStatus {
@@ -237,6 +238,56 @@ enum AftercareJobStatus {
   DEAD_LETTER
 }
 
+enum FinancialJobStatus {
+  PENDING
+  RUNNING
+  DONE
+  DEAD_LETTER
+}
+
+enum FiscalOperationType {
+  SALE
+  REFUND
+}
+
+enum FiscalOperationStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  RETRY_PENDING
+  RECONCILIATION_REQUIRED
+}
+
+enum LedgerDirection {
+  CREDIT
+  DEBIT
+}
+
+enum LedgerEntryType {
+  EARNING
+  REFUND_ADJUSTMENT
+}
+
+enum SettlementBatchStatus {
+  CREATED
+  SUBMITTED
+  SETTLED
+  RETRY_PENDING
+  RECONCILIATION_REQUIRED
+}
+
+enum ReconciliationKind {
+  PAYMENT
+  FISCAL
+  PAYOUT
+}
+
+enum ReconciliationStatus {
+  MATCHED
+  MISMATCH
+  RESOLVED
+}
+
 model AftercareJob {
   dedupKey String @id @db.Char(64)
   eventId String @unique @db.Uuid
@@ -247,6 +298,20 @@ model AftercareJob {
   lastErrorCode String? @db.VarChar(40)
   createdAt DateTime @default(now())
   completedAt DateTime?
+  @@index([status, leaseUntil])
+}
+
+model FinancialJob {
+  dedupKey String @id @db.Char(64)
+  eventId String @unique @db.Uuid
+  status FinancialJobStatus @default(PENDING)
+  attempts Int @default(0)
+  leaseUntil DateTime?
+  leaseOwner String? @db.Uuid
+  lastErrorCode String? @db.VarChar(40)
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+
   @@index([status, leaseUntil])
 }
 
@@ -276,6 +341,8 @@ model User {
   disputeResolutions   DisputeResolution[]       @relation("DisputeResolver")
   legalHoldsCreated    LegalHold[]               @relation("LegalHoldCreator")
   legalHoldsReleased   LegalHold[]               @relation("LegalHoldReleaser")
+  settlementBatches   SettlementBatch[]          @relation("SettlementBatchCreator")
+  reconciliations     FinancialReconciliation[]  @relation("ReconciliationActor")
 }
 
 model UserRole {
@@ -329,6 +396,7 @@ model Partner {
   branches    Branch[]
   offers      PartnerOffer[]
   assignments PartnerAssignment[]
+  settlementBatches SettlementBatch[]
 }
 
 model Branch {
@@ -615,6 +683,8 @@ model Order {
   disputes            DisputeCase[]
   retentionSchedules  RetentionSchedule[]
   legalHolds          LegalHold[]
+  fiscalOperations    FiscalOperation[]
+  partnerLedger       PartnerLedgerEntry[]
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
@@ -784,6 +854,7 @@ model PartnerPayoutSnapshot {
   createdAt           DateTime           @default(now())
   offer               PartnerOffer       @relation(fields: [offerId], references: [id], onDelete: Restrict)
   assignment          PartnerAssignment?
+  ledgerEntries       PartnerLedgerEntry[]
 }
 
 model PartnerAssignment {
@@ -805,6 +876,7 @@ model PartnerAssignment {
   payoutSnapshot   PartnerPayoutSnapshot @relation(fields: [payoutSnapshotId], references: [id], onDelete: Restrict)
   printJobs        PrintJob[]
   productionCycles ProductionCycle[]
+  ledgerEntries    PartnerLedgerEntry[]
 
   @@index([orderId, active])
   @@index([partnerId, active])
@@ -840,6 +912,7 @@ model Payment {
   updatedAt                DateTime          @updatedAt
   order                    Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
   refunds                  RefundOperation[]
+  fiscalOperations         FiscalOperation[]
 
   @@index([status, updatedAt])
 }
@@ -857,6 +930,8 @@ model RefundOperation {
   confirmedAt             DateTime?
   payment                 Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   dispute                 DisputeCase? @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  fiscalOperation         FiscalOperation?
+  ledgerEntry             PartnerLedgerEntry?
 
   @@index([paymentId, status])
 }
@@ -1017,6 +1092,122 @@ model ProviderCallback {
   createdAt   DateTime @default(now())
 
   @@unique([provider, eventId])
+}
+
+/// Durable fiscal intent. Provider references are never returned by public API.
+model FiscalOperation {
+  id                String                @id @default(uuid()) @db.Uuid
+  orderId           String                @db.Uuid
+  paymentId         String                @db.Uuid
+  refundId          String?               @unique @db.Uuid
+  type              FiscalOperationType
+  amountMinor       BigInt
+  currency          String                @db.Char(3)
+  status            FiscalOperationStatus @default(PENDING)
+  dedupKey          String                @unique @db.Char(64)
+  providerReference String?               @unique @db.VarChar(160)
+  attempts          Int                   @default(0)
+  nextAttemptAt     DateTime?
+  lastErrorCode     String?               @db.VarChar(40)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  confirmedAt       DateTime?
+  order             Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payment           Payment               @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  refund            RefundOperation?      @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  receipt           FiscalReceipt?
+
+  @@index([status, nextAttemptAt])
+  @@index([orderId, createdAt])
+}
+
+/// Receipt facts are append-only after provider confirmation.
+model FiscalReceipt {
+  id                      String          @id @default(uuid()) @db.Uuid
+  fiscalOperationId       String          @unique @db.Uuid
+  providerReceiptDigest   String          @db.Char(64)
+  fiscalSignDigest        String?         @db.Char(64)
+  issuedAt                DateTime
+  createdAt               DateTime        @default(now())
+  operation               FiscalOperation @relation(fields: [fiscalOperationId], references: [id], onDelete: Restrict)
+}
+
+/// Append-only partner balance movements; amount is always positive and direction carries the sign.
+model PartnerLedgerEntry {
+  id               String                @id @default(uuid()) @db.Uuid
+  orderId          String                @db.Uuid
+  assignmentId     String                @db.Uuid
+  payoutSnapshotId String                @db.Uuid
+  refundId         String?               @unique @db.Uuid
+  type             LedgerEntryType
+  direction        LedgerDirection
+  amountMinor      BigInt
+  currency         String                @db.Char(3)
+  dedupKey         String                @unique @db.Char(64)
+  createdAt        DateTime              @default(now())
+  order            Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  assignment       PartnerAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  payoutSnapshot   PartnerPayoutSnapshot @relation(fields: [payoutSnapshotId], references: [id], onDelete: Restrict)
+  refund           RefundOperation?      @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  settlementItem   SettlementBatchItem?
+
+  @@index([assignmentId, createdAt])
+  @@index([orderId, createdAt])
+}
+
+model SettlementBatch {
+  id                String                @id @default(uuid()) @db.Uuid
+  partnerId         String                @db.Uuid
+  sequence          Int                   @unique @default(autoincrement())
+  currency          String                @db.Char(3)
+  status            SettlementBatchStatus @default(CREATED)
+  cutoffAt          DateTime
+  totalMinor        BigInt
+  dedupKey          String                @unique @db.Char(64)
+  providerReference String?               @unique @db.VarChar(160)
+  attempts          Int                   @default(0)
+  nextAttemptAt     DateTime?
+  lastErrorCode     String?               @db.VarChar(40)
+  createdById       String                @db.Uuid
+  createdAt         DateTime              @default(now())
+  submittedAt       DateTime?
+  settledAt         DateTime?
+  createdBy         User                  @relation("SettlementBatchCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  partner           Partner               @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  items             SettlementBatchItem[]
+
+  @@index([status, nextAttemptAt])
+  @@index([partnerId, createdAt])
+}
+
+model SettlementBatchItem {
+  batchId       String             @db.Uuid
+  ledgerEntryId String             @unique @db.Uuid
+  amountMinor   BigInt
+  createdAt     DateTime           @default(now())
+  batch         SettlementBatch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  ledgerEntry   PartnerLedgerEntry @relation(fields: [ledgerEntryId], references: [id], onDelete: Restrict)
+
+  @@id([batchId, ledgerEntryId])
+}
+
+/// Every run records its observation. Mismatches require an explicit later resolution.
+model FinancialReconciliation {
+  id             String               @id @default(uuid()) @db.Uuid
+  kind           ReconciliationKind
+  entityId       String               @db.Uuid
+  runKeyDigest   String               @db.Char(64)
+  expectedStatus String               @db.VarChar(40)
+  observedStatus String               @db.VarChar(40)
+  status         ReconciliationStatus
+  detailCode     String?              @db.VarChar(40)
+  actorId        String?              @db.Uuid
+  createdAt      DateTime             @default(now())
+  resolvedAt     DateTime?
+  actor          User?                @relation("ReconciliationActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([kind, entityId, runKeyDigest])
+  @@index([status, createdAt])
 }
 
 model ManualReview {

@@ -24,6 +24,9 @@ export default function AdminPage() {
         <a className="button" href="/admin/disputes">
           Споры, повторная печать и retention
         </a>
+        <a className="button" href="/admin/finance">
+          Фискализация, выплаты и сверка
+        </a>
       </div>
     </main>
   );

@@ -4,6 +4,8 @@ export interface AppEnvironment {
   port: number;
   jwtSecret: string;
   otpProvider: string;
+  otpProviderEndpoint: string;
+  otpProviderApiKey: string;
   mockOtpCode: string;
   otpTtlSeconds: number;
   otpMaxAttempts: number;
@@ -33,6 +35,17 @@ export interface AppEnvironment {
   previewSignedUrlTtlSeconds: number;
   paymentProvider: string;
   mockPaymentSecret: string;
+  paymentProviderEndpoint: string;
+  paymentProviderApiKey: string;
+  paymentWebhookSecret: string;
+  fiscalProvider: string;
+  fiscalProviderEndpoint: string;
+  fiscalProviderApiKey: string;
+  payoutProvider: string;
+  payoutProviderEndpoint: string;
+  payoutProviderApiKey: string;
+  providerTimeoutSeconds: number;
+  financeDispatchEnabled: boolean;
   matchingDispatchEnabled: boolean;
   partnerOfferTtlSeconds: number;
   partnerPayoutBasisPoints: number;
@@ -130,6 +143,55 @@ export function loadEnvironment(
       if (forbiddenProductionValue(value))
         throw new Error(`${name} must come from the production secret store`);
     }
+    const providers = [
+      [
+        "OTP",
+        otpProvider,
+        source.OTP_PROVIDER_ENDPOINT,
+        source.OTP_PROVIDER_API_KEY,
+      ],
+      [
+        "PAYMENT",
+        paymentProvider,
+        source.PAYMENT_PROVIDER_ENDPOINT,
+        source.PAYMENT_PROVIDER_API_KEY,
+      ],
+      [
+        "FISCAL",
+        source.FISCAL_PROVIDER ?? "mock",
+        source.FISCAL_PROVIDER_ENDPOINT,
+        source.FISCAL_PROVIDER_API_KEY,
+      ],
+      [
+        "PAYOUT",
+        source.PAYOUT_PROVIDER ?? "mock",
+        source.PAYOUT_PROVIDER_ENDPOINT,
+        source.PAYOUT_PROVIDER_API_KEY,
+      ],
+    ] as const;
+    for (const [name, provider, endpoint, apiKey] of providers) {
+      if (provider !== "http")
+        throw new Error(
+          `${name}_PROVIDER must select the configured production http adapter`,
+        );
+      if (!endpoint || new URL(endpoint).protocol !== "https:")
+        throw new Error(
+          `${name}_PROVIDER_ENDPOINT must use HTTPS in production`,
+        );
+      if (!apiKey || forbiddenProductionValue(apiKey))
+        throw new Error(
+          `${name}_PROVIDER_API_KEY must come from the production secret store`,
+        );
+    }
+    if (
+      !source.PAYMENT_WEBHOOK_SECRET ||
+      forbiddenProductionValue(source.PAYMENT_WEBHOOK_SECRET)
+    )
+      throw new Error(
+        "PAYMENT_WEBHOOK_SECRET must come from the production secret store",
+      );
+    if (source.FINANCE_DISPATCH_ENABLED !== "true")
+      throw new Error("FINANCE_DISPATCH_ENABLED must be true in production");
   }
   return {
     nodeEnv,
@@ -139,6 +201,8 @@ export function loadEnvironment(
     port: integer(source.API_PORT, 4000),
     jwtSecret,
     otpProvider,
+    otpProviderEndpoint: source.OTP_PROVIDER_ENDPOINT ?? "",
+    otpProviderApiKey: source.OTP_PROVIDER_API_KEY ?? "",
     mockOtpCode: source.MOCK_OTP_CODE ?? "000000",
     otpTtlSeconds: integer(source.OTP_TTL_SECONDS, 300),
     otpMaxAttempts: integer(source.OTP_MAX_ATTEMPTS, 5),
@@ -180,6 +244,18 @@ export function loadEnvironment(
     ),
     paymentProvider,
     mockPaymentSecret,
+    paymentProviderEndpoint: source.PAYMENT_PROVIDER_ENDPOINT ?? "",
+    paymentProviderApiKey: source.PAYMENT_PROVIDER_API_KEY ?? "",
+    paymentWebhookSecret: source.PAYMENT_WEBHOOK_SECRET ?? "",
+    fiscalProvider: source.FISCAL_PROVIDER ?? "mock",
+    fiscalProviderEndpoint: source.FISCAL_PROVIDER_ENDPOINT ?? "",
+    fiscalProviderApiKey: source.FISCAL_PROVIDER_API_KEY ?? "",
+    payoutProvider: source.PAYOUT_PROVIDER ?? "mock",
+    payoutProviderEndpoint: source.PAYOUT_PROVIDER_ENDPOINT ?? "",
+    payoutProviderApiKey: source.PAYOUT_PROVIDER_API_KEY ?? "",
+    providerTimeoutSeconds: integer(source.PROVIDER_TIMEOUT_SECONDS, 15),
+    financeDispatchEnabled:
+      (source.FINANCE_DISPATCH_ENABLED ?? "false") === "true",
     matchingDispatchEnabled:
       (source.MATCHING_DISPATCH_ENABLED ?? "false") === "true",
     partnerOfferTtlSeconds: integer(source.PARTNER_OFFER_TTL_SECONDS, 180),

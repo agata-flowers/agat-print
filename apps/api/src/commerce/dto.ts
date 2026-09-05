@@ -1,6 +1,7 @@
 import {
   IsIn,
   IsInt,
+  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -29,8 +30,9 @@ export class CreateOrderDto {
 }
 
 export class StartPaymentDto {
+  @IsOptional()
   @IsIn(["SUCCESS", "FAILURE"])
-  simulateOutcome!: "SUCCESS" | "FAILURE";
+  simulateOutcome?: "SUCCESS" | "FAILURE";
 }
 
 export class PaymentCallbackDto {
@@ -38,7 +40,7 @@ export class PaymentCallbackDto {
   eventId!: string;
 
   @IsString()
-  @Matches(/^[a-f0-9]{64}$/)
+  @Matches(/^[A-Za-z0-9._:-]{1,160}$/)
   paymentReference!: string;
 
   @IsIn(["PAYMENT_SUCCEEDED", "PAYMENT_FAILED", "REFUND_SUCCEEDED"])

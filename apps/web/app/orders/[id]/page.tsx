@@ -14,6 +14,12 @@ type OrderView = {
     tariffVersion: number;
   };
   payment: null | { status: string; refundStatus: string | null };
+  fiscal: Array<{
+    type: string;
+    status: string;
+    amountMinor: string;
+    currency: string;
+  }>;
   fulfillment: null | {
     mode: "PICKUP" | "DELIVERY";
     status: string;
@@ -64,15 +70,26 @@ export default function OrderPage() {
         body: JSON.stringify({ simulateOutcome: "SUCCESS" }),
       });
       const started = (await response.json()) as {
-        mockCallback: unknown;
-        mockSignature: string;
+        mockCallback?: unknown;
+        mockSignature?: string;
       };
-      await apiRequest("/payments/mock/callback", {
-        method: "POST",
-        headers: { "X-Provider-Signature": started.mockSignature },
-        body: JSON.stringify(started.mockCallback),
-      });
-      setMessage("Оплата подтверждена mock-провайдером.");
+      if (started.mockCallback && started.mockSignature) {
+        await apiRequest("/payments/mock/callback", {
+          method: "POST",
+          headers: { "X-Provider-Signature": started.mockSignature },
+          body: JSON.stringify(started.mockCallback),
+        });
+        setMessage("Оплата подтверждена тестовым провайдером.");
+      } else {
+        await apiRequest(`/orders/${id}/payment/confirm`, {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: "{}",
+        });
+        setMessage(
+          "Подтверждение отправлено. Ожидаем ответ платёжного провайдера.",
+        );
+      }
       await load();
     } catch {
       setMessage("Оплата не завершена. Повторите безопасно с новой попыткой.");
@@ -141,6 +158,12 @@ export default function OrderPage() {
         )}
         <p>Статус заказа: {order?.status ?? "LOADING"}</p>
         <p>Статус платежа: {order?.payment?.status ?? "NOT_STARTED"}</p>
+        {order?.fiscal?.map((operation, index) => (
+          <p key={`${operation.type}-${index}`}>
+            Фискальная операция {operation.type}: {operation.status} ·{" "}
+            {operation.amountMinor} {operation.currency}
+          </p>
+        ))}
         {order?.status === "AWAITING_PAYMENT" && (
           <button className="button primary" type="button" onClick={pay}>
             Оплатить

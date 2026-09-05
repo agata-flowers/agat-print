@@ -7,10 +7,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, type PaymentStatus } from "@prisma/client";
+import type { PaymentProvider } from "@agat/providers";
 import { AuditService } from "../audit/audit.service";
 import type { AppEnvironment } from "../config/environment";
 import { PrismaService } from "../prisma/prisma.service";
 import { APP_ENVIRONMENT } from "../uploads/private-object-storage.service";
+import { PAYMENT_PROVIDER } from "../providers/provider-tokens";
 import type {
   CreateOrderDto,
   CreateTariffDto,
@@ -66,6 +68,10 @@ const orderInclude = {
   productionCycles: { orderBy: { sequence: "desc" as const }, take: 1 },
   fulfillments: { orderBy: { createdAt: "desc" as const }, take: 1 },
   deliveryTasks: { orderBy: { assignedAt: "desc" as const }, take: 1 },
+  fiscalOperations: {
+    orderBy: { createdAt: "desc" as const },
+    select: { type: true, status: true, amountMinor: true, currency: true },
+  },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithFinance = Prisma.OrderGetPayload<{
@@ -100,6 +106,12 @@ const orderView = (order: OrderWithFinance) => ({
         refundStatus: order.payment.refunds[0]?.status ?? null,
       }
     : null,
+  fiscal: order.fiscalOperations.map((operation) => ({
+    type: operation.type,
+    status: operation.status,
+    amountMinor: operation.amountMinor.toString(),
+    currency: operation.currency,
+  })),
   fulfillment:
     order.fulfillments[0] &&
     order.fulfillments[0].productionCycleId === order.productionCycles[0]?.id
@@ -118,7 +130,9 @@ export class CommerceService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(IdempotencyService)
     private readonly idempotency: IdempotencyService,
-    @Inject(MockPaymentProvider) private readonly payments: MockPaymentProvider,
+    @Inject(PAYMENT_PROVIDER) private readonly payments: PaymentProvider,
+    @Inject(MockPaymentProvider)
+    private readonly mockPayments: MockPaymentProvider,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
   ) {}
@@ -315,8 +329,8 @@ export class CommerceService {
     key: string | undefined,
     input: StartPaymentDto,
   ) {
-    if (this.env.paymentProvider !== "mock")
-      throw new ConflictException({ code: "PAYMENT_PROVIDER_UNAVAILABLE" });
+    if (this.env.paymentProvider === "mock" && !input.simulateOutcome)
+      throw new ConflictException({ code: "MOCK_OUTCOME_REQUIRED" });
     const prepared = this.idempotency.prepare(
       `payment:start:${orderId}`,
       key,
@@ -340,15 +354,17 @@ export class CommerceService {
       "UZS",
       { idempotencyKey: prepared.keyDigest, correlationId: order.id },
     );
-    const callback: PaymentCallbackDto = {
-      eventId: randomUUID(),
-      paymentReference: provider.reference,
-      outcome:
-        input.simulateOutcome === "SUCCESS"
-          ? "PAYMENT_SUCCEEDED"
-          : "PAYMENT_FAILED",
-    };
-    const callbackBody = JSON.stringify(callback);
+    const callback: PaymentCallbackDto | undefined =
+      this.env.paymentProvider === "mock"
+        ? {
+            eventId: randomUUID(),
+            paymentReference: provider.reference,
+            outcome:
+              input.simulateOutcome === "SUCCESS"
+                ? "PAYMENT_SUCCEEDED"
+                : "PAYMENT_FAILED",
+          }
+        : undefined;
     try {
       const response = await this.prisma.$transaction(async (tx) => {
         const payment = order.payment
@@ -363,7 +379,7 @@ export class CommerceService {
           : await tx.payment.create({
               data: {
                 orderId: order.id,
-                provider: "mock",
+                provider: this.env.paymentProvider,
                 providerPaymentReference: provider.reference,
                 amountMinor: order.priceSnapshot!.totalMinor,
                 currency: "UZS",
@@ -380,8 +396,12 @@ export class CommerceService {
         const value = {
           orderId: order.id,
           paymentStatus: payment.status,
-          mockCallback: callback,
-          mockSignature: this.payments.sign(callbackBody),
+          ...(callback
+            ? {
+                mockCallback: callback,
+                mockSignature: this.mockPayments.sign(JSON.stringify(callback)),
+              }
+            : {}),
         };
         await tx.idempotencyRecord.create({
           data: this.idempotency.data(
@@ -401,13 +421,20 @@ export class CommerceService {
     }
   }
 
-  async callback(input: PaymentCallbackDto, signature: string | undefined) {
-    const raw = JSON.stringify(input);
-    if (!this.payments.verify(raw, signature))
+  async callbackRaw(rawPayload: string, signature: string | undefined) {
+    const input = this.payments.parseWebhook(rawPayload, signature);
+    if (!input)
       throw new ForbiddenException({ code: "INVALID_PROVIDER_SIGNATURE" });
-    const payloadHash = digest(raw);
+    if (this.env.paymentProvider === "mock")
+      this.mockPayments.recordOutcome(input.paymentReference, input.outcome);
+    const payloadHash = digest(rawPayload);
     const existing = await this.prisma.providerCallback.findUnique({
-      where: { provider_eventId: { provider: "mock", eventId: input.eventId } },
+      where: {
+        provider_eventId: {
+          provider: this.env.paymentProvider,
+          eventId: input.eventId,
+        },
+      },
     });
     if (existing) {
       if (existing.payloadHash !== payloadHash)
@@ -434,7 +461,10 @@ export class CommerceService {
         await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${located.id}::uuid FOR UPDATE`;
         const prior = await tx.providerCallback.findUnique({
           where: {
-            provider_eventId: { provider: "mock", eventId: input.eventId },
+            provider_eventId: {
+              provider: this.env.paymentProvider,
+              eventId: input.eventId,
+            },
           },
         });
         if (prior) {
@@ -539,7 +569,7 @@ export class CommerceService {
         };
         await tx.providerCallback.create({
           data: {
-            provider: "mock",
+            provider: this.env.paymentProvider,
             eventId: input.eventId,
             payloadHash,
             result,
@@ -554,7 +584,10 @@ export class CommerceService {
       ) {
         const replay = await this.prisma.providerCallback.findUniqueOrThrow({
           where: {
-            provider_eventId: { provider: "mock", eventId: input.eventId },
+            provider_eventId: {
+              provider: this.env.paymentProvider,
+              eventId: input.eventId,
+            },
           },
         });
         if (replay.payloadHash !== payloadHash)
@@ -563,6 +596,82 @@ export class CommerceService {
       }
       throw error;
     }
+  }
+
+  callback(input: PaymentCallbackDto, signature: string | undefined) {
+    return this.callbackRaw(JSON.stringify(input), signature);
+  }
+
+  async confirmPayment(
+    userId: string,
+    orderId: string,
+    key: string | undefined,
+  ) {
+    const prepared = this.idempotency.prepare(
+      `payment:confirm:${orderId}`,
+      key,
+      {},
+    );
+    const replay =
+      await this.idempotency.replay<Record<string, unknown>>(prepared);
+    if (replay) return replay;
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, userId },
+      include: { payment: true },
+    });
+    if (!order) throw new NotFoundException();
+    if (
+      order.status !== "AWAITING_PAYMENT" ||
+      order.payment?.status !== "PENDING" ||
+      !order.payment.providerPaymentReference
+    )
+      throw new ConflictException({ code: "PAYMENT_NOT_CONFIRMABLE" });
+    const provider = await this.payments.confirm(
+      order.payment.providerPaymentReference,
+      {
+        idempotencyKey: digest(
+          `confirm:${order.payment.id}:${order.payment.version}`,
+        ),
+        correlationId: order.payment.id,
+      },
+    );
+    const response = await this.prisma.$transaction(async (tx) => {
+      const value = { orderId, paymentStatus: provider.status };
+      await tx.idempotencyRecord.create({
+        data: this.idempotency.data(prepared, value),
+      });
+      const event = outbox(
+        "payment",
+        order.payment!.id,
+        order.payment!.version,
+        "PAYMENT_CONFIRMATION_REQUESTED",
+      );
+      await tx.outboxEvent.upsert({
+        where: { dedupKey: event.dedupKey },
+        create: event,
+        update: {},
+      });
+      return value;
+    });
+    await this.audit.record(
+      "PAYMENT_CONFIRMATION_REQUESTED",
+      userId,
+      "payment",
+      {
+        status: "PENDING",
+        operation: "CONFIRM",
+      },
+    );
+    return response;
+  }
+
+  async mockCallback(input: PaymentCallbackDto, signature: string | undefined) {
+    if (
+      this.env.paymentProvider !== "mock" ||
+      this.env.nodeEnv === "production"
+    )
+      throw new ForbiddenException({ code: "MOCK_PROVIDER_FORBIDDEN" });
+    return this.callback(input, signature);
   }
 
   async requestNoExecutorRefund(
@@ -648,7 +757,7 @@ export class CommerceService {
           paymentStatus: payment.status,
           refundStatus: refund.status,
           mockCallback: callback,
-          mockSignature: this.payments.sign(JSON.stringify(callback)),
+          mockSignature: this.mockPayments.sign(JSON.stringify(callback)),
         };
         await tx.idempotencyRecord.create({
           data: this.idempotency.data(
@@ -745,7 +854,7 @@ export class CommerceService {
       paymentReference: refund.providerRefundReference,
       outcome: "REFUND_SUCCEEDED",
     };
-    return this.callback(input, this.payments.sign(JSON.stringify(input)));
+    return this.callback(input, this.mockPayments.sign(JSON.stringify(input)));
   }
 
   private async handleIdempotencyRace(
@@ -783,7 +892,7 @@ export class CommerceService {
     };
     await tx.providerCallback.create({
       data: {
-        provider: "mock",
+        provider: this.env.paymentProvider,
         eventId: input.eventId,
         payloadHash,
         result,

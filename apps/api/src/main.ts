@@ -10,7 +10,10 @@ import { loadEnvironment } from "./config/environment";
 
 async function bootstrap(): Promise<void> {
   const env = loadEnvironment();
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
   app.setGlobalPrefix("api/v1");
   app.enableCors({
     origin: env.webOrigin,

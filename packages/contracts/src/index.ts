@@ -1,4 +1,10 @@
-export const USER_ROLES = ["CUSTOMER", "PARTNER", "COURIER", "ADMIN"] as const;
+export const USER_ROLES = [
+  "CUSTOMER",
+  "PARTNER",
+  "COURIER",
+  "ADMIN",
+  "FINANCE_ADMIN",
+] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const PARTNER_STATUSES = [
@@ -59,6 +65,7 @@ export const PAYMENT_STATUSES = [
   "SUCCEEDED",
   "FAILED",
   "REFUND_PENDING",
+  "PARTIALLY_REFUNDED",
   "REFUNDED",
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
@@ -73,6 +80,22 @@ export const DELIVERY_STATUSES = [
   "FAILED",
 ] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+export const FISCAL_OPERATION_STATUSES = [
+  "PENDING",
+  "SUBMITTED",
+  "CONFIRMED",
+  "RETRY_PENDING",
+  "RECONCILIATION_REQUIRED",
+] as const;
+
+export const SETTLEMENT_BATCH_STATUSES = [
+  "CREATED",
+  "SUBMITTED",
+  "SETTLED",
+  "RETRY_PENDING",
+  "RECONCILIATION_REQUIRED",
+] as const;
 
 export interface CurrentUser {
   id: string;

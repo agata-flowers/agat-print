@@ -21,6 +21,9 @@ export class AdminBootstrapService {
         create: { phone, roles: { create: { role: "CUSTOMER" } } },
       });
       await tx.userRole.create({ data: { userId: user.id, role: "ADMIN" } });
+      await tx.userRole.create({
+        data: { userId: user.id, role: "FINANCE_ADMIN" },
+      });
       await tx.bootstrapState.create({
         data: { key: "production-admin", usedAt: new Date() },
       });

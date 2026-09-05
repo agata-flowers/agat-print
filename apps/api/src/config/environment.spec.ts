@@ -134,4 +134,47 @@ describe("environment validation", () => {
       }),
     ).toThrow(/PICKUP_PIN_SECRET/);
   });
+
+  it("fails closed until every production finance provider is configured", () => {
+    const production = {
+      NODE_ENV: "production",
+      WEB_ORIGIN: "https://print.invalid",
+      JWT_ACCESS_SECRET: "q7Ve4!Tn9#Lm2@Rx8$Bp5%Kd1&Hs6*Wz",
+      MINIO_ACCESS_KEY: "prod-access-9A7b6C5d",
+      MINIO_SECRET_KEY: "prod-minio-9A7b6C5d4E3f2G1h",
+      PICKUP_PIN_SECRET: "9A7b6C5d4E3f2G1h8J7k6L5m4N3p2Q1r",
+      DELIVERY_DATA_KEY: Buffer.from(
+        "0123456789abcdef0123456789abcdef",
+      ).toString("base64"),
+      PRINTER_AGENT_TOKEN_PEPPER: "8J7k6L5m4N3p2Q1r9A7b6C5d4E3f2G1h",
+      DELIVERY_PROVIDER: "dispatch",
+      OTP_PROVIDER: "http",
+      PAYMENT_PROVIDER: "http",
+      FISCAL_PROVIDER: "http",
+      PAYOUT_PROVIDER: "http",
+      OTP_PROVIDER_ENDPOINT: "https://otp.invalid/v1/",
+      PAYMENT_PROVIDER_ENDPOINT: "https://payments.invalid/v1/",
+      FISCAL_PROVIDER_ENDPOINT: "https://fiscal.invalid/v1/",
+      PAYOUT_PROVIDER_ENDPOINT: "https://payout.invalid/v1/",
+      OTP_PROVIDER_API_KEY: "otp-prod-9A7b6C5d4E3f",
+      PAYMENT_PROVIDER_API_KEY: "pay-prod-9A7b6C5d4E3f",
+      FISCAL_PROVIDER_API_KEY: "fiscal-prod-9A7b6C5d4E3f",
+      PAYOUT_PROVIDER_API_KEY: "payout-prod-9A7b6C5d4E3f",
+      PAYMENT_WEBHOOK_SECRET: "webhook-prod-9A7b6C5d4E3f",
+      FINANCE_DISPATCH_ENABLED: "true",
+    };
+    expect(loadEnvironment(production).paymentProvider).toBe("http");
+    expect(() =>
+      loadEnvironment({ ...production, FISCAL_PROVIDER_API_KEY: "" }),
+    ).toThrow(/FISCAL_PROVIDER_API_KEY/);
+    expect(() =>
+      loadEnvironment({
+        ...production,
+        PAYMENT_PROVIDER_ENDPOINT: "http://payments.invalid/",
+      }),
+    ).toThrow(/HTTPS/);
+    expect(() =>
+      loadEnvironment({ ...production, FINANCE_DISPATCH_ENABLED: "false" }),
+    ).toThrow(/FINANCE_DISPATCH_ENABLED/);
+  });
 });
