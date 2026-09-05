@@ -121,3 +121,15 @@ jobs:
           name: stage8-verification-report
           path: outputs/stage8-verification-report.json
           if-no-files-found: error
+      - name: Initialize stage 9 diagnostic artifact
+        if: always()
+        run: |
+          printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage9-verification-report.json
+      - name: Run stage 9 production pilot readiness verification
+        run: bash ops/verify/stage9.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage9-verification-report
+          path: outputs/stage9-verification-report.json
+          if-no-files-found: error

@@ -133,3 +133,29 @@ included in customer/courier delivery views.
 - Refund replay does not reserve or confirm money twice. Production still
   rejects mock payment/delivery and development secrets; no real settlement
   adapter is introduced by this stage.
+
+## Stage 9 production finance controls
+
+- Production accepts only explicitly configured HTTPS OTP, payment, fiscal and
+  payout adapters. Missing endpoints, API keys or payment webhook HMAC material
+  abort startup. Mock adapters and mock secrets remain development/test-only.
+- `FINANCE_ADMIN` is distinct from customer, partner and courier authority.
+  Financial mutations require that role, CSRF/origin checks and an
+  `Idempotency-Key`; partners may read only ledger entries reached through their
+  own assignment.
+- Provider authentication happens before database lookup. Payment adapters
+  authenticate and normalize the exact raw HTTP body; a signature over parsed
+  or reserialized JSON is never substituted. Exact duplicate webhook payloads
+  replay the stored result; changed payloads, invalid signatures and
+  out-of-order transitions fail closed.
+- Provider references, credentials, webhook signatures, receipt identifiers,
+  settlement identifiers and reconciliation run references never enter logs,
+  audit metadata, metric labels or customer responses. Fiscal receipt
+  identifiers are stored only as SHA-256 digests.
+- Fiscal receipts, partner ledger entries and settlement membership are
+  immutable at the database layer. Concurrent settlement creation is
+  serialized; each partner-scoped batch has a database-validated net total and
+  every ledger movement may occur in at most one batch.
+- Reconciliation mismatches are durable incidents. Operators retry through
+  guarded commands; direct financial-state SQL and silent correction are
+  prohibited.

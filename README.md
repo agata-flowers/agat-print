@@ -1,10 +1,10 @@
 # AGAT PRINT
 
 Foundation for the AGAT PRINT mobile-first printing platform. This repository
-implements stages 1–6: planning, platform foundation, protected upload,
+implements stages 1–9: planning, platform foundation, protected upload,
 isolated processing, preflight, immutable layout artifacts, manual review and
-customer layout approval, versioned pricing, mock payment/refund and partner
-matching through manual production readiness.
+customer layout approval, versioned pricing, payment/refund, partner matching,
+fulfillment, aftercare and production-pilot financial controls.
 
 ## Prerequisites
 
@@ -133,18 +133,32 @@ The normal paths terminate at `COMPLETED`; unavailable/failed delivery reaches
 `DELIVERY_FAILED`. Run the complete Docker gate with
 `bash ops/verify/stage7.sh`.
 
-## Scope boundary
-
-Do not begin stage 8. Disputes, reprints, advanced courier optimization,
-marketplace expansion and later workflows remain out of scope until explicit
-approval.
-
-## Stage 8 work in progress
+## Stage 8 aftercare
 
 Aftercare endpoints and schema extend the Stage 7 baseline with disputes,
 production cycles, partial/full refunds and retention holds. See
 [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md),
 [operations](docs/OPERATIONS.md), [OpenAPI](docs/api/openapi.yaml) and
-[test gate](docs/TESTING.md). Stage 8 is not accepted until the full regression
-and infrastructure suites pass and GitHub Actions quality/infrastructure plus
-the verification artifact are confirmed. Do not deploy unverified migrations.
+[test gate](docs/TESTING.md). Stage 8 is the accepted baseline for Stage 9.
+
+## Stage 9 production pilot readiness
+
+Production OTP, payment, fiscal and payout integrations use provider-neutral
+HTTPS adapters and fail startup closed without secret-store configuration.
+Development/test mocks remain available but are rejected in production.
+
+Payment webhooks retain the signed replay-safe Stage 5 flow. Confirmed payments
+and refunds create durable fiscal intents and immutable receipt facts. Completed
+orders create one partner earning from the immutable payout snapshot; confirmed
+refunds append proportional debit adjustments. `FINANCE_ADMIN` creates and
+submits partner-scoped net settlement batches and runs reconciliation. Mismatches remain explicit
+incidents instead of silently changing financial history.
+
+Run `bash ops/verify/stage9.sh` on a Docker host. Actual provider certification
+requires merchant/OTP/fiscal/payout credentials and contracts outside this
+repository.
+
+## Scope boundary
+
+Stage 10, marketplace expansion, new matching, advanced routing, document
+editing and unrelated product features require separate approval.

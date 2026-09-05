@@ -180,3 +180,24 @@ monthly isolated drill and record measured RPO/RTO, not target values as facts.
 The same-host backup-minio in compose.verify.yaml is only a test stand-in;
 production requires an independently managed off-host endpoint and encryption
 secret held separately.
+
+## Stage 9 provider and financial operations
+
+Production must set `OTP_PROVIDER=http`, `PAYMENT_PROVIDER=http`,
+`FISCAL_PROVIDER=http` and `PAYOUT_PROVIDER=http`, with separate HTTPS endpoint
+and API-key secrets plus `PAYMENT_WEBHOOK_SECRET`. Startup is intentionally
+blocked if any value is absent, weak, marked as development, or uses HTTP.
+Provider timeouts default to 15 seconds. Never pass credentials as CLI arguments
+or place them in Compose source, `.env.example`, tickets or verification output.
+
+Enable the durable finance dispatcher with `FINANCE_DISPATCH_ENABLED=true`.
+Inspect only bounded job status/error codes. Fiscal retries stop after five
+attempts and require FINANCE_ADMIN review. Each settlement batch belongs to one
+partner and reserves the immutable credit/debit movements used to derive its
+positive net total. A provider mismatch creates a reconciliation incident and
+must not be fixed by editing ledger, receipt or batch-item rows.
+
+Run `bash ops/verify/stage9.sh` on the controlled Docker host. Backups include
+all fiscal, ledger, settlement and reconciliation records because no legal
+deletion period is approved for them. Restore validation must confirm their
+presence, uniqueness and immutable constraints before enabling API traffic.

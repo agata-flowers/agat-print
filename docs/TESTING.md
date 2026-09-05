@@ -82,7 +82,7 @@ financial snapshots and customer payout isolation. It also checks Redis/BullMQ,
 no-store headers and absence of PINs, addresses, tokens, object identifiers,
 signed URLs or high-cardinality values in telemetry.
 
-## Stage 8 gate (not yet accepted)
+## Stage 8 accepted regression gate
 
 Run pnpm install --frozen-lockfile, pnpm db:generate and pnpm run ci. Note that
 pnpm ci is the package-manager clean-install alias, not the repository gate.
@@ -106,3 +106,23 @@ suite. Explicitly verify real BullMQ redelivery/crash recovery, concurrent
 refund reservations, legal-hold/deletion races and an old snapshot restored
 with a newer deletion ledger before claiming Stage 8 acceptance. Tests skipped
 because PostgreSQL/Redis/MinIO are absent are not passing DB-E2E.
+
+## Stage 9 gate
+
+`bash ops/verify/stage9.sh` builds the application and operational images,
+applies all migrations to a clean PostgreSQL database twice, and runs the Stage
+7 fixture with `RUN_STAGE9_E2E=1`. That switch includes Stage 7, Stage 8 and
+Stage 9 DB scenarios: production configuration fail-closed behavior, provider
+signature/replay/order validation, immutable fiscal receipts, retry, ledger
+credit/refund debit, finance RBAC, settlement uniqueness, reconciliation
+mismatch persistence and BullMQ redelivery.
+
+The workflow must first run every Stage 2–8 verification script. Stage 9 then
+checks PostgreSQL, Redis, MinIO, ClamAV, processing and backup services; privacy
+headers/metrics/logs; an encrypted off-host restic backup; isolated restore;
+financial row integrity; and measured RPO/RTO. The diagnostic report is created
+before execution and uploaded with `if: always()` without changing job failure.
+
+Vendor acceptance is separate: real OTP delivery, acquiring/fiscal sandbox
+certification and payout settlement cannot be marked verified until credentials,
+merchant contracts, webhook endpoints and provider test environments exist.

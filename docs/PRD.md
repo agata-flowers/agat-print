@@ -74,9 +74,9 @@ approved artifact and original partner with a new production/fulfillment
 cycle. It never combines with a refund in one decision.
 
 Automate only already-defined object retention; financial/legal records wait
-for separately approved legal periods. Marketplace expansion, rematching,
-GPS/route optimization, real payout settlement/reconciliation, new external
-providers and all next-stage work remain outside this approval.
+for separately approved legal periods. Marketplace expansion, rematching and
+GPS/route optimization remain outside this approval. Production provider and
+financial-ledger work is introduced only by the separately approved Stage 9.
 
 ## Stage 9 approved boundary — Production Pilot Readiness
 
@@ -89,7 +89,7 @@ replay-safe, idempotent and tolerant of duplicate or out-of-order delivery.
 Fiscal operations are immutable records linked to payments, orders and refunds,
 with durable retry and reconciliation states. Partner earnings are recorded in
 an append-only UZS ledger derived from the accepted payout snapshot. Settlement
-batches reserve eligible entries exactly once and retain explicit reconciliation
+batches net one partner's eligible credit/debit entries exactly once and retain explicit reconciliation
 mismatches instead of silently modifying financial history. Refunds and disputes
 produce traceable ledger adjustments; cumulative money remains integer minor
 units and cannot exceed the underlying payment or earning.

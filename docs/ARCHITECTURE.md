@@ -109,6 +109,18 @@ erDiagram
   RetentionSchedule ||--o{ RetentionScheduleObject : selects
   PermanentObjectReference ||--o{ RetentionScheduleObject : referenced
   OutboxEvent ||--o| AftercareJob : dispatches
+  OutboxEvent ||--o| FinancialJob : dispatches
+  Payment ||--o{ FiscalOperation : fiscalizes
+  RefundOperation ||--o| FiscalOperation : reverses
+  FiscalOperation ||--o| FiscalReceipt : confirms
+  PartnerPayoutSnapshot ||--o{ PartnerLedgerEntry : values
+  PartnerAssignment ||--o{ PartnerLedgerEntry : earns
+  RefundOperation ||--o| PartnerLedgerEntry : adjusts
+  SettlementBatch ||--o{ SettlementBatchItem : contains
+  Partner ||--o{ SettlementBatch : receives
+  PartnerLedgerEntry ||--o| SettlementBatchItem : reserved_once
+  User ||--o{ SettlementBatch : creates
+  User ||--o{ FinancialReconciliation : runs
   User ||--o| CourierProfile : applies
   OrderFulfillment ||--o| DeliveryTask : dispatches
   CourierProfile ||--o{ DeliveryTask : carries
@@ -270,3 +282,32 @@ five-attempt limit, inbox and idempotent provider calls are authoritative.
 A periodic durable retention sweep excludes active holds and nonterminal
 orders. Tombstone intent commits before storage deletion and remains retryable
 after a crash. Legal/financial database records are not automatically purged.
+
+## ADR 9: provider-neutral production finance and append-only settlement evidence
+
+The domain depends only on `OtpProvider`, `PaymentProvider`, `FiscalProvider`
+and `PayoutProvider`. Development/test mocks are selected explicitly; production
+startup accepts only the HTTPS adapters with secret-store credentials. HTTP
+request bodies use decimal strings for UZS minor units, bounded references and
+provider idempotency keys. Webhook HMAC verification occurs before any lookup
+or state transition, and provider references never enter public views.
+
+Payment/refund callbacks retain the Stage 5 row-lock and replay contract. The
+selected payment adapter authenticates and normalizes the exact raw request
+body before the core sees a provider-neutral event.
+Financial jobs independently fan out committed outbox events through BullMQ;
+the PostgreSQL `FinancialJob` lease and common inbox remain authoritative.
+Fiscal sale/refund intents are unique by source and create an append-only
+receipt only after provider confirmation. Five failures move an operation to
+explicit reconciliation rather than fabricating a receipt.
+
+Each completed order creates one CREDIT ledger entry from its immutable
+`PartnerPayoutSnapshot`. Confirmed refunds create proportional DEBIT entries;
+cumulative debit cannot exceed the original earning. Settlement creation uses
+a database advisory lock, excludes open disputes and incomplete reprints, and
+reserves each included ledger movement with a unique batch item. Every batch is
+scoped to one partner and its positive total is the database-validated net of
+that partner's credits and debits, preventing cross-partner or double payout.
+Reconciliation appends an
+observation for every provider entity/run. Amount, currency or status mismatch
+is retained as `MISMATCH` and never silently rewrites immutable history.

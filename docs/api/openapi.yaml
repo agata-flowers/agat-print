@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.8.0
+  version: 0.9.0
 servers:
   - url: /api/v1
 paths:
@@ -252,6 +252,36 @@ paths:
         "201": { description: State transition accepted or replayed }
         "403": { description: Invalid signature }
         "409": { description: Replay conflict or invalid ordering }
+  /orders/{orderId}/payment/confirm:
+    post:
+      summary: Idempotently request confirmation from the selected payment provider
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          { description: Confirmation requested; webhook remains authoritative }
+        "404": { description: Order not owned }
+        "409": { description: Payment not confirmable or key conflict }
+  /payments/webhook:
+    post:
+      summary: Accept a signed webhook from the selected production payment provider
+      description: The selected adapter authenticates the exact raw body and maps it to the provider-neutral payment event.
+      parameters:
+        - in: header
+          name: X-Provider-Signature
+          required: true
+          schema: { type: string, pattern: "^[a-f0-9]{64}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentCallback" }
+      responses:
+        "201": { description: Transition accepted or exact duplicate replayed }
+        "403": { description: Invalid provider signature }
+        "409": { description: Changed replay payload or invalid ordering }
   /admin/internal/orders/{orderId}/no-executor:
     post:
       summary: Synthetically request one full refund (ADMIN only; stage 6 hook)
@@ -695,6 +725,75 @@ paths:
       security: [{ AccessCookie: [] }]
       responses:
         "200": { description: Private no-store status without object keys }
+  /admin/finance:
+    get:
+      summary: FINANCE_ADMIN fiscal, settlement and reconciliation overview
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Bounded records without provider references }
+        "403": { description: Explicit finance permission required }
+  /admin/finance/settlement-batches:
+    post:
+      summary: Reserve eligible partner earnings exactly once
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSettlementBatch" }
+      responses:
+        "201": { description: Batch created or replayed }
+        "409": { description: No eligible earnings or idempotency conflict }
+  /admin/finance/settlement-batches/{batchId}/submit:
+    post:
+      summary: Submit a settlement batch through the configured payout provider
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - {
+            in: path,
+            name: batchId,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Submission accepted or replayed }
+        "409": { description: Invalid or concurrent transition }
+  /admin/finance/reconciliation:
+    post:
+      summary: Compare internal payment, fiscal and payout records with providers
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunReconciliation" }
+      responses:
+        "201": { description: Observations and explicit mismatches recorded }
+  /admin/finance/fiscal/{operationId}/retry:
+    post:
+      summary: Requeue a retryable fiscal operation
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - {
+            in: path,
+            name: operationId,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Retry requested or replayed }
+        "409": { description: Operation is not retryable }
+  /partner/finance/ledger:
+    get:
+      summary: Partner views only its own credit/debit ledger
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Own ledger without customer or provider data }
+        "403": { description: Partner permission required }
 components:
   securitySchemes:
     AccessCookie:
@@ -897,16 +996,18 @@ components:
     StartPayment:
       type: object
       additionalProperties: false
-      required: [simulateOutcome]
       properties:
-        simulateOutcome: { type: string, enum: [SUCCESS, FAILURE] }
+        simulateOutcome:
+          type: string
+          enum: [SUCCESS, FAILURE]
+          description: Required only by the development/test mock adapter.
     PaymentCallback:
       type: object
       additionalProperties: false
       required: [eventId, paymentReference, outcome]
       properties:
         eventId: { type: string, format: uuid }
-        paymentReference: { type: string, pattern: "^[a-f0-9]{64}$" }
+        paymentReference: { type: string, pattern: "^[A-Za-z0-9._:-]{1,160}$" }
         outcome:
           type: string
           enum: [PAYMENT_SUCCEEDED, PAYMENT_FAILED, REFUND_SUCCEEDED]
@@ -1012,3 +1113,17 @@ components:
         reason:
           type: string
           enum: [RECIPIENT_UNAVAILABLE, ADDRESS_UNREACHABLE, PACKAGE_DAMAGED]
+    CreateSettlementBatch:
+      type: object
+      additionalProperties: false
+      required: [cutoffAt]
+      properties:
+        cutoffAt: { type: string, format: date-time }
+    RunReconciliation:
+      type: object
+      additionalProperties: false
+      required: [runReference]
+      properties:
+        runReference:
+          type: string
+          pattern: "^[A-Za-z0-9._:-]{1,80}$"
