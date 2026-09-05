@@ -302,7 +302,7 @@ export class FinanceService {
     if (replay) return replay;
     const result = await this.prisma.$transaction(
       async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(915009)`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(915009)`;
         const insideReplay = await tx.idempotencyRecord.findUnique({
           where: {
             scope_keyDigest: {
