@@ -113,7 +113,10 @@ echo 'Deleting source data and seeding a stale object in the isolated restore ta
   tombstoned_key="verification/tombstoned.bin"
   mc alias set source "$MINIO_ALIAS_URL" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
   mc rm --force "source/$MINIO_BUCKET/$retained_key" >/dev/null
-  mc rm --force "source/$MINIO_BUCKET/$tombstoned_key" >/dev/null
+  # The running retention worker may already have applied this tombstone.
+  # Deletion is intentionally idempotent; restore validation below still
+  # proves that the tombstone is present and the object cannot reappear.
+  mc rm --force "source/$MINIO_BUCKET/$tombstoned_key" >/dev/null 2>&1 || true
   psql -v ON_ERROR_STOP=1 \
     -c "DELETE FROM \"PermanentObjectReference\" WHERE \"objectKey\" = 'verification/retained.bin'" >/dev/null
 SCRIPT
