@@ -300,104 +300,141 @@ export class FinanceService {
     const replay =
       await this.idempotency.replay<Record<string, unknown>>(prepared);
     if (replay) return replay;
-    const result = await this.prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(915009)`;
-        const insideReplay = await tx.idempotencyRecord.findUnique({
-          where: {
-            scope_keyDigest: {
-              scope: prepared.scope,
-              keyDigest: prepared.keyDigest,
-            },
-          },
-        });
-        if (insideReplay)
-          return this.idempotency.assertCompatible(insideReplay, prepared) as {
-            id: string;
-            status: string;
-            totalMinor: string;
-            currency: string;
-          };
-        const entries = await tx.partnerLedgerEntry.findMany({
-          where: {
-            createdAt: { lte: cutoffAt },
-            settlementItem: null,
-            order: {
-              payment: {
-                status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] },
-                refunds: {
-                  none: { status: "CONFIRMED", ledgerEntry: null },
+    let result:
+      | {
+          id: string;
+          status: string;
+          totalMinor: string;
+          currency: string;
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        result = await this.prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(915009)`;
+            const insideReplay = await tx.idempotencyRecord.findUnique({
+              where: {
+                scope_keyDigest: {
+                  scope: prepared.scope,
+                  keyDigest: prepared.keyDigest,
                 },
               },
-              disputes: {
-                none: { status: { in: ["OPEN", "PARTNER_RESPONDED"] } },
+            });
+            if (insideReplay)
+              return this.idempotency.assertCompatible(
+                insideReplay,
+                prepared,
+              ) as {
+                id: string;
+                status: string;
+                totalMinor: string;
+                currency: string;
+              };
+            const entries = await tx.partnerLedgerEntry.findMany({
+              where: {
+                createdAt: { lte: cutoffAt },
+                settlementItem: null,
+                order: {
+                  payment: {
+                    status: {
+                      in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"],
+                    },
+                    refunds: {
+                      none: { status: "CONFIRMED", ledgerEntry: null },
+                    },
+                  },
+                  disputes: {
+                    none: { status: { in: ["OPEN", "PARTNER_RESPONDED"] } },
+                  },
+                  productionCycles: { none: { status: { not: "COMPLETED" } } },
+                  legalHolds: { none: { releasedAt: null } },
+                },
               },
-              productionCycles: { none: { status: { not: "COMPLETED" } } },
-              legalHolds: { none: { releasedAt: null } },
-            },
+              orderBy: { createdAt: "asc" },
+              take: 500,
+              include: { assignment: { select: { partnerId: true } } },
+            });
+            const byPartner = new Map<string, typeof entries>();
+            for (const entry of entries) {
+              const partnerEntries =
+                byPartner.get(entry.assignment.partnerId) ?? [];
+              partnerEntries.push(entry);
+              byPartner.set(entry.assignment.partnerId, partnerEntries);
+            }
+            const eligible = [...byPartner.entries()]
+              .map(([partnerId, partnerEntries]) => ({
+                partnerId,
+                entries: partnerEntries,
+                totalMinor: partnerEntries.reduce(
+                  (sum, entry) =>
+                    sum +
+                    (entry.direction === "CREDIT"
+                      ? entry.amountMinor
+                      : -entry.amountMinor),
+                  0n,
+                ),
+              }))
+              .filter((candidate) => candidate.totalMinor > 0n)
+              .sort((left, right) =>
+                left.partnerId.localeCompare(right.partnerId),
+              );
+            const selected = eligible[0];
+            if (!selected)
+              throw new ConflictException({ code: "NO_SETTLEMENT_ENTRIES" });
+            const items = selected.entries.map((entry) => ({
+              ledgerEntryId: entry.id,
+              amountMinor: entry.amountMinor,
+            }));
+            const totalMinor = selected.totalMinor;
+            const batch = await tx.settlementBatch.create({
+              data: {
+                id: randomUUID(),
+                partnerId: selected.partnerId,
+                currency: "UZS",
+                cutoffAt,
+                totalMinor,
+                dedupKey: prepared.keyDigest,
+                createdById: actorId,
+                items: { create: items },
+              },
+            });
+            const response = {
+              id: batch.id,
+              status: batch.status,
+              totalMinor: totalMinor.toString(),
+              currency: batch.currency,
+            };
+            await tx.idempotencyRecord.create({
+              data: this.idempotency.data(prepared, response),
+            });
+            await tx.outboxEvent.create({
+              data: outbox("settlement", batch.id, 0, "SETTLEMENT_CREATED"),
+            });
+            return response;
           },
-          orderBy: { createdAt: "asc" },
-          take: 500,
-          include: { assignment: { select: { partnerId: true } } },
-        });
-        const byPartner = new Map<string, typeof entries>();
-        for (const entry of entries) {
-          const partnerEntries =
-            byPartner.get(entry.assignment.partnerId) ?? [];
-          partnerEntries.push(entry);
-          byPartner.set(entry.assignment.partnerId, partnerEntries);
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (error) {
+        if (
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          !["P2002", "P2034"].includes(error.code)
+        ) {
+          throw error;
         }
-        const eligible = [...byPartner.entries()]
-          .map(([partnerId, partnerEntries]) => ({
-            partnerId,
-            entries: partnerEntries,
-            totalMinor: partnerEntries.reduce(
-              (sum, entry) =>
-                sum +
-                (entry.direction === "CREDIT"
-                  ? entry.amountMinor
-                  : -entry.amountMinor),
-              0n,
-            ),
-          }))
-          .filter((candidate) => candidate.totalMinor > 0n)
-          .sort((left, right) => left.partnerId.localeCompare(right.partnerId));
-        const selected = eligible[0];
-        if (!selected)
-          throw new ConflictException({ code: "NO_SETTLEMENT_ENTRIES" });
-        const items = selected.entries.map((entry) => ({
-          ledgerEntryId: entry.id,
-          amountMinor: entry.amountMinor,
-        }));
-        const totalMinor = selected.totalMinor;
-        const batch = await tx.settlementBatch.create({
-          data: {
-            id: randomUUID(),
-            partnerId: selected.partnerId,
-            currency: "UZS",
-            cutoffAt,
-            totalMinor,
-            dedupKey: prepared.keyDigest,
-            createdById: actorId,
-            items: { create: items },
-          },
-        });
-        const response = {
-          id: batch.id,
-          status: batch.status,
-          totalMinor: totalMinor.toString(),
-          currency: batch.currency,
-        };
-        await tx.idempotencyRecord.create({
-          data: this.idempotency.data(prepared, response),
-        });
-        await tx.outboxEvent.create({
-          data: outbox("settlement", batch.id, 0, "SETTLEMENT_CREATED"),
-        });
-        return response;
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+        const committed =
+          await this.idempotency.replay<Record<string, unknown>>(prepared);
+        if (committed) {
+          result = committed as typeof result;
+          break;
+        }
+        if (error.code !== "P2034" || attempt === 2) {
+          throw new ConflictException({ code: "CONCURRENT_SETTLEMENT" });
+        }
+      }
+    }
+    if (!result) throw new ConflictException({ code: "CONCURRENT_SETTLEMENT" });
     await this.audit.record("SETTLEMENT_BATCH_CREATED", actorId, "settlement", {
       status: "CREATED",
       operation: "PAYOUT",
