@@ -104,3 +104,23 @@ Stage 9 verification artifact.
 
 Marketplace expansion, new matching, advanced routing, document editing and
 unrelated customer functionality are outside Stage 9.
+
+## Stage 10 approved boundary — Partner Marketplace & Production Network
+
+Stage 10 extends the existing partner, branch and Stage 6 matching aggregates
+with moderated lifecycle, owned studio profiles, immutable operational,
+capability, catalog and capacity versions, temporary availability and
+service-area eligibility. Matching persists bounded explainable candidate
+evaluations and ranks eligible branches deterministically by configured
+priority, distance, workload and stable identity.
+
+Offer capacity is reserved transactionally and released idempotently on
+expiry/rejection or consumed on acceptance. Acceptance revalidates the current
+versions and availability so stale offers cannot create an assignment.
+Suspension prevents new work while allowing an already accepted paid order to
+finish. Existing one-partner assignment, payout snapshots, production,
+fulfillment, aftercare and finance invariants remain unchanged.
+
+The complete contract, tests and explicit exclusions are defined in
+[`STAGE10.md`](STAGE10.md). Customer marketplace UI, route optimization,
+subscriptions, new payment integrations and Stage 11 are not included.
