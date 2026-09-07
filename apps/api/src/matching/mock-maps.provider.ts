@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { MapsProvider, ProviderContext } from "@agat/providers";
+import { distanceMeters } from "./network-policy";
 
 @Injectable()
 export class MockMapsProvider implements MapsProvider {
@@ -29,5 +30,20 @@ export class MockMapsProvider implements MapsProvider {
         (origin.longitude - destination.longitude) ** 2) *
         1_000_000,
     );
+  }
+
+  distanceMeters(
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number },
+  ) {
+    return Promise.resolve(distanceMeters(origin, destination));
+  }
+
+  async isWithinServiceArea(
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number },
+    radiusMeters: number,
+  ) {
+    return (await this.distanceMeters(origin, destination)) <= radiusMeters;
   }
 }

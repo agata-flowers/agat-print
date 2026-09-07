@@ -115,6 +115,9 @@ export default function PartnerPage() {
       <p className="eyebrow">Ручное производство</p>
       <h1>Кабинет партнёра</h1>
       <p>
+        <a className="button" href="/partner/network">
+          Профиль и возможности студии
+        </a>{" "}
         <a className="button" href="/partner/finance">
           Реестр начислений
         </a>

@@ -111,6 +111,15 @@ export interface MapsProvider {
     context: ProviderContext,
   ): Promise<{ latitude: number; longitude: number }>;
   distanceScore(originCode: string, destinationCode: string): Promise<number>;
+  distanceMeters(
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number },
+  ): Promise<number>;
+  isWithinServiceArea(
+    origin: { latitude: number; longitude: number },
+    destination: { latitude: number; longitude: number },
+    radiusMeters: number,
+  ): Promise<boolean>;
 }
 export interface DeliveryProvider {
   createDelivery(

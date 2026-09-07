@@ -9,6 +9,13 @@ type History = {
   matchingStatus: string;
   offers: { id: string; status: string; candidateRank: number }[];
   assignmentStatus: string | null;
+  evaluations: {
+    reasonCodes: string[];
+    eligible: boolean;
+    candidateRank: number | null;
+    distanceMeters: number | null;
+    workloadBasisPoints: number | null;
+  }[];
 };
 
 export default function MatchingAdminPage() {
@@ -40,6 +47,17 @@ export default function MatchingAdminPage() {
                 </li>
               ))}
             </ol>
+            <ul>
+              {item.evaluations.map((evaluation, index) => (
+                <li key={`${evaluation.candidateRank ?? "x"}-${index}`}>
+                  {evaluation.eligible
+                    ? "Подходит"
+                    : evaluation.reasonCodes.join(", ")}
+                  ; расстояние {evaluation.distanceMeters ?? "—"} м; загрузка{" "}
+                  {evaluation.workloadBasisPoints ?? "—"} б.п.
+                </li>
+              ))}
+            </ul>
           </article>
         ))}
         <p aria-live="polite">{message}</p>

@@ -10,6 +10,8 @@ import { MatchingQueueService } from "./matching-queue.service";
 import { MatchingService } from "./matching.service";
 import { MockMapsProvider } from "./mock-maps.provider";
 import { MockNotificationProvider } from "./mock-notification.provider";
+import { PartnerNetworkService } from "./partner-network.service";
+import { MAPS_PROVIDER } from "../providers/provider-tokens";
 
 @Module({
   imports: [AuditModule, CommerceModule, UploadsModule],
@@ -18,7 +20,9 @@ import { MockNotificationProvider } from "./mock-notification.provider";
     MatchingService,
     MatchingQueueService,
     MockMapsProvider,
+    { provide: MAPS_PROVIDER, useExisting: MockMapsProvider },
     MockNotificationProvider,
+    PartnerNetworkService,
   ],
   exports: [MatchingService, MatchingQueueService],
 })

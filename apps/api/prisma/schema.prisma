@@ -16,10 +16,43 @@ enum Role {
 }
 
 enum PartnerStatus {
+  DRAFT
   PENDING
   APPROVED
+  ACTIVE
   REJECTED
   SUSPENDED
+  CLOSED
+}
+
+enum NetworkVersionStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum AvailabilityKind {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum CapacityReservationStatus {
+  HELD
+  CONSUMED
+  RELEASED
+}
+
+enum MatchingReasonCode {
+  ELIGIBLE
+  PARTNER_NOT_ACTIVE
+  BRANCH_INACTIVE
+  ORDERS_DISABLED
+  CAPABILITY_MISMATCH
+  SERVICE_DISABLED
+  OUTSIDE_WORKING_HOURS
+  TEMPORARILY_UNAVAILABLE
+  OUTSIDE_SERVICE_AREA
+  CAPACITY_FULL
+  STALE_NETWORK_VERSION
 }
 
 enum ObjectRetentionClass {
@@ -289,60 +322,65 @@ enum ReconciliationStatus {
 }
 
 model AftercareJob {
-  dedupKey String @id @db.Char(64)
-  eventId String @unique @db.Uuid
-  status AftercareJobStatus @default(PENDING)
-  attempts Int @default(0)
-  leaseUntil DateTime?
-  leaseOwner String? @db.Uuid
-  lastErrorCode String? @db.VarChar(40)
-  createdAt DateTime @default(now())
-  completedAt DateTime?
+  dedupKey      String             @id @db.Char(64)
+  eventId       String             @unique @db.Uuid
+  status        AftercareJobStatus @default(PENDING)
+  attempts      Int                @default(0)
+  leaseUntil    DateTime?
+  leaseOwner    String?            @db.Uuid
+  lastErrorCode String?            @db.VarChar(40)
+  createdAt     DateTime           @default(now())
+  completedAt   DateTime?
+
   @@index([status, leaseUntil])
 }
 
 model FinancialJob {
-  dedupKey String @id @db.Char(64)
-  eventId String @unique @db.Uuid
-  status FinancialJobStatus @default(PENDING)
-  attempts Int @default(0)
-  leaseUntil DateTime?
-  leaseOwner String? @db.Uuid
-  lastErrorCode String? @db.VarChar(40)
-  createdAt DateTime @default(now())
-  completedAt DateTime?
+  dedupKey      String             @id @db.Char(64)
+  eventId       String             @unique @db.Uuid
+  status        FinancialJobStatus @default(PENDING)
+  attempts      Int                @default(0)
+  leaseUntil    DateTime?
+  leaseOwner    String?            @db.Uuid
+  lastErrorCode String?            @db.VarChar(40)
+  createdAt     DateTime           @default(now())
+  completedAt   DateTime?
 
   @@index([status, leaseUntil])
 }
 
 model User {
-  id                   String                    @id @default(uuid()) @db.Uuid
-  phone                String                    @unique @db.VarChar(32)
-  locale               String                    @default("ru") @db.VarChar(8)
-  displayName          String?                   @db.VarChar(160)
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  id                   String                        @id @default(uuid()) @db.Uuid
+  phone                String                        @unique @db.VarChar(32)
+  locale               String                        @default("ru") @db.VarChar(8)
+  displayName          String?                       @db.VarChar(160)
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
   roles                UserRole[]
   sessions             Session[]
   challenges           OtpChallenge[]
   partner              Partner?
-  auditEvents          AuditEvent[]              @relation("AuditActor")
+  auditEvents          AuditEvent[]                  @relation("AuditActor")
   uploads              UploadSession[]
   layouts              LayoutRequest[]
   layoutApprovals      LayoutApproval[]
-  manualReviews        ManualReview[]            @relation("ManualReviewOperator")
-  tariffVersions       TariffVersion[]           @relation("TariffAuthor")
+  manualReviews        ManualReview[]                @relation("ManualReviewOperator")
+  tariffVersions       TariffVersion[]               @relation("TariffAuthor")
   orders               Order[]
-  capabilityVersions   BranchCapabilityVersion[] @relation("CapabilityAuthor")
+  capabilityVersions   BranchCapabilityVersion[]     @relation("CapabilityAuthor")
+  operationalVersions  BranchOperationalVersion[]    @relation("OperationalVersionAuthor")
+  catalogVersions      BranchCatalogVersion[]        @relation("CatalogVersionAuthor")
+  capacityVersions     BranchCapacityVersion[]       @relation("CapacityVersionAuthor")
+  availabilityChanges  BranchAvailabilityException[] @relation("AvailabilityAuthor")
   courierProfile       CourierProfile?
-  printerAgentsCreated PrinterAgent[]            @relation("PrinterAgentCreator")
-  disputesOpened       DisputeCase[]             @relation("DisputeOpener")
-  disputeResponses     DisputeResponse[]         @relation("DisputeResponder")
-  disputeResolutions   DisputeResolution[]       @relation("DisputeResolver")
-  legalHoldsCreated    LegalHold[]               @relation("LegalHoldCreator")
-  legalHoldsReleased   LegalHold[]               @relation("LegalHoldReleaser")
-  settlementBatches   SettlementBatch[]          @relation("SettlementBatchCreator")
-  reconciliations     FinancialReconciliation[]  @relation("ReconciliationActor")
+  printerAgentsCreated PrinterAgent[]                @relation("PrinterAgentCreator")
+  disputesOpened       DisputeCase[]                 @relation("DisputeOpener")
+  disputeResponses     DisputeResponse[]             @relation("DisputeResponder")
+  disputeResolutions   DisputeResolution[]           @relation("DisputeResolver")
+  legalHoldsCreated    LegalHold[]                   @relation("LegalHoldCreator")
+  legalHoldsReleased   LegalHold[]                   @relation("LegalHoldReleaser")
+  settlementBatches    SettlementBatch[]             @relation("SettlementBatchCreator")
+  reconciliations      FinancialReconciliation[]     @relation("ReconciliationActor")
 }
 
 model UserRole {
@@ -385,60 +423,168 @@ model Session {
 }
 
 model Partner {
-  id          String              @id @default(uuid()) @db.Uuid
-  ownerId     String              @unique @db.Uuid
-  displayName String              @db.VarChar(180)
-  status      PartnerStatus       @default(PENDING)
-  approvedAt  DateTime?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  owner       User                @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  branches    Branch[]
-  offers      PartnerOffer[]
-  assignments PartnerAssignment[]
-  settlementBatches SettlementBatch[]
+  id                           String              @id @default(uuid()) @db.Uuid
+  ownerId                      String              @unique @db.Uuid
+  displayName                  String              @db.VarChar(180)
+  publicDescription            String?             @db.VarChar(500)
+  publicContact                String?             @db.VarChar(180)
+  operationalContactCiphertext String?             @db.Text
+  operationalContactIv         String?             @db.VarChar(24)
+  operationalContactAuthTag    String?             @db.VarChar(32)
+  status                       PartnerStatus       @default(PENDING)
+  approvedAt                   DateTime?
+  createdAt                    DateTime            @default(now())
+  updatedAt                    DateTime            @updatedAt
+  owner                        User                @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  branches                     Branch[]
+  offers                       PartnerOffer[]
+  assignments                  PartnerAssignment[]
+  settlementBatches            SettlementBatch[]
 }
 
 model Branch {
-  id                 String                    @id @default(uuid()) @db.Uuid
-  partnerId          String                    @db.Uuid
-  name               String                    @db.VarChar(180)
-  city               String                    @default("Tashkent") @db.VarChar(100)
-  district           String?                   @db.VarChar(120)
-  locationCode       String                    @default("TASHKENT") @db.VarChar(40)
-  active             Boolean                   @default(true)
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
-  partner            Partner                   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  capabilityVersions BranchCapabilityVersion[]
-  offers             PartnerOffer[]
-  assignments        PartnerAssignment[]
-  printerAgents      PrinterAgent[]
-  printJobs          PrintJob[]
-  deliveryTasks      DeliveryTask[]
+  id                     String                        @id @default(uuid()) @db.Uuid
+  partnerId              String                        @db.Uuid
+  name                   String                        @db.VarChar(180)
+  city                   String                        @default("Tashkent") @db.VarChar(100)
+  district               String?                       @db.VarChar(120)
+  locationCode           String                        @default("TASHKENT") @db.VarChar(40)
+  publicDescription      String?                       @db.VarChar(500)
+  timezone               String                        @default("Asia/Tashkent") @db.VarChar(64)
+  latitude               Decimal                       @default(41.311081) @db.Decimal(9, 6)
+  longitude              Decimal                       @default(69.240562) @db.Decimal(9, 6)
+  serviceRadiusMeters    Int                           @default(25000)
+  acceptingOrders        Boolean                       @default(true)
+  active                 Boolean                       @default(true)
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  partner                Partner                       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  capabilityVersions     BranchCapabilityVersion[]
+  operationalVersions    BranchOperationalVersion[]
+  catalogVersions        BranchCatalogVersion[]
+  capacityVersions       BranchCapacityVersion[]
+  availabilityExceptions BranchAvailabilityException[]
+  candidateEvaluations   MatchingCandidateEvaluation[]
+  capacityReservations   OfferCapacityReservation[]
+  offers                 PartnerOffer[]
+  assignments            PartnerAssignment[]
+  printerAgents          PrinterAgent[]
+  printJobs              PrintJob[]
+  deliveryTasks          DeliveryTask[]
 }
 
 /// Immutable, versioned matching capabilities. Retiring a version never edits it.
 model BranchCapabilityVersion {
-  id                 String           @id @default(uuid()) @db.Uuid
-  branchId           String           @db.Uuid
-  version            Int
-  status             CapabilityStatus @default(ACTIVE)
-  supportedFileKinds UploadFileKind[]
-  maxPages           Int
-  maxWidthMm         Int
-  maxHeightMm        Int
-  minDpi             Int
-  priority           Int              @default(100)
-  createdById        String           @db.Uuid
-  createdAt          DateTime         @default(now())
-  retiredAt          DateTime?
-  branch             Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  createdBy          User             @relation("CapabilityAuthor", fields: [createdById], references: [id], onDelete: Restrict)
-  offers             PartnerOffer[]
+  id                   String                        @id @default(uuid()) @db.Uuid
+  branchId             String                        @db.Uuid
+  version              Int
+  status               CapabilityStatus              @default(ACTIVE)
+  supportedFileKinds   UploadFileKind[]
+  maxPages             Int
+  maxWidthMm           Int
+  maxHeightMm          Int
+  minDpi               Int
+  priority             Int                           @default(100)
+  serviceCodes         String[]                      @default(["DOCUMENT_PRINT"])
+  paperCodes           String[]                      @default(["STANDARD"])
+  colorModes           String[]                      @default(["COLOR", "MONOCHROME"])
+  equipmentCodes       String[]                      @default([])
+  maxQuantity          Int                           @default(1000)
+  createdById          String                        @db.Uuid
+  createdAt            DateTime                      @default(now())
+  retiredAt            DateTime?
+  branch               Branch                        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("CapabilityAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  offers               PartnerOffer[]
+  candidateEvaluations MatchingCandidateEvaluation[]
 
   @@unique([branchId, version])
   @@index([branchId, status])
+}
+
+/// Immutable branch hours/settings. weeklyHours uses bounded weekday/minute ranges.
+model BranchOperationalVersion {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  branchId             String                        @db.Uuid
+  version              Int
+  status               NetworkVersionStatus          @default(ACTIVE)
+  weeklyHours          Json
+  settings             Json
+  createdById          String                        @db.Uuid
+  createdAt            DateTime                      @default(now())
+  retiredAt            DateTime?
+  branch               Branch                        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("OperationalVersionAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  candidateEvaluations MatchingCandidateEvaluation[]
+  offers               PartnerOffer[]
+
+  @@unique([branchId, version])
+  @@index([branchId, status])
+}
+
+model BranchCatalogVersion {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  branchId             String                        @db.Uuid
+  version              Int
+  status               NetworkVersionStatus          @default(ACTIVE)
+  createdById          String                        @db.Uuid
+  createdAt            DateTime                      @default(now())
+  retiredAt            DateTime?
+  branch               Branch                        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("CatalogVersionAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  items                BranchCatalogItem[]
+  candidateEvaluations MatchingCandidateEvaluation[]
+  offers               PartnerOffer[]
+
+  @@unique([branchId, version])
+  @@index([branchId, status])
+}
+
+model BranchCatalogItem {
+  id               String               @id @default(uuid()) @db.Uuid
+  catalogVersionId String               @db.Uuid
+  serviceCode      String               @db.VarChar(40)
+  enabled          Boolean              @default(true)
+  paperCodes       String[]             @default([])
+  colorModes       String[]             @default([])
+  maxQuantity      Int
+  catalogVersion   BranchCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([catalogVersionId, serviceCode])
+}
+
+model BranchCapacityVersion {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  branchId             String                        @db.Uuid
+  version              Int
+  status               NetworkVersionStatus          @default(ACTIVE)
+  maxConcurrentOrders  Int
+  createdById          String                        @db.Uuid
+  createdAt            DateTime                      @default(now())
+  retiredAt            DateTime?
+  branch               Branch                        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy            User                          @relation("CapacityVersionAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  candidateEvaluations MatchingCandidateEvaluation[]
+  reservations         OfferCapacityReservation[]
+  offers               PartnerOffer[]
+
+  @@unique([branchId, version])
+  @@index([branchId, status])
+}
+
+model BranchAvailabilityException {
+  id          String           @id @default(uuid()) @db.Uuid
+  branchId    String           @db.Uuid
+  kind        AvailabilityKind
+  startsAt    DateTime
+  endsAt      DateTime
+  createdById String           @db.Uuid
+  createdAt   DateTime         @default(now())
+  cancelledAt DateTime?
+  branch      Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy   User             @relation("AvailabilityAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([branchId, startsAt, endsAt])
 }
 
 model AuditEvent {
@@ -657,20 +803,20 @@ model TariffVersion {
 }
 
 model Order {
-  id                  String              @id @default(uuid()) @db.Uuid
-  userId              String              @db.Uuid
-  layoutId            String              @db.Uuid
-  layoutApprovalId    String              @unique @db.Uuid
-  printReadyVersionId String              @db.Uuid
-  status              OrderStatus         @default(AWAITING_PAYMENT)
-  version             Int                 @default(0)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                  String               @id @default(uuid()) @db.Uuid
+  userId              String               @db.Uuid
+  layoutId            String               @db.Uuid
+  layoutApprovalId    String               @unique @db.Uuid
+  printReadyVersionId String               @db.Uuid
+  status              OrderStatus          @default(AWAITING_PAYMENT)
+  version             Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   disputeEligibleAt   DateTime?
-  user                User                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  layout              LayoutRequest       @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  layoutApproval      LayoutApproval      @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
-  printReadyVersion   PrintReadyVersion   @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  layout              LayoutRequest        @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval      LayoutApproval       @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion    @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
   priceSnapshot       PriceSnapshot?
   payment             Payment?
   matching            OrderMatching?
@@ -807,52 +953,107 @@ model PrintJob {
 }
 
 model OrderMatching {
-  id          String         @id @default(uuid()) @db.Uuid
-  orderId     String         @unique @db.Uuid
-  status      MatchingStatus @default(ACTIVE)
-  version     Int            @default(0)
-  startedAt   DateTime       @default(now())
+  id          String                        @id @default(uuid()) @db.Uuid
+  orderId     String                        @unique @db.Uuid
+  status      MatchingStatus                @default(ACTIVE)
+  version     Int                           @default(0)
+  startedAt   DateTime                      @default(now())
   exhaustedAt DateTime?
   assignedAt  DateTime?
-  order       Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order       Order                         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  evaluations MatchingCandidateEvaluation[]
+}
+
+model MatchingCandidateEvaluation {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  matchingId           String                    @db.Uuid
+  branchId             String                    @db.Uuid
+  evaluationRound      Int                       @default(0)
+  capabilityVersionId  String?                   @db.Uuid
+  operationalVersionId String?                   @db.Uuid
+  catalogVersionId     String?                   @db.Uuid
+  capacityVersionId    String?                   @db.Uuid
+  reasonCodes          MatchingReasonCode[]
+  eligible             Boolean
+  candidateRank        Int?
+  priority             Int?
+  distanceMeters       Int?
+  workloadBasisPoints  Int?
+  createdAt            DateTime                  @default(now())
+  matching             OrderMatching             @relation(fields: [matchingId], references: [id], onDelete: Restrict)
+  branch               Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  capabilityVersion    BranchCapabilityVersion?  @relation(fields: [capabilityVersionId], references: [id], onDelete: Restrict)
+  operationalVersion   BranchOperationalVersion? @relation(fields: [operationalVersionId], references: [id], onDelete: Restrict)
+  catalogVersion       BranchCatalogVersion?     @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  capacityVersion      BranchCapacityVersion?    @relation(fields: [capacityVersionId], references: [id], onDelete: Restrict)
+  offer                PartnerOffer?
+
+  @@unique([matchingId, branchId, evaluationRound])
+  @@index([matchingId, eligible, candidateRank])
 }
 
 model PartnerOffer {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  orderId             String                  @db.Uuid
-  partnerId           String                  @db.Uuid
-  branchId            String                  @db.Uuid
-  capabilityVersionId String                  @db.Uuid
-  candidateRank       Int
-  status              PartnerOfferStatus      @default(PENDING)
-  version             Int                     @default(0)
-  expiresAt           DateTime
-  decidedAt           DateTime?
-  createdAt           DateTime                @default(now())
-  order               Order                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  partner             Partner                 @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  branch              Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  capabilityVersion   BranchCapabilityVersion @relation(fields: [capabilityVersionId], references: [id], onDelete: Restrict)
-  payoutSnapshot      PartnerPayoutSnapshot?
-  assignment          PartnerAssignment?
+  id                   String                       @id @default(uuid()) @db.Uuid
+  orderId              String                       @db.Uuid
+  partnerId            String                       @db.Uuid
+  branchId             String                       @db.Uuid
+  capabilityVersionId  String                       @db.Uuid
+  operationalVersionId String?                      @db.Uuid
+  catalogVersionId     String?                      @db.Uuid
+  capacityVersionId    String?                      @db.Uuid
+  evaluationId         String?                      @unique @db.Uuid
+  candidateRank        Int
+  status               PartnerOfferStatus           @default(PENDING)
+  version              Int                          @default(0)
+  expiresAt            DateTime
+  decidedAt            DateTime?
+  createdAt            DateTime                     @default(now())
+  order                Order                        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  partner              Partner                      @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  branch               Branch                       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  capabilityVersion    BranchCapabilityVersion      @relation(fields: [capabilityVersionId], references: [id], onDelete: Restrict)
+  operationalVersion   BranchOperationalVersion?    @relation(fields: [operationalVersionId], references: [id], onDelete: Restrict)
+  catalogVersion       BranchCatalogVersion?        @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  capacityVersion      BranchCapacityVersion?       @relation(fields: [capacityVersionId], references: [id], onDelete: Restrict)
+  evaluation           MatchingCandidateEvaluation? @relation(fields: [evaluationId], references: [id], onDelete: Restrict)
+  payoutSnapshot       PartnerPayoutSnapshot?
+  assignment           PartnerAssignment?
+  capacityReservation  OfferCapacityReservation?
 
   @@unique([orderId, branchId])
   @@index([partnerId, status, expiresAt])
   @@index([status, expiresAt])
 }
 
+model OfferCapacityReservation {
+  id                String                    @id @default(uuid()) @db.Uuid
+  offerId           String                    @unique @db.Uuid
+  branchId          String                    @db.Uuid
+  capacityVersionId String                    @db.Uuid
+  status            CapacityReservationStatus @default(HELD)
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  releasedAt        DateTime?
+  createdAt         DateTime                  @default(now())
+  offer             PartnerOffer              @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  branch            Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  capacityVersion   BranchCapacityVersion     @relation(fields: [capacityVersionId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, status, expiresAt])
+}
+
 /// Financial terms are append-only and never updated after offer creation.
 model PartnerPayoutSnapshot {
-  id                  String             @id @default(uuid()) @db.Uuid
-  offerId             String             @unique @db.Uuid
+  id                  String               @id @default(uuid()) @db.Uuid
+  offerId             String               @unique @db.Uuid
   customerAmountMinor BigInt
   partnerPayoutMinor  BigInt
   agatCommissionMinor BigInt
-  currency            String             @default("UZS") @db.Char(3)
-  ruleVersion         String             @db.VarChar(40)
+  currency            String               @default("UZS") @db.Char(3)
+  ruleVersion         String               @db.VarChar(40)
   calculationInputs   Json
-  createdAt           DateTime           @default(now())
-  offer               PartnerOffer       @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  createdAt           DateTime             @default(now())
+  offer               PartnerOffer         @relation(fields: [offerId], references: [id], onDelete: Restrict)
   assignment          PartnerAssignment?
   ledgerEntries       PartnerLedgerEntry[]
 }
@@ -918,18 +1119,18 @@ model Payment {
 }
 
 model RefundOperation {
-  id                      String       @id @default(uuid()) @db.Uuid
-  paymentId               String       @db.Uuid
-  disputeId               String?      @unique @db.Uuid
-  kind                    RefundKind   @default(FULL)
-  triggerDedupKey         String       @unique @db.Char(64)
-  providerRefundReference String?      @unique @db.VarChar(160)
+  id                      String              @id @default(uuid()) @db.Uuid
+  paymentId               String              @db.Uuid
+  disputeId               String?             @unique @db.Uuid
+  kind                    RefundKind          @default(FULL)
+  triggerDedupKey         String              @unique @db.Char(64)
+  providerRefundReference String?             @unique @db.VarChar(160)
   amountMinor             BigInt
-  status                  RefundStatus @default(REQUESTED)
-  createdAt               DateTime     @default(now())
+  status                  RefundStatus        @default(REQUESTED)
+  createdAt               DateTime            @default(now())
   confirmedAt             DateTime?
-  payment                 Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  dispute                 DisputeCase? @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  payment                 Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  dispute                 DisputeCase?        @relation(fields: [disputeId], references: [id], onDelete: Restrict)
   fiscalOperation         FiscalOperation?
   ledgerEntry             PartnerLedgerEntry?
 
@@ -1123,13 +1324,13 @@ model FiscalOperation {
 
 /// Receipt facts are append-only after provider confirmation.
 model FiscalReceipt {
-  id                      String          @id @default(uuid()) @db.Uuid
-  fiscalOperationId       String          @unique @db.Uuid
-  providerReceiptDigest   String          @db.Char(64)
-  fiscalSignDigest        String?         @db.Char(64)
-  issuedAt                DateTime
-  createdAt               DateTime        @default(now())
-  operation               FiscalOperation @relation(fields: [fiscalOperationId], references: [id], onDelete: Restrict)
+  id                    String          @id @default(uuid()) @db.Uuid
+  fiscalOperationId     String          @unique @db.Uuid
+  providerReceiptDigest String          @db.Char(64)
+  fiscalSignDigest      String?         @db.Char(64)
+  issuedAt              DateTime
+  createdAt             DateTime        @default(now())
+  operation             FiscalOperation @relation(fields: [fiscalOperationId], references: [id], onDelete: Restrict)
 }
 
 /// Append-only partner balance movements; amount is always positive and direction carries the sign.

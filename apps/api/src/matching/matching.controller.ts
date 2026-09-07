@@ -15,11 +15,16 @@ import type { AuthenticatedUser } from "../common/request-user";
 import { Roles } from "../common/roles.decorator";
 import { RolesGuard } from "../common/roles.guard";
 import {
+  CreateAvailabilityDto,
   CreateCapabilityVersionDto,
+  CreateCapacityVersionDto,
+  CreateCatalogVersionDto,
+  CreateOperationalVersionDto,
   OfferDecisionDto,
   ProductionStatusDto,
 } from "./dto";
 import { MatchingService } from "./matching.service";
+import { PartnerNetworkService } from "./partner-network.service";
 
 @Controller("partner")
 @UseGuards(AccessGuard, RolesGuard)
@@ -27,7 +32,69 @@ import { MatchingService } from "./matching.service";
 export class PartnerMatchingController {
   constructor(
     @Inject(MatchingService) private readonly matching: MatchingService,
+    @Inject(PartnerNetworkService)
+    private readonly network: PartnerNetworkService,
   ) {}
+
+  @Post("network/branches/:id/capabilities")
+  capability(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: CreateCapabilityVersionDto,
+  ) {
+    return this.network.capability(user.id, id, key, input);
+  }
+
+  @Post("network/branches/:id/operations")
+  operational(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: CreateOperationalVersionDto,
+  ) {
+    return this.network.operational(user.id, id, key, input);
+  }
+
+  @Post("network/branches/:id/catalogs")
+  catalog(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: CreateCatalogVersionDto,
+  ) {
+    return this.network.catalog(user.id, id, key, input);
+  }
+
+  @Post("network/branches/:id/capacity")
+  capacity(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: CreateCapacityVersionDto,
+  ) {
+    return this.network.capacity(user.id, id, key, input);
+  }
+
+  @Post("network/branches/:id/availability")
+  availability(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: CreateAvailabilityDto,
+  ) {
+    return this.network.availability(user.id, id, key, input);
+  }
+
+  @Post("network/branches/:id/availability/:availabilityId/cancel")
+  cancelAvailability(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("availabilityId", new ParseUUIDPipe()) availabilityId: string,
+    @Headers("idempotency-key") key: string | undefined,
+  ) {
+    return this.network.cancelAvailability(user.id, id, availabilityId, key);
+  }
 
   @Get("offers")
   offers(@CurrentUser() user: AuthenticatedUser) {
