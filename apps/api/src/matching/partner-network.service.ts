@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { IdempotencyService } from "../commerce/idempotency.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -14,6 +15,9 @@ import type {
   CreateCatalogVersionDto,
   CreateOperationalVersionDto,
 } from "./dto";
+
+const scopeDigest = (value: string) =>
+  createHash("sha256").update(value).digest("hex");
 
 @Injectable()
 export class PartnerNetworkService {
@@ -260,7 +264,7 @@ export class PartnerNetworkService {
     execute: (tx: Prisma.TransactionClient) => Promise<T>,
   ) {
     const prepared = this.idempotency.prepare(
-      `partner-network:${ownerId}:${branchId}:${operation}`,
+      `partner-network:${scopeDigest(`${ownerId}:${branchId}:${operation}`).slice(0, 48)}`,
       key,
       input,
     );

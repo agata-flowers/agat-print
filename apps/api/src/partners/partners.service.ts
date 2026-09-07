@@ -134,7 +134,7 @@ export class PartnersService {
     input: UpdateBranchProfileDto,
   ) {
     const prepared = this.idempotency.prepare(
-      `partner:${ownerId}:branch:${branchId}:profile`,
+      `partner:${digest(`${ownerId}:branch:${branchId}:profile`).slice(0, 64)}`,
       key,
       input,
     );
