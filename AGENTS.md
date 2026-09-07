@@ -1,13 +1,15 @@
 # AGAT PRINT agent instructions
 
-- Current authorized scope is stages 1–10. Stage 10 is Partner Marketplace &
-  Production Network and extends the existing Stage 6 matching aggregate with
-  moderated partner lifecycle, immutable branch configuration, eligibility,
-  capacity reservations and explainable ranking.
+- Current authorized scope is stages 1–11. Stage 11 is Customer Ordering &
+  Service Catalog MVP: a mobile-first RU/UZ customer journey over the existing
+  upload, processing, layout, commerce, matching, fulfillment and finance
+  aggregates, plus an extensible platform catalog, server-authoritative quote,
+  resumable order draft, order timeline and durable in-app notifications.
 - Stage 9 baseline is 49d108ca88c045d16c05650ed3b4e2fe7fa5072a
   (Actions 33978772270).
-- Stage 10 is explicitly approved. Do not start Stage 11, customer marketplace
-  browsing, route optimization or unrelated product features without approval.
+- Stage 11 is explicitly approved. Do not start or design Stage 12, customer
+  partner selection, multi-partner carts, inventory-backed stationery sales,
+  route optimization or unrelated product features without approval.
 - Keep the domain core in the NestJS modular monolith. External capabilities use provider interfaces.
 - Never log OTPs, cookies, tokens, phone numbers, addresses, document contents, filenames, object keys, or signed URLs.
 - Metrics may use only bounded enums and route templates. Never use IDs, IPs, query strings, request IDs, or user-controlled text as labels.

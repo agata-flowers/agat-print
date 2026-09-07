@@ -124,3 +124,23 @@ fulfillment, aftercare and finance invariants remain unchanged.
 The complete contract, tests and explicit exclusions are defined in
 [`STAGE10.md`](STAGE10.md). Customer marketplace UI, route optimization,
 subscriptions, new payment integrations and Stage 11 are not included.
+
+## Stage 11 approved boundary — Customer Ordering & Service Catalog MVP
+
+Stage 11 connects the existing technical pipeline into a resumable mobile-first
+RU/UZ customer journey. It adds an immutable platform service catalog, owned
+order drafts, server-authoritative expiring quotes, guided upload/layout/
+approval/checkout screens, order history and bounded timeline, and durable
+in-app notifications. The implementation reuses every Stage 1–10 aggregate and
+keeps one print-ready artifact and one partner per order.
+
+Acceptance requires PDF, DOCX, JPG/JPEG and PNG DB-E2E, at least one browser
+E2E through the real UI and internal APIs, stale-lineage and concurrent checkout
+tests, owner isolation, localized safe errors, complete Stage 1–10 regression,
+clean/repeated migrations, infrastructure recovery and a successful Stage 11
+verification artifact. The full contract is defined in
+[`STAGE11.md`](STAGE11.md).
+
+Inventory-backed stationery, multi-line/multi-partner carts, customer partner
+selection, advanced routing, editors, subscriptions and Stage 12 are outside
+this approval.
