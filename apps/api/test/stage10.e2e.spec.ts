@@ -23,6 +23,7 @@ describe.skipIf(!enabled)("stage 10 partner production network DB-E2E", () => {
   let adminId: string;
   let admin: ReturnType<typeof request.agent>;
   let adminCsrf: string;
+  let tariffId: string;
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -50,6 +51,16 @@ describe.skipIf(!enabled)("stage 10 partner production network DB-E2E", () => {
     } = await login("+998000000102"));
     await prisma.userRole.create({ data: { userId: adminId, role: "ADMIN" } });
     adminCsrf = await refresh(admin, adminCsrf);
+    tariffId = (
+      await prisma.tariffVersion.create({
+        data: {
+          version: 1,
+          basePriceMinor: 1000n,
+          perPagePriceMinor: 250n,
+          createdById: adminId,
+        },
+      })
+    ).id;
   });
 
   afterAll(async () => app.close());
@@ -257,16 +268,8 @@ describe.skipIf(!enabled)("stage 10 partner production network DB-E2E", () => {
         currentApprovalId: approval.id,
       },
     });
-    let tariff = await prisma.tariffVersion.findFirst({
-      where: { status: "ACTIVE" },
-    });
-    tariff ??= await prisma.tariffVersion.create({
-      data: {
-        version: 1,
-        basePriceMinor: 1000n,
-        perPagePriceMinor: 250n,
-        createdById: adminId,
-      },
+    const tariff = await prisma.tariffVersion.findUniqueOrThrow({
+      where: { id: tariffId },
     });
     return prisma.order.create({
       data: {
