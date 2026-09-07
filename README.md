@@ -158,7 +158,21 @@ Run `bash ops/verify/stage9.sh` on a Docker host. Actual provider certification
 requires merchant/OTP/fiscal/payout credentials and contracts outside this
 repository.
 
+## Stage 10 partner production network
+
+Stage 10 extends the existing offer flow with moderated studio lifecycle,
+partner-owned public/operational profiles, immutable service/catalog/hours and
+capacity versions, planned availability, service areas and explainable
+capacity-safe matching. Partners configure their network under
+`/partner/network`; administrators moderate it under `/admin/partners`.
+
+Matching reserves capacity for each live offer, revalidates configuration on
+accept and releases the reservation on reject/expiry. Suspending a partner
+blocks new work without stranding an already accepted paid order. Run
+`bash ops/verify/stage10.sh` on a Docker host for the DB concurrency, Redis,
+Compose, privacy and isolated backup/restore gate.
+
 ## Scope boundary
 
-Stage 10, marketplace expansion, new matching, advanced routing, document
-editing and unrelated product features require separate approval.
+Stage 11, customer marketplace browsing, advanced routing, document editing
+and unrelated product features require separate approval.

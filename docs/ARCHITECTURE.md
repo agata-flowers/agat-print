@@ -48,6 +48,9 @@ flowchart LR
   cycles, cumulative refund reservation, legal holds and durable object deletion.
 - Finance operations: production provider selection, immutable fiscal records,
   append-only partner ledger, settlement batches and explicit reconciliation.
+- Partner network: moderated studio lifecycle, encrypted operational contacts,
+  immutable branch capability/catalog/hours/capacity versions, temporary
+  availability and capacity-safe explainable matching.
 - Future ports: vendor-specific payment/fiscal integrations and external dispatch.
 
 ## Stage 5 order aggregates
@@ -85,6 +88,14 @@ erDiagram
   Order ||--o| Payment : pays
   Payment ||--o{ RefundOperation : refunds
   Branch ||--o{ BranchCapabilityVersion : versions
+  Branch ||--o{ BranchOperationalVersion : schedules
+  Branch ||--o{ BranchCatalogVersion : catalogs
+  BranchCatalogVersion ||--o{ BranchCatalogItem : contains
+  Branch ||--o{ BranchCapacityVersion : limits
+  Branch ||--o{ BranchAvailabilityException : overrides
+  Branch ||--o{ MatchingCandidateEvaluation : evaluated
+  BranchCapacityVersion ||--o{ OfferCapacityReservation : reserves
+  PartnerOffer ||--o| OfferCapacityReservation : holds
   Order ||--o| OrderMatching : matches
   Order ||--o{ PartnerOffer : offers
   BranchCapabilityVersion ||--o{ PartnerOffer : qualifies
@@ -311,3 +322,25 @@ that partner's credits and debits, preventing cross-partner or double payout.
 Reconciliation appends an
 observation for every provider entity/run. Amount, currency or status mismatch
 is retained as `MISMATCH` and never silently rewrites immutable history.
+
+## ADR 10: immutable network configuration and reservation-based capacity
+
+Stage 10 extends the existing Stage 6 matching aggregate; it does not create a
+parallel matcher. New moderation uses `DRAFT → PENDING → ACTIVE`, with
+`SUSPENDED`, `REJECTED` and `CLOSED` terminal/administrative alternatives.
+Legacy `APPROVED` remains eligible for backwards compatibility.
+
+Branch capability, catalog, weekly operations and capacity are append-only
+versions. Matching persists one bounded `MatchingCandidateEvaluation` per
+branch and round. Hard eligibility covers lifecycle, branch switch, service,
+paper, color, equipment, quantity, schedule/override, deterministic service
+area and derived workload. Ranking is priority, distance, workload ratio and
+stable branch UUID; reason codes are bounded enums.
+
+An offer and `HELD` capacity reservation are committed together after locking
+the current capacity row and recounting active assignments plus unexpired
+holds. Accept locks the order, revalidates all current versions and operational
+eligibility, then consumes the reservation in the assignment transaction.
+Reject/expiry releases it once. Suspension blocks new offers and pending
+acceptance, but an already accepted job may safely finish production and
+fulfillment. Existing unique assignment and aggregate CAS guarantees remain.

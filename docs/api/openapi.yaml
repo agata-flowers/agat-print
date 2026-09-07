@@ -303,6 +303,157 @@ paths:
       responses:
         "200": { description: Safe audit events }
         "403": { description: Admin required }
+  /partners/draft:
+    post:
+      summary: Idempotently create an authenticated user's partner draft
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePartnerDraft" }
+      responses:
+        "201": { description: Private partner draft view }
+        "409": { description: Partner exists or idempotency payload conflicts }
+  /partners/me/submit:
+    post:
+      summary: Submit the authenticated owner's draft for moderation
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Partner is PENDING }
+        "409": { description: Partner is not a draft }
+  /partners/me/profile:
+    patch:
+      summary: Update the authenticated partner profile
+      description: Operational contact is encrypted and never returned; responses contain only a presence flag.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePartnerProfile" }
+      responses:
+        "200": { description: Private safe partner view }
+        "404": { description: Partner profile missing }
+  /partners/me/branches/{branchId}:
+    patch:
+      summary: Update an owned active branch profile and matching switch
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateBranchProfile" }
+      responses:
+        "200": { description: Owned branch profile }
+        "404": { description: Foreign or missing branch }
+  /admin/partners:
+    get:
+      summary: List bounded partner lifecycle and current branch readiness
+      responses:
+        "200":
+          { description: Safe moderation list without operational contacts }
+        "403": { description: Admin required }
+  /admin/partners/{partnerId}/lifecycle:
+    post:
+      summary: Apply an idempotent partner lifecycle moderation decision
+      parameters:
+        - name: partnerId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModeratePartner" }
+      responses:
+        "201": { description: Moderated partner view }
+        "403": { description: Admin required }
+        "409": { description: Invalid lifecycle transition or key conflict }
+  /partner/network/branches/{branchId}/capabilities:
+    post:
+      summary: Publish an immutable capability version for an owned branch
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCapabilityVersion" }
+      responses:
+        "201": { description: New active immutable version }
+        "403": { description: Partner ownership required }
+  /partner/network/branches/{branchId}/operations:
+    post:
+      summary: Publish immutable weekly operations/settings for an owned branch
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOperationalVersion" }
+      responses:
+        "201": { description: New active immutable version }
+  /partner/network/branches/{branchId}/catalogs:
+    post:
+      summary: Publish an immutable partner-specific service catalog
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCatalogVersion" }
+      responses:
+        "201": { description: New active immutable catalog }
+  /partner/network/branches/{branchId}/capacity:
+    post:
+      summary: Publish an immutable branch capacity version
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCapacityVersion" }
+      responses:
+        "201": { description: New active immutable capacity }
+  /partner/network/branches/{branchId}/availability:
+    post:
+      summary: Add a bounded temporary availability override
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAvailability" }
+      responses:
+        "201": { description: Availability override created }
+        "409": { description: Invalid range or idempotency conflict }
+  /partner/network/branches/{branchId}/availability/{availabilityId}/cancel:
+    post:
+      summary: Idempotently cancel an owned availability override
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - name: availabilityId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Availability override cancelled }
+        "403": { description: Partner ownership required }
   /admin/branches/{branchId}/capabilities:
     post:
       summary: Publish an immutable branch capability version (ADMIN only)
@@ -1041,6 +1192,119 @@ components:
         maxHeightMm: { type: integer, minimum: 10, maximum: 2000 }
         minDpi: { type: integer, minimum: 72, maximum: 2400 }
         priority: { type: integer, minimum: 1, maximum: 1000 }
+        serviceCodes:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [DOCUMENT_PRINT, PHOTO_PRINT] }
+        paperCodes:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [STANDARD, GLOSSY, MATTE, PHOTO] }
+        colorModes:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [COLOR, MONOCHROME] }
+        equipmentCodes:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 80 }
+        maxQuantity: { type: integer, minimum: 1, maximum: 100000 }
+    CreatePartnerDraft:
+      type: object
+      additionalProperties: false
+      required: [displayName, branchName]
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 180 }
+        branchName: { type: string, minLength: 2, maxLength: 180 }
+        district: { type: string, minLength: 2, maxLength: 120 }
+    UpdatePartnerProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 180 }
+        publicDescription: { type: string, maxLength: 500 }
+        publicContact: { type: string, maxLength: 180 }
+        operationalContact:
+          type: string
+          minLength: 2
+          maxLength: 500
+          writeOnly: true
+    UpdateBranchProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 180 }
+        publicDescription: { type: string, maxLength: 500 }
+        timezone: { type: string, enum: [Asia/Tashkent] }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        serviceRadiusMeters: { type: integer, minimum: 0, maximum: 200000 }
+        acceptingOrders: { type: boolean }
+    ModeratePartner:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [ACTIVE, SUSPENDED, REJECTED, CLOSED] }
+    WeeklyWindow:
+      type: object
+      additionalProperties: false
+      required: [weekday, opensMinute, closesMinute]
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6 }
+        opensMinute: { type: integer, minimum: 0, maximum: 1439 }
+        closesMinute: { type: integer, minimum: 1, maximum: 1440 }
+    CreateOperationalVersion:
+      type: object
+      additionalProperties: false
+      required: [weeklyHours, pickupEnabled, printerAgentEnabled]
+      properties:
+        weeklyHours:
+          type: array
+          maxItems: 21
+          items: { $ref: "#/components/schemas/WeeklyWindow" }
+        pickupEnabled: { type: boolean }
+        printerAgentEnabled: { type: boolean }
+    CatalogItem:
+      type: object
+      additionalProperties: false
+      required: [serviceCode, enabled, paperCodes, colorModes, maxQuantity]
+      properties:
+        serviceCode: { type: string, enum: [DOCUMENT_PRINT, PHOTO_PRINT] }
+        enabled: { type: boolean }
+        paperCodes:
+          type: array
+          maxItems: 4
+          items: { type: string, enum: [STANDARD, GLOSSY, MATTE, PHOTO] }
+        colorModes:
+          type: array
+          maxItems: 2
+          items: { type: string, enum: [COLOR, MONOCHROME] }
+        maxQuantity: { type: integer, minimum: 1, maximum: 100000 }
+    CreateCatalogVersion:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/CatalogItem" }
+    CreateCapacityVersion:
+      type: object
+      additionalProperties: false
+      required: [maxConcurrentOrders]
+      properties:
+        maxConcurrentOrders: { type: integer, minimum: 1, maximum: 10000 }
+    CreateAvailability:
+      type: object
+      additionalProperties: false
+      required: [kind, startsAt, endsAt]
+      properties:
+        kind: { type: string, enum: [AVAILABLE, UNAVAILABLE] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
     OfferDecision:
       type: object
       additionalProperties: false

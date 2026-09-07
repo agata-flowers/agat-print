@@ -201,3 +201,24 @@ Run `bash ops/verify/stage9.sh` on the controlled Docker host. Backups include
 all fiscal, ledger, settlement and reconciliation records because no legal
 deletion period is approved for them. Restore validation must confirm their
 presence, uniqueness and immutable constraints before enabling API traffic.
+
+## Stage 10 partner network operations
+
+Activate a submitted partner only after operational review. Suspension stops
+new matching and pending offer acceptance; it intentionally does not abandon
+an already accepted paid order. Close only a partner that should never return
+to service. Never repair lifecycle or capacity with direct SQL.
+
+Partners publish a new immutable version when hours, services, equipment or
+capacity change. Use the branch `acceptingOrders` switch for an immediate pause
+and bounded availability exceptions for planned downtime. Held reservations
+count against capacity until accept, reject or expiry. If capacity appears
+stuck, inspect bounded offer/reservation states and redeliver the existing
+outbox job; do not delete reservations or assignment rows.
+
+Run `bash ops/verify/stage10.sh` on a Docker host. Production geocoding/maps
+requires a separately contracted adapter and secret-store configuration; the
+pilot matcher uses deterministic supplied coordinates and does no route
+optimization. Backups include immutable network versions, evaluations and
+reservations, and restore validation checks that workload does not exceed the
+active capacity version.

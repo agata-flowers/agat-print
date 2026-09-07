@@ -159,3 +159,21 @@ included in customer/courier delivery views.
 - Reconciliation mismatches are durable incidents. Operators retry through
   guarded commands; direct financial-state SQL and silent correction are
   prohibited.
+
+## Stage 10 partner-network controls
+
+- ADMIN alone moderates lifecycle. PARTNER mutations select branches through
+  authenticated ownership; a foreign branch or availability identifier is not
+  disclosed. CUSTOMER, COURIER and machine identities have no network-admin
+  authority.
+- Operational contacts are AES-256-GCM encrypted with the deployment-managed
+  delivery data key. API views expose only `hasOperationalContact`; plaintext,
+  coordinates and identifiers are not logged, audited or used as metric labels.
+- Every network mutation requires `Idempotency-Key`; its scope includes the
+  authenticated owner or target branch. Same key with changed input conflicts.
+- Matching/accept uses PostgreSQL row locks, immutable version references,
+  capacity reservations and order CAS. Configuration changes or suspension
+  invalidate pending acceptance instead of creating a stale assignment.
+- Audit metadata contains only bounded operation, lifecycle and result values.
+  Candidate explanations use bounded reason-code enums and numeric score
+  components, never contacts, customer data or provider payloads.

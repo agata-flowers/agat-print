@@ -126,3 +126,19 @@ before execution and uploaded with `if: always()` without changing job failure.
 Vendor acceptance is separate: real OTP delivery, acquiring/fiscal sandbox
 certification and payout settlement cannot be marked verified until credentials,
 merchant contracts, webhook endpoints and provider test environments exist.
+
+## Stage 10 gate
+
+`bash ops/verify/stage10.sh` applies all migrations twice to a clean PostgreSQL
+database and runs the dedicated partner-network DB-E2E suite. It verifies draft
+and moderation lifecycle, owner isolation, encrypted contact storage, immutable
+configuration history, catalog/availability/service-area filters, bounded reason
+codes, deterministic order, last-slot capacity races, stale-offer rejection,
+concurrent accept, suspension behavior and safe completion of accepted work.
+
+The GitHub Actions infrastructure job runs Stage 2–9 scripts first, then Stage 10. The Stage 10 gate also builds Compose images, checks PostgreSQL, Redis,
+MinIO, ClamAV and API health, observes the existing BullMQ matching queue,
+checks no-store/privacy telemetry, performs an encrypted off-host backup and
+isolated restore, validates network/reservation integrity and records measured
+RPO/RTO. `stage10-verification-report` is uploaded with `if: always()`; an
+earlier failure remains a failed job and a diagnostic report is still retained.
