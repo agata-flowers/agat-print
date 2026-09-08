@@ -222,3 +222,19 @@ pilot matcher uses deterministic supplied coordinates and does no route
 optimization. Backups include immutable network versions, evaluations and
 reservations, and restore validation checks that workload does not exceed the
 active capacity version.
+
+## Stage 11 customer ordering operations
+
+Publish the initial catalog from the ADMIN UI/API only after an active tariff
+exists. Corrections create a new catalog version and intentionally make quotes
+from the retired version stale. Never edit catalog or quote rows directly.
+
+Set `ORDERING_DISPATCH_ENABLED=true` on API worker instances. The worker
+projects committed outbox events into the bounded timeline and durable in-app
+inbox. Redis loss is recovered by scanning unclaimed outbox events; database
+inbox/job uniqueness prevents duplicates. It also expires non-checked-out
+drafts and active quotes; existing unfinished-upload cleanup remains in force.
+
+Run `bash ops/verify/stage11.sh` on a Docker host. Production outbound
+notification delivery remains blocked on a contracted provider, while the
+in-app inbox has no external dependency.

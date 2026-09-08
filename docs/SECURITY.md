@@ -177,3 +177,18 @@ included in customer/courier delivery views.
 - Audit metadata contains only bounded operation, lifecycle and result values.
   Candidate explanations use bounded reason-code enums and numeric score
   components, never contacts, customer data or provider payloads.
+
+## Stage 11 customer-ordering controls
+
+- Public reads expose only published RU/UZ copy, bounded options and supported
+  file kinds. Publication is ADMIN-only, idempotent and safely audited.
+- Draft, upload, layout, quote, order, timeline and notification access is
+  constrained by authenticated ownership; foreign resources return not found.
+- Browser totals are display-only. Quote and checkout re-read active immutable
+  catalog/tariff versions and current approval, then recompute integer amounts.
+- Source/configuration changes invalidate approval and quote. A canonical
+  configuration hash participates in layout provenance.
+- Responses and projections exclude raw state names, payout/commission data,
+  provider references, filenames, object keys and persisted signed URLs.
+- Catalog/new-order/draft/order/notification routes are network-only and
+  `no-store, private`; ephemeral preview URLs remain in component memory only.

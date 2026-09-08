@@ -142,3 +142,17 @@ checks no-store/privacy telemetry, performs an encrypted off-host backup and
 isolated restore, validates network/reservation integrity and records measured
 RPO/RTO. `stage10-verification-report` is uploaded with `if: always()`; an
 earlier failure remains a failed job and a diagnostic report is still retained.
+
+## Stage 11 gate
+
+`bash ops/verify/stage11.sh` builds infrastructure and the isolated processing
+image, applies migrations twice and runs customer-ordering DB-E2E for PDF,
+DOCX, JPEG and PNG, ownership, immutable/stale lineage, idempotency, concurrent
+checkout, notification redelivery and draft expiry.
+
+It then starts the real API/PWA/worker stack and uses Playwright Chromium to
+traverse the RU mobile journey from catalog through upload, processing,
+preview, approval, quote, checkout and timeline. Cache/privacy checks and an
+encrypted backup plus isolated restore record measured RPO/RTO. Actions runs
+Stage 2–10 first and uploads the diagnostic report with `if: always()` without
+turning a failed assertion into success.

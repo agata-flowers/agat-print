@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.9.0
+  version: 0.11.0
 servers:
   - url: /api/v1
 paths:
@@ -201,6 +201,11 @@ paths:
         "201": { description: New active tariff version }
         "403": { description: Admin required }
   /orders:
+    get:
+      summary: List owner-scoped customer order projections
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Localized bounded status and frozen total only }
     post:
       summary: Create an order from the latest active layout approval
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
@@ -945,6 +950,122 @@ paths:
       responses:
         "200": { description: Own ledger without customer or provider data }
         "403": { description: Partner permission required }
+  /catalog:
+    get:
+      summary: Read the active localized platform service catalog
+      parameters:
+        - in: query
+          name: locale
+          schema: { type: string, enum: [ru, uz] }
+      responses:
+        "200":
+          {
+            description: Published services,
+            accepted kinds and bounded options,
+          }
+        "404": { description: No catalog is currently published }
+  /admin/catalog/versions:
+    post:
+      summary: Publish one immutable catalog version (ADMIN only)
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201":
+          { description: Version published and prior active version retired }
+        "403": { description: Admin required }
+        "409": { description: Invalid catalog or idempotency conflict }
+  /order-drafts:
+    get:
+      summary: List resumable drafts owned by the customer
+      security: [{ AccessCookie: [] }]
+      responses: { "200": { description: Bounded customer draft projections } }
+    post:
+      summary: Create an owner-scoped order draft from a published service
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Draft created }
+        "409": { description: Invalid service/options or conflicting replay }
+  /order-drafts/{draftId}:
+    get:
+      summary: Resume an owned draft
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200":
+          { description: Customer presentation state without storage internals }
+        "404": { description: Not owned or not found }
+    delete:
+      summary: Cancel an owned draft safely
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "200": { description: Cancelled or replayed } }
+  /order-drafts/{draftId}/upload-session:
+    post:
+      summary: Start the existing protected upload pipeline for a draft
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Upload session linked to the draft } }
+  /order-drafts/{draftId}/content:
+    put:
+      summary: Stream the declared file bytes into the existing quarantine flow
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Bytes accepted for protected processing }
+        "413": { description: Configured file-size limit exceeded }
+  /order-drafts/{draftId}/create-layout:
+    post:
+      summary: Start preflight/layout using canonical draft options
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Existing layout pipeline invoked } }
+  /order-drafts/{draftId}/preview-url:
+    get:
+      summary: Issue a short-lived no-store preview URL for the owner
+      security: [{ AccessCookie: [] }]
+      responses:
+        { "200": { description: Ephemeral URL; never persisted client-side } }
+  /order-drafts/{draftId}/approve:
+    post:
+      summary: Confirm only the latest current preview
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Existing LayoutApproval linked } }
+  /order-drafts/{draftId}/quote:
+    post:
+      summary: Create an immutable expiring server-authoritative quote
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: UZS integer-minor-unit quote }
+        "409":
+          { description: Stale catalog, tariff, source, layout or approval }
+  /order-drafts/{draftId}/checkout:
+    post:
+      summary: Recompute and create one order with immutable PriceSnapshot
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Existing order/payment path created or replayed }
+        "409":
+          { description: Stale lineage, concurrent checkout or changed replay }
+  /orders/{orderId}/timeline:
+    get:
+      summary: Read an owner-scoped bounded customer timeline
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Presentation codes and timestamps only }
+        "404": { description: Not owned or not found }
+  /notifications:
+    get:
+      summary: Read durable localized in-app notifications
+      security: [{ AccessCookie: [] }]
+      responses: { "200": { description: Owner-scoped notification inbox } }
+  /notifications/{notificationId}/read:
+    post:
+      summary: Mark an owned notification read idempotently
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Read state stored or replayed } }
 components:
   securitySchemes:
     AccessCookie:

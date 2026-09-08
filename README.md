@@ -172,7 +172,20 @@ blocks new work without stranding an already accepted paid order. Run
 `bash ops/verify/stage10.sh` on a Docker host for the DB concurrency, Redis,
 Compose, privacy and isolated backup/restore gate.
 
+## Customer ordering MVP
+
+Publish the service catalog at `/admin/catalog`; customers then use the
+mobile-first home and `/catalog` journey. Draft configuration, protected upload,
+processing, preview/approval, server-authoritative quote and checkout reuse the
+accepted Stage 3–10 modules. `/drafts` resumes unfinished work; `/orders` and
+`/notifications` provide owner-scoped RU/UZ projections without backend or
+storage details.
+
+PDF, DOCX, JPEG and PNG remain the only accepted formats. Run
+`bash ops/verify/stage11.sh` on a Docker host for clean/repeated migrations,
+DB-E2E, the Playwright mobile journey, privacy, backup and isolated restore.
+
 ## Scope boundary
 
-Stage 11, customer marketplace browsing, advanced routing, document editing
-and unrelated product features require separate approval.
+Customer partner browsing, advanced routing, document editing and any stage
+after Stage 11 require separate approval.

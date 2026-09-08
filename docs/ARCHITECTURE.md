@@ -344,3 +344,38 @@ eligibility, then consumes the reservation in the assignment transaction.
 Reject/expiry releases it once. Suspension blocks new offers and pending
 acceptance, but an already accepted job may safely finish production and
 fulfillment. Existing unique assignment and aggregate CAS guarantees remain.
+
+## ADR 11: customer checkout composes existing aggregates
+
+Stage 11 adds a thin ordering orchestration layer rather than a second order
+state machine. An immutable `PlatformCatalogVersion` maps localized services
+and bounded option schemas to service codes already consumed by partner
+catalogs. `OrderDraft` is an owner-scoped, versioned pointer to the existing
+upload, layout and current approval; it contains no file bytes or signed URLs.
+
+Every quote freezes catalog, tariff, configuration, print-ready and approval
+lineage. Checkout locks the draft through the existing commerce transaction,
+recomputes integer UZS amounts and creates the existing `Order` and immutable
+`PriceSnapshot`. Retired catalogs, changed tariffs, source/configuration
+changes and stale approvals fail closed. Unique lineage plus idempotency hashes
+prevents duplicate checkout under retries and races.
+
+Customer timeline and notification projections consume committed outbox events
+through BullMQ. PostgreSQL job leases, inbox deduplication and unique outbox
+relations are authoritative; Redis is transport only.
+
+```mermaid
+erDiagram
+  PlatformCatalogVersion ||--|{ PlatformCatalogItem : publishes
+  PlatformCatalogItem ||--o{ OrderDraft : configures
+  TariffVersion ||--o{ TariffRule : contains
+  OrderDraft ||--o{ PriceQuote : quotes
+  OrderDraft o|--|| UploadSession : reuses
+  OrderDraft o|--|| LayoutRequest : reuses
+  OrderDraft o|--|| LayoutApproval : confirms
+  OrderDraft ||--o| Order : checks_out
+  PriceQuote ||--o| Order : freezes
+  Order ||--o{ CustomerOrderEvent : projects
+  OutboxEvent ||--o| NotificationJob : dispatches
+  User ||--o{ UserNotification : receives
+```
