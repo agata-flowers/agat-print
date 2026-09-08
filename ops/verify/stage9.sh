@@ -7,14 +7,16 @@ phase=initialization
 rpo=null
 rto=null
 db_e2e=not_run
+failure_line=null
 execution_environment=local-docker
 [[ -n "${GITHUB_ACTIONS:-}" ]] && execution_environment=github-actions
 write_report() {
   local checks=not_completed
   [[ "$1" == success ]] && checks=passed
-  printf '{"result":"%s","phase":"%s","rpoSeconds":%s,"rtoSeconds":%s,"scope":"production-otp-payment-fiscal-payout-reconciliation","executionEnvironment":"%s","databaseE2E":"%s","stage1To8Regression":"executed-by-prior-workflow-gates","requiredChecks":"%s","externalProviders":"credentials-and-contracts-required"}\n' "$1" "$phase" "$rpo" "$rto" "$execution_environment" "$db_e2e" "$checks" > "$report_dir/stage9-verification-report.json"
+  printf '{"result":"%s","phase":"%s","failureLine":%s,"rpoSeconds":%s,"rtoSeconds":%s,"scope":"production-otp-payment-fiscal-payout-reconciliation","executionEnvironment":"%s","databaseE2E":"%s","stage1To8Regression":"executed-by-prior-workflow-gates","requiredChecks":"%s","externalProviders":"credentials-and-contracts-required"}\n' "$1" "$phase" "$failure_line" "$rpo" "$rto" "$execution_environment" "$db_e2e" "$checks" > "$report_dir/stage9-verification-report.json"
 }
 write_report running
+trap 'failure_line=$LINENO' ERR
 cleanup() {
   local result="$?"
   if [[ "$result" -ne 0 ]]; then
