@@ -10,6 +10,7 @@ rpo=null
 rto=null
 db_e2e=not_run
 browser_e2e=not_run
+failure_line=null
 api_pid=""
 web_pid=""
 execution_environment=local-docker
@@ -18,11 +19,12 @@ execution_environment=local-docker
 write_report() {
   local result="$1" checks=not_completed
   [[ "$result" == success ]] && checks=passed
-  printf '{"result":"%s","phase":"%s","commitSha":"%s","scope":"customer-ordering-service-catalog-mvp","executionEnvironment":"%s","databaseE2E":"%s","browserE2E":"%s","stage1To10Regression":"executed-by-prior-workflow-gates","migrations":"clean-and-repeatable","securityPrivacyConcurrencyIdempotency":"%s","backupRestore":"%s","rpoSeconds":%s,"rtoSeconds":%s}\n' \
-    "$result" "$phase" "${GITHUB_SHA:-$(git rev-parse HEAD)}" "$execution_environment" "$db_e2e" "$browser_e2e" "$checks" "$checks" "$rpo" "$rto" > "$report_dir/stage11-verification-report.json"
+  printf '{"result":"%s","phase":"%s","failureLine":%s,"commitSha":"%s","scope":"customer-ordering-service-catalog-mvp","executionEnvironment":"%s","databaseE2E":"%s","browserE2E":"%s","stage1To10Regression":"executed-by-prior-workflow-gates","migrations":"clean-and-repeatable","securityPrivacyConcurrencyIdempotency":"%s","backupRestore":"%s","rpoSeconds":%s,"rtoSeconds":%s}\n' \
+    "$result" "$phase" "$failure_line" "${GITHUB_SHA:-$(git rev-parse HEAD)}" "$execution_environment" "$db_e2e" "$browser_e2e" "$checks" "$checks" "$rpo" "$rto" > "$report_dir/stage11-verification-report.json"
 }
 
 write_report running
+trap 'failure_line=$LINENO' ERR
 cleanup() {
   local result="$?"
   [[ -n "$web_pid" ]] && kill "$web_pid" >/dev/null 2>&1 || true

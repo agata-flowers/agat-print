@@ -164,7 +164,16 @@ jobs:
         run: |
           printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage11-verification-report.json
       - name: Run stage 11 customer ordering verification
-        run: bash ops/verify/stage11.sh
+        run: |
+          set +e
+          bash ops/verify/stage11.sh
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            diagnostic="$(node -e 'const fs=require("node:fs"); const p="outputs/stage11-verification-report.json"; if(!fs.existsSync(p)){process.stdout.write("phase=report-missing; failureLine=unknown"); process.exit(0)} const r=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(`phase=${r.phase}; failureLine=${r.failureLine ?? "unknown"}`)')"
+            echo "::error title=Stage 11 verification diagnostic::$diagnostic"
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
