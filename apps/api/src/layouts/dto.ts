@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsUUID,
+  Matches,
   Max,
   Min,
 } from "class-validator";
@@ -33,6 +34,10 @@ export class GenerateLayoutDto {
 
   @IsBoolean()
   photoDocument!: boolean;
+
+  @IsOptional()
+  @Matches(/^[a-f0-9]{64}$/)
+  customerConfigurationHash?: string;
 }
 
 export class ConfirmLayoutDto {

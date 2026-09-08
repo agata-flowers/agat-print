@@ -59,6 +59,7 @@ export interface AppEnvironment {
   printerAgentTokenPepper: string;
   printerAgentLeaseSeconds: number;
   aftercareDispatchEnabled: boolean;
+  orderingDispatchEnabled: boolean;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -197,6 +198,8 @@ export function loadEnvironment(
     nodeEnv,
     aftercareDispatchEnabled:
       (source.AFTERCARE_DISPATCH_ENABLED ?? "false") === "true",
+    orderingDispatchEnabled:
+      (source.ORDERING_DISPATCH_ENABLED ?? "false") === "true",
     webOrigin,
     port: integer(source.API_PORT, 4000),
     jwtSecret,

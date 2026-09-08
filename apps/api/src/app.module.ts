@@ -17,6 +17,7 @@ import { ProfileModule } from "./profile/profile.module";
 import { UploadsModule } from "./uploads/uploads.module";
 import { DisputesModule } from "./disputes/disputes.module";
 import { FinanceModule } from "./finance/finance.module";
+import { OrderingModule } from "./ordering/ordering.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { FinanceModule } from "./finance/finance.module";
     FulfillmentModule,
     DisputesModule,
     FinanceModule,
+    OrderingModule,
   ],
   controllers: [HealthController],
   providers: [

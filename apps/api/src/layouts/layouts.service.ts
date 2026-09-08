@@ -34,6 +34,7 @@ const hashSettings = (sourceFileVersion: string, input: GenerateLayoutDto) =>
         targetHeightMm: input.targetHeightMm,
         minDpi: input.minDpi,
         photoDocument: input.photoDocument,
+        customerConfigurationHash: input.customerConfigurationHash,
       }),
     )
     .digest("hex");
@@ -105,6 +106,7 @@ export class LayoutsService {
       targetHeightMm: input.targetHeightMm,
       minDpi: input.minDpi,
       photoDocument: input.photoDocument,
+      customerConfigurationHash: input.customerConfigurationHash,
     };
     const layout = existing
       ? await this.prisma.$transaction(async (tx) => {

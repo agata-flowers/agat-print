@@ -30,6 +30,43 @@ enum NetworkVersionStatus {
   RETIRED
 }
 
+enum PlatformCatalogStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum OrderDraftStatus {
+  CONFIGURING
+  FILE_UPLOADED
+  PROCESSING
+  AWAITING_APPROVAL
+  READY_FOR_QUOTE
+  QUOTED
+  CHECKED_OUT
+  CANCELLED
+  EXPIRED
+}
+
+enum PriceQuoteStatus {
+  ACTIVE
+  CONSUMED
+  STALE
+  EXPIRED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+enum NotificationJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  DEAD_LETTER
+}
+
 enum AvailabilityKind {
   AVAILABLE
   UNAVAILABLE
@@ -381,6 +418,9 @@ model User {
   legalHoldsReleased   LegalHold[]                   @relation("LegalHoldReleaser")
   settlementBatches    SettlementBatch[]             @relation("SettlementBatchCreator")
   reconciliations      FinancialReconciliation[]     @relation("ReconciliationActor")
+  platformCatalogs     PlatformCatalogVersion[]      @relation("PlatformCatalogPublisher")
+  orderDrafts          OrderDraft[]
+  notifications        UserNotification[]
 }
 
 model UserRole {
@@ -587,6 +627,45 @@ model BranchAvailabilityException {
   @@index([branchId, startsAt, endsAt])
 }
 
+/// Immutable published customer catalog. New versions supersede rather than edit.
+model PlatformCatalogVersion {
+  id          String                @id @default(uuid()) @db.Uuid
+  version     Int                   @unique
+  status      PlatformCatalogStatus @default(DRAFT)
+  createdById String                @db.Uuid
+  createdAt   DateTime              @default(now())
+  publishedAt DateTime?
+  retiredAt   DateTime?
+  createdBy   User                  @relation("PlatformCatalogPublisher", fields: [createdById], references: [id], onDelete: Restrict)
+  items       PlatformCatalogItem[]
+  drafts      OrderDraft[]
+  quotes      PriceQuote[]
+
+  @@index([status, version])
+}
+
+model PlatformCatalogItem {
+  id                String                 @id @default(uuid()) @db.Uuid
+  catalogVersionId  String                 @db.Uuid
+  serviceCode       String                 @db.VarChar(40)
+  slug              String                 @db.VarChar(80)
+  titleRu           String                 @db.VarChar(120)
+  titleUz           String                 @db.VarChar(120)
+  descriptionRu     String                 @db.VarChar(500)
+  descriptionUz     String                 @db.VarChar(500)
+  acceptedFileKinds UploadFileKind[]
+  optionSchema      Json
+  sortOrder         Int                    @default(100)
+  enabled           Boolean                @default(true)
+  catalogVersion    PlatformCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  drafts            OrderDraft[]
+  quotes            PriceQuote[]
+
+  @@unique([catalogVersionId, serviceCode])
+  @@unique([catalogVersionId, slug])
+  @@index([catalogVersionId, enabled, sortOrder])
+}
+
 model AuditEvent {
   id         String   @id @default(uuid()) @db.Uuid
   actorId    String?  @db.Uuid
@@ -658,6 +737,7 @@ model UploadSession {
   processingJobs      ProcessingJob[]
   processingResults   ProcessingResult[]
   layout              LayoutRequest?
+  orderDraft          OrderDraft?
 
   @@index([userId, status])
   @@index([status, expiresAt])
@@ -723,6 +803,7 @@ model LayoutRequest {
   approvals          LayoutApproval[]
   manualReviews      ManualReview[]
   orders             Order[]
+  orderDraft         OrderDraft?
 
   @@index([userId, status])
   @@index([status, updatedAt])
@@ -781,6 +862,7 @@ model LayoutApproval {
   previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
   user             User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   order            Order?
+  orderDraft       OrderDraft?
 
   @@unique([layoutId, previewVersionId])
   @@index([userId, createdAt])
@@ -798,8 +880,88 @@ model TariffVersion {
   retiredAt         DateTime?
   createdBy         User            @relation("TariffAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   priceSnapshots    PriceSnapshot[]
+  rules             TariffRule[]
+  quotes            PriceQuote[]
 
   @@index([status, version])
+}
+
+/// Immutable service-specific rule inside one tariff version.
+model TariffRule {
+  id                String        @id @default(uuid()) @db.Uuid
+  tariffVersionId   String        @db.Uuid
+  serviceCode       String        @db.VarChar(40)
+  basePriceMinor    BigInt
+  perPagePriceMinor BigInt
+  optionPrices      Json
+  createdAt         DateTime      @default(now())
+  tariffVersion     TariffVersion @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([tariffVersionId, serviceCode])
+}
+
+model OrderDraft {
+  id               String                 @id @default(uuid()) @db.Uuid
+  userId           String                 @db.Uuid
+  catalogVersionId String                 @db.Uuid
+  catalogItemId    String                 @db.Uuid
+  serviceCode      String                 @db.VarChar(40)
+  locale           String                 @default("ru") @db.VarChar(8)
+  configuration    Json
+  quantity         Int                    @default(1)
+  status           OrderDraftStatus       @default(CONFIGURING)
+  version          Int                    @default(0)
+  uploadId         String?                @unique @db.Uuid
+  layoutId         String?                @unique @db.Uuid
+  layoutApprovalId String?                @unique @db.Uuid
+  expiresAt        DateTime
+  cancelledAt      DateTime?
+  checkedOutAt     DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  catalogVersion   PlatformCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  catalogItem      PlatformCatalogItem    @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  upload           UploadSession?         @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  layout           LayoutRequest?         @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval   LayoutApproval?        @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  quotes           PriceQuote[]
+  order            Order?
+
+  @@index([userId, status, updatedAt])
+  @@index([status, expiresAt])
+}
+
+model PriceQuote {
+  id               String                 @id @default(uuid()) @db.Uuid
+  draftId          String                 @db.Uuid
+  sequence         Int
+  draftVersion     Int
+  catalogVersionId String                 @db.Uuid
+  catalogItemId    String                 @db.Uuid
+  tariffVersionId  String                 @db.Uuid
+  tariffVersion    Int
+  layoutVersion    Int
+  layoutApprovalId String                 @db.Uuid
+  sourceParameters Json
+  lineItems        Json
+  quantity         Int
+  subtotalMinor    BigInt
+  discountMinor    BigInt                 @default(0)
+  totalMinor       BigInt
+  currency         String                 @default("UZS") @db.Char(3)
+  status           PriceQuoteStatus       @default(ACTIVE)
+  expiresAt        DateTime
+  createdAt        DateTime               @default(now())
+  consumedAt       DateTime?
+  draft            OrderDraft             @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  catalogVersion   PlatformCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  catalogItem      PlatformCatalogItem    @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  tariff           TariffVersion          @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+  order            Order?
+
+  @@unique([draftId, sequence])
+  @@index([draftId, status, expiresAt])
 }
 
 model Order {
@@ -813,6 +975,8 @@ model Order {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   disputeEligibleAt   DateTime?
+  orderDraftId        String?              @unique @db.Uuid
+  priceQuoteId        String?              @unique @db.Uuid
   user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   layout              LayoutRequest        @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   layoutApproval      LayoutApproval       @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
@@ -831,9 +995,59 @@ model Order {
   legalHolds          LegalHold[]
   fiscalOperations    FiscalOperation[]
   partnerLedger       PartnerLedgerEntry[]
+  orderDraft          OrderDraft?          @relation(fields: [orderDraftId], references: [id], onDelete: Restrict)
+  priceQuote          PriceQuote?          @relation(fields: [priceQuoteId], references: [id], onDelete: Restrict)
+  customerEvents      CustomerOrderEvent[]
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
+}
+
+model CustomerOrderEvent {
+  id            String      @id @default(uuid()) @db.Uuid
+  orderId       String      @db.Uuid
+  outboxEventId String      @unique @db.Uuid
+  sequence      Int
+  eventCode     String      @db.VarChar(80)
+  createdAt     DateTime    @default(now())
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  outboxEvent   OutboxEvent @relation(fields: [outboxEventId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, sequence])
+  @@index([orderId, createdAt])
+}
+
+model UserNotification {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @db.Uuid
+  outboxEventId String             @db.Uuid
+  eventCode     String             @db.VarChar(80)
+  titleKey      String             @db.VarChar(80)
+  bodyKey       String             @db.VarChar(80)
+  status        NotificationStatus @default(UNREAD)
+  createdAt     DateTime           @default(now())
+  readAt        DateTime?
+  user          User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  outboxEvent   OutboxEvent        @relation(fields: [outboxEventId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, outboxEventId])
+  @@index([userId, status, createdAt])
+}
+
+model NotificationJob {
+  id            String                @id @default(uuid()) @db.Uuid
+  outboxEventId String                @unique @db.Uuid
+  dedupKey      String                @unique @db.Char(64)
+  status        NotificationJobStatus @default(PENDING)
+  attempts      Int                   @default(0)
+  leaseOwner    String?               @db.VarChar(100)
+  leaseUntil    DateTime?
+  lastErrorCode String?               @db.VarChar(80)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  outboxEvent   OutboxEvent           @relation(fields: [outboxEventId], references: [id], onDelete: Restrict)
+
+  @@index([status, leaseUntil])
 }
 
 /// Courier onboarding is role-gated independently from partner ownership.
@@ -1429,15 +1643,18 @@ model ManualReview {
 }
 
 model OutboxEvent {
-  id               String    @id @default(uuid()) @db.Uuid
-  aggregateType    String    @db.VarChar(50)
-  aggregateId      String    @db.Uuid
+  id               String              @id @default(uuid()) @db.Uuid
+  aggregateType    String              @db.VarChar(50)
+  aggregateId      String              @db.Uuid
   aggregateVersion Int
-  eventType        String    @db.VarChar(80)
-  dedupKey         String    @unique @db.Char(64)
+  eventType        String              @db.VarChar(80)
+  dedupKey         String              @unique @db.Char(64)
   payload          Json
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime            @default(now())
   publishedAt      DateTime?
+  notifications    UserNotification[]
+  notificationJob  NotificationJob?
+  customerEvent    CustomerOrderEvent?
 
   @@index([publishedAt, createdAt])
 }

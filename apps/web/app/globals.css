@@ -185,6 +185,76 @@ h1 {
   font-size: 18px;
   background: white;
 }
+.auth-form select {
+  height: 52px;
+  border: 1px solid #cbbab2;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 16px;
+  background: white;
+}
+.language {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.service-grid,
+.journey,
+.draft-flow,
+.review-list {
+  display: grid;
+  gap: 18px;
+}
+.service-card,
+.order-card,
+.notice,
+.quote {
+  border: 1px solid #eaded9;
+  border-radius: 12px;
+  padding: 22px;
+  background: white;
+}
+.service-card {
+  display: grid;
+  gap: 12px;
+}
+.service-card h2,
+.service-card p {
+  margin: 0;
+}
+.service-card small {
+  color: var(--muted);
+}
+.file-picker {
+  display: grid;
+  gap: 10px;
+  font-weight: 700;
+}
+.file-picker input {
+  padding: 16px;
+  border: 1px dashed #b7988d;
+  border-radius: 8px;
+  background: white;
+}
+.quote,
+.order-card {
+  display: grid;
+  gap: 9px;
+  text-decoration: none;
+}
+.quote strong {
+  color: var(--wine);
+  font-size: 28px;
+}
+.notice.error {
+  border-color: #b33a2f;
+  color: #7d2119;
+}
+.notice.unread {
+  border-left: 4px solid var(--wine);
+}
 .pin {
   border: 1px solid var(--wine);
   border-radius: 8px;
@@ -208,8 +278,17 @@ footer {
   font-size: 13px;
 }
 @media (max-width: 700px) {
-  .topbar nav a:first-child {
+  .topbar nav a:nth-child(n + 3) {
     display: none;
+  }
+  .topbar {
+    padding: 0 18px;
+  }
+  nav {
+    gap: 14px;
+  }
+  h1 {
+    font-size: 44px;
   }
   .features {
     grid-template-columns: 1fr;

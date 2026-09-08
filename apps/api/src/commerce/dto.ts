@@ -2,6 +2,7 @@ import {
   IsIn,
   IsInt,
   IsOptional,
+  IsArray,
   IsString,
   IsUUID,
   Matches,
@@ -17,6 +18,15 @@ export class CreateTariffDto {
   @IsString()
   @Matches(/^\d{1,15}$/)
   perPagePriceMinor!: string;
+
+  @IsOptional()
+  @IsArray()
+  rules?: Array<{
+    serviceCode: string;
+    basePriceMinor: string;
+    perPagePriceMinor: string;
+    optionPrices: Record<string, string>;
+  }>;
 }
 
 export class CreateOrderDto {
@@ -27,6 +37,14 @@ export class CreateOrderDto {
   @Min(1)
   @Max(10_000)
   quantity!: number;
+
+  @IsOptional()
+  @IsUUID()
+  orderDraftId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  priceQuoteId?: string;
 }
 
 export class StartPaymentDto {

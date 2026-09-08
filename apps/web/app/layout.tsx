@@ -28,9 +28,10 @@ export default function RootLayout({
             AGAT <span>PRINT</span>
           </Link>
           <nav>
-            <Link href="/profile">Профиль</Link>
+            <Link href="/catalog">Услуги</Link>
+            <Link href="/orders">Заказы</Link>
+            <Link href="/notifications">Уведомления</Link>
             <Link href="/partner">Партнёрам</Link>
-            <Link href="/courier">Курьерам</Link>
           </nav>
         </header>
         {children}

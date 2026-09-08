@@ -2,28 +2,17 @@
 
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { apiRequest } from "../../../lib/api";
+import { ApiError, apiRequest } from "../../../lib/api";
+import { customerError, useCustomerLocale } from "../../../lib/customer-i18n";
 
 type OrderView = {
   id: string;
   status: string;
-  price: null | {
-    totalMinor: string;
-    currency: string;
-    quantity: number;
-    tariffVersion: number;
-  };
-  payment: null | { status: string; refundStatus: string | null };
-  fiscal: Array<{
-    type: string;
-    status: string;
-    amountMinor: string;
-    currency: string;
-  }>;
+  price: null | { totalMinor: string; currency: string; quantity: number };
+  payment: null | { status: string };
   fulfillment: null | {
     mode: "PICKUP" | "DELIVERY";
     status: string;
-    expiresAt: string;
     deliveryStatus: string | null;
   };
 };
@@ -31,16 +20,123 @@ type DisputeView = {
   id: string;
   category: string;
   status: string;
-  resolution: null | {
-    type: string;
-    refundAmountMinor: string | null;
-    currency: string | null;
-  };
+  resolution: null | { type: string };
 };
+type Timeline = {
+  current: string;
+  events: Array<{ presentation: string; at: string }>;
+};
+
+const copy = {
+  ru: {
+    title: "Ваш заказ",
+    total: "Итого",
+    payment: "Оплатить",
+    payWaiting: "Ожидаем подтверждение платёжного провайдера.",
+    payFailed: "Оплата не завершена. Повторите попытку — заказ сохранён.",
+    pickup: "Самовывоз",
+    delivery: "Доставка",
+    address: "Адрес доставки",
+    savePin:
+      "Сохраните PIN до получения заказа. Он показывается только один раз.",
+    issue: "Сообщить о проблеме",
+    open: "Отправить обращение",
+    cancel: "Отменить обращение",
+    unavailable: "Заказ недоступен или принадлежит другому пользователю.",
+    timeline: "Ход заказа",
+  },
+  uz: {
+    title: "Buyurtmangiz",
+    total: "Jami",
+    payment: "To‘lash",
+    payWaiting: "To‘lov provayderi tasdig‘ini kutyapmiz.",
+    payFailed:
+      "To‘lov yakunlanmadi. Qayta urinib ko‘ring — buyurtma saqlangan.",
+    pickup: "Olib ketish",
+    delivery: "Yetkazib berish",
+    address: "Yetkazib berish manzili",
+    savePin:
+      "Buyurtmani olishgacha PIN-kodni saqlang. U faqat bir marta ko‘rsatiladi.",
+    issue: "Muammo haqida xabar berish",
+    open: "Murojaat yuborish",
+    cancel: "Murojaatni bekor qilish",
+    unavailable: "Buyurtma mavjud emas yoki boshqa foydalanuvchiga tegishli.",
+    timeline: "Buyurtma jarayoni",
+  },
+} as const;
+const stateLabels = {
+  ru: {
+    AWAITING_PAYMENT: "Ожидает оплаты",
+    PAID: "Оплата получена",
+    MATCHING: "Ищем подходящую студию",
+    PARTNER_OFFERED: "Студии предложен заказ",
+    PARTNER_ACCEPTED: "Студия приняла заказ",
+    IN_PRODUCTION: "Заказ печатается",
+    READY: "Готов к получению",
+    AWAITING_PICKUP: "Ожидает выдачи",
+    COURIER_ASSIGNED: "Курьер назначен",
+    IN_DELIVERY: "В доставке",
+    COMPLETED: "Завершён",
+    DELIVERY_FAILED: "Доставка не состоялась",
+    DISPUTED: "Обращение рассматривается",
+    REPRINT: "Назначена повторная печать",
+    REFUND_PENDING: "Возврат подтверждается",
+    PARTIALLY_REFUNDED: "Частичный возврат выполнен",
+    REFUNDED: "Возврат выполнен",
+  },
+  uz: {
+    AWAITING_PAYMENT: "To‘lov kutilmoqda",
+    PAID: "To‘lov qabul qilindi",
+    MATCHING: "Mos studiya qidirilmoqda",
+    PARTNER_OFFERED: "Buyurtma studiyaga taklif qilindi",
+    PARTNER_ACCEPTED: "Studiya buyurtmani qabul qildi",
+    IN_PRODUCTION: "Buyurtma chop etilmoqda",
+    READY: "Olishga tayyor",
+    AWAITING_PICKUP: "Berishni kutmoqda",
+    COURIER_ASSIGNED: "Kuryer tayinlandi",
+    IN_DELIVERY: "Yetkazilmoqda",
+    COMPLETED: "Bajarildi",
+    DELIVERY_FAILED: "Yetkazib berilmadi",
+    DISPUTED: "Murojaat ko‘rib chiqilmoqda",
+    REPRINT: "Qayta chop etish belgilandi",
+    REFUND_PENDING: "Qaytarish tasdiqlanmoqda",
+    PARTIALLY_REFUNDED: "Qisman qaytarildi",
+    REFUNDED: "Pul qaytarildi",
+  },
+} as const;
+const timelineLabels = {
+  ru: {
+    created: "Заказ создан",
+    paid: "Оплата получена",
+    partner_assigned: "Студия назначена",
+    production: "Печать началась",
+    ready: "Заказ готов",
+    delivery: "Заказ передан в доставку",
+    completed: "Заказ завершён",
+    delivery_failed: "Доставка не состоялась",
+    refunded: "Возврат выполнен",
+    updated: "Статус обновлён",
+  },
+  uz: {
+    created: "Buyurtma yaratildi",
+    paid: "To‘lov qabul qilindi",
+    partner_assigned: "Studiya tayinlandi",
+    production: "Chop etish boshlandi",
+    ready: "Buyurtma tayyor",
+    delivery: "Buyurtma yetkazishga berildi",
+    completed: "Buyurtma bajarildi",
+    delivery_failed: "Yetkazib berilmadi",
+    refunded: "Pul qaytarildi",
+    updated: "Holat yangilandi",
+  },
+} as const;
 
 export default function OrderPage() {
   const { id } = useParams<{ id: string }>();
+  const locale = useCustomerLocale();
+  const text = copy[locale];
   const [order, setOrder] = useState<OrderView>();
+  const [timeline, setTimeline] = useState<Timeline>();
   const [message, setMessage] = useState("");
   const [address, setAddress] = useState("");
   const [completionPin, setCompletionPin] = useState("");
@@ -48,20 +144,33 @@ export default function OrderPage() {
   const [category, setCategory] = useState("PRINT_QUALITY");
   const load = useCallback(async () => {
     try {
-      const response = await apiRequest(`/orders/${id}`);
-      setOrder((await response.json()) as OrderView);
-      const disputeResponse = await apiRequest(`/orders/${id}/disputes`);
+      const [orderResponse, disputeResponse, timelineResponse] =
+        await Promise.all([
+          apiRequest(`/orders/${id}`),
+          apiRequest(`/orders/${id}/disputes`),
+          apiRequest(`/orders/${id}/timeline`),
+        ]);
+      setOrder((await orderResponse.json()) as OrderView);
       setDisputes(
         ((await disputeResponse.json()) as { disputes: DisputeView[] })
           .disputes,
       );
-    } catch {
-      setMessage("Заказ недоступен или не принадлежит вам.");
+      setTimeline((await timelineResponse.json()) as Timeline);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        window.location.assign(
+          `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}&lang=${locale}`,
+        );
+        return;
+      }
+      setMessage(text.unavailable);
     }
-  }, [id]);
-
-  useEffect(() => void load(), [load]);
-
+  }, [id, text.unavailable]);
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => void load(), 5000);
+    return () => clearInterval(timer);
+  }, [load]);
   const pay = async () => {
     try {
       const response = await apiRequest(`/orders/${id}/payment`, {
@@ -73,26 +182,41 @@ export default function OrderPage() {
         mockCallback?: unknown;
         mockSignature?: string;
       };
-      if (started.mockCallback && started.mockSignature) {
+      if (started.mockCallback && started.mockSignature)
         await apiRequest("/payments/mock/callback", {
           method: "POST",
           headers: { "X-Provider-Signature": started.mockSignature },
           body: JSON.stringify(started.mockCallback),
         });
-        setMessage("Оплата подтверждена тестовым провайдером.");
-      } else {
+      else
         await apiRequest(`/orders/${id}/payment/confirm`, {
           method: "POST",
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: "{}",
         });
-        setMessage(
-          "Подтверждение отправлено. Ожидаем ответ платёжного провайдера.",
-        );
-      }
+      setMessage(text.payWaiting);
       await load();
     } catch {
-      setMessage("Оплата не завершена. Повторите безопасно с новой попыткой.");
+      setMessage(text.payFailed);
+    }
+  };
+  const requestFulfillment = async (mode: "PICKUP" | "DELIVERY") => {
+    try {
+      const response = await apiRequest(`/orders/${id}/fulfillment`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({
+          mode,
+          ...(mode === "DELIVERY" ? { deliveryAddress: address } : {}),
+        }),
+      });
+      setCompletionPin(
+        ((await response.json()) as { completionPin: string }).completionPin,
+      );
+      setMessage(text.savePin);
+      await load();
+    } catch {
+      setMessage(customerError("REQUEST_FAILED", locale));
     }
   };
   const openDispute = async () => {
@@ -102,10 +226,9 @@ export default function OrderPage() {
         headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ category }),
       });
-      setMessage("Спор открыт. Материалы заказа защищены legal hold.");
       await load();
     } catch {
-      setMessage("Спор недоступен или 72-часовое окно истекло.");
+      setMessage(customerError("REQUEST_FAILED", locale));
     }
   };
   const cancelDispute = async (disputeId: string) => {
@@ -117,83 +240,45 @@ export default function OrderPage() {
       });
       await load();
     } catch {
-      setMessage("Спор уже рассматривается или недоступен.");
+      setMessage(customerError("REQUEST_FAILED", locale));
     }
   };
-
-  const requestFulfillment = async (mode: "PICKUP" | "DELIVERY") => {
-    try {
-      const response = await apiRequest(`/orders/${id}/fulfillment`, {
-        method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({
-          mode,
-          ...(mode === "DELIVERY" ? { deliveryAddress: address } : {}),
-        }),
-      });
-      const body = (await response.json()) as { completionPin: string };
-      setCompletionPin(body.completionPin);
-      setMessage(
-        "Сохраните PIN до получения заказа. Он больше нигде не отображается.",
-      );
-      await load();
-    } catch {
-      setMessage("Не удалось выбрать способ получения.");
-    }
-  };
-
+  const state = order?.status
+    ? (stateLabels[locale][order.status as keyof typeof stateLabels.ru] ??
+      (locale === "uz" ? "Jarayonda" : "В работе"))
+    : locale === "uz"
+      ? "Yuklanmoqda"
+      : "Загрузка";
   return (
     <main className="narrow">
-      <p className="eyebrow">Заказ и оплата</p>
-      <h1>Итоговая цена</h1>
-      <section className="panel">
+      <p className="eyebrow">AGAT PRINT</p>
+      <h1>{text.title}</h1>
+      <section className="panel draft-flow" data-testid="order-status">
+        <h2>{state}</h2>
         {order?.price && (
-          <>
-            <p>
-              {order.price.totalMinor} {order.price.currency} · количество{" "}
-              {order.price.quantity}
-            </p>
-            <p>Версия тарифа: {order.price.tariffVersion}</p>
-          </>
-        )}
-        <p>Статус заказа: {order?.status ?? "LOADING"}</p>
-        <p>Статус платежа: {order?.payment?.status ?? "NOT_STARTED"}</p>
-        {order?.fiscal?.map((operation, index) => (
-          <p key={`${operation.type}-${index}`}>
-            Фискальная операция {operation.type}: {operation.status} ·{" "}
-            {operation.amountMinor} {operation.currency}
+          <p>
+            <strong>
+              {text.total}: {order.price.totalMinor} {order.price.currency}
+            </strong>{" "}
+            · {order.price.quantity}
           </p>
-        ))}
+        )}
         {order?.status === "AWAITING_PAYMENT" && (
-          <button className="button primary" type="button" onClick={pay}>
-            Оплатить
+          <button className="button primary" onClick={pay}>
+            {text.payment}
           </button>
-        )}
-        {order?.status === "REFUND_PENDING" && (
-          <p>Возврат ожидает подтверждения.</p>
-        )}
-        {order?.status === "REFUNDED" && <p>Полный возврат подтверждён.</p>}
-        {order?.status === "PARTIALLY_REFUNDED" && (
-          <p>Частичный возврат подтверждён.</p>
-        )}
-        {order?.status === "DISPUTED" && (
-          <p>Спор рассматривается оператором.</p>
-        )}
-        {order?.status === "REPRINT" && (
-          <p>Назначена повторная печать утверждённого макета.</p>
         )}
         {order?.status === "READY" && (
           <div className="auth-form">
-            <h2>Получение заказа</h2>
+            <h2>{locale === "uz" ? "Buyurtmani olish" : "Получение заказа"}</h2>
             <button
               className="button secondary"
-              type="button"
               onClick={() => requestFulfillment("PICKUP")}
             >
-              Самовывоз
+              {text.pickup}
             </button>
             <label>
-              Адрес доставки
+              {text.address}
               <input
                 value={address}
                 onChange={(event) => setAddress(event.target.value)}
@@ -204,62 +289,77 @@ export default function OrderPage() {
             </label>
             <button
               className="button primary"
-              type="button"
               disabled={address.length < 8}
               onClick={() => requestFulfillment("DELIVERY")}
             >
-              Заказать доставку
+              {text.delivery}
             </button>
           </div>
         )}
         {completionPin && (
           <p className="pin" role="status">
-            PIN получения: <strong>{completionPin}</strong>
+            PIN: <strong>{completionPin}</strong>
           </p>
         )}
-        {order?.status === "AWAITING_PICKUP" && <p>Заказ ожидает выдачи.</p>}
-        {order?.status === "COURIER_ASSIGNED" && <p>Курьер назначен.</p>}
-        {order?.status === "IN_DELIVERY" && <p>Заказ в доставке.</p>}
-        {order?.status === "DELIVERY_FAILED" && <p>Доставка не состоялась.</p>}
-        {order?.status === "COMPLETED" && <p>Заказ успешно завершён.</p>}
+        <section>
+          <h2>{text.timeline}</h2>
+          <ol className="journey">
+            {timeline?.events.map((event, index) => (
+              <li key={`${event.at}-${index}`}>
+                {timelineLabels[locale][
+                  event.presentation as keyof typeof timelineLabels.ru
+                ] ?? timelineLabels[locale].updated}
+                <small>
+                  {new Date(event.at).toLocaleString(
+                    locale === "uz" ? "uz-UZ" : "ru-RU",
+                  )}
+                </small>
+              </li>
+            ))}
+          </ol>
+        </section>
         {["COMPLETED", "DELIVERY_FAILED"].includes(order?.status ?? "") &&
           !disputes.some((item) =>
             ["OPEN", "PARTNER_RESPONDED"].includes(item.status),
           ) && (
             <div className="auth-form">
-              <h2>Сообщить о проблеме</h2>
+              <h2>{text.issue}</h2>
               <select
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
               >
-                <option value="PRINT_QUALITY">Качество печати</option>
-                <option value="WRONG_OUTPUT">Неверный результат</option>
-                <option value="DAMAGED">Повреждение</option>
-                <option value="MISSING_ITEMS">Не хватает материалов</option>
-                <option value="DELIVERY_FAILURE">Проблема доставки</option>
+                <option value="PRINT_QUALITY">
+                  {locale === "uz" ? "Chop etish sifati" : "Качество печати"}
+                </option>
+                <option value="WRONG_OUTPUT">
+                  {locale === "uz" ? "Noto‘g‘ri natija" : "Неверный результат"}
+                </option>
+                <option value="DAMAGED">
+                  {locale === "uz" ? "Shikastlangan" : "Повреждение"}
+                </option>
+                <option value="MISSING_ITEMS">
+                  {locale === "uz" ? "Yetishmaydi" : "Не хватает материалов"}
+                </option>
+                <option value="DELIVERY_FAILURE">
+                  {locale === "uz" ? "Yetkazish muammosi" : "Проблема доставки"}
+                </option>
               </select>
               <button className="button secondary" onClick={openDispute}>
-                Открыть спор
+                {text.open}
               </button>
             </div>
           )}
-        {disputes.map((item) => (
-          <article key={item.id}>
-            <strong>{item.category}</strong>
-            <p>
-              {item.status}
-              {item.resolution ? ` · ${item.resolution.type}` : ""}
-            </p>
-            {item.status === "OPEN" && (
-              <button
-                className="button secondary"
-                onClick={() => cancelDispute(item.id)}
-              >
-                Отменить обращение
-              </button>
-            )}
-          </article>
-        ))}
+        {disputes
+          .filter((item) => item.status === "OPEN")
+          .map((item) => (
+            <button
+              className="button secondary"
+              key={item.id}
+              onClick={() => cancelDispute(item.id)}
+            >
+              {text.cancel}
+            </button>
+          ))}
         <p aria-live="polite">{message}</p>
       </section>
     </main>

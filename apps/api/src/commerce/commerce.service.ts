@@ -22,6 +22,7 @@ import type {
 } from "./dto";
 import { IdempotencyService } from "./idempotency.service";
 import { MockPaymentProvider } from "./mock-payment.provider";
+import { calculateCustomerPrice } from "../ordering/pricing";
 
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -142,6 +143,28 @@ export class CommerceService {
     const perPage = BigInt(input.perPagePriceMinor);
     if (base + perPage <= 0n)
       throw new ConflictException({ code: "EMPTY_TARIFF" });
+    const rules = (input.rules ?? []).map((rule) => {
+      if (
+        !/^[A-Z][A-Z0-9_]{2,39}$/.test(rule.serviceCode) ||
+        !/^\d{1,15}$/.test(rule.basePriceMinor) ||
+        !/^\d{1,15}$/.test(rule.perPagePriceMinor) ||
+        !rule.optionPrices ||
+        Object.entries(rule.optionPrices).some(
+          ([key, value]) =>
+            !/^[A-Z][A-Z0-9_]{1,39}=[A-Z0-9][A-Z0-9_]{0,39}$/.test(key) ||
+            !/^\d{1,15}$/.test(value),
+        )
+      )
+        throw new ConflictException({ code: "INVALID_TARIFF_RULE" });
+      return {
+        serviceCode: rule.serviceCode,
+        basePriceMinor: BigInt(rule.basePriceMinor),
+        perPagePriceMinor: BigInt(rule.perPagePriceMinor),
+        optionPrices: rule.optionPrices,
+      };
+    });
+    if (new Set(rules.map((rule) => rule.serviceCode)).size !== rules.length)
+      throw new ConflictException({ code: "DUPLICATE_TARIFF_RULE" });
     const tariff = await this.prisma.$transaction(
       async (tx) => {
         const current = await tx.tariffVersion.findFirst({
@@ -158,6 +181,7 @@ export class CommerceService {
             basePriceMinor: base,
             perPagePriceMinor: perPage,
             createdById: actorId,
+            rules: { create: rules },
           },
         });
         await tx.outboxEvent.create({
@@ -210,6 +234,8 @@ export class CommerceService {
     try {
       const result = await this.prisma.$transaction(
         async (tx) => {
+          if (input.orderDraftId)
+            await tx.$queryRaw`SELECT id FROM "OrderDraft" WHERE id = ${input.orderDraftId}::uuid FOR UPDATE`;
           const approval = await tx.layoutApproval.findFirst({
             where: { id: input.layoutApprovalId, userId },
             include: {
@@ -248,25 +274,99 @@ export class CommerceService {
           });
           if (!tariff)
             throw new ConflictException({ code: "NO_ACTIVE_TARIFF" });
+          let quoted:
+            | {
+                id: string;
+                lineItems: Prisma.JsonValue;
+                subtotalMinor: bigint;
+                discountMinor: bigint;
+                totalMinor: bigint;
+                sourceParameters: Prisma.JsonValue;
+              }
+            | undefined;
+          if (input.orderDraftId || input.priceQuoteId) {
+            if (!input.orderDraftId || !input.priceQuoteId)
+              throw new ConflictException({ code: "QUOTE_LINEAGE_REQUIRED" });
+            const quote = await tx.priceQuote.findFirst({
+              where: { id: input.priceQuoteId, draftId: input.orderDraftId },
+              include: {
+                draft: { include: { catalogVersion: true, catalogItem: true } },
+              },
+            });
+            if (!quote || quote.draft.userId !== userId)
+              throw new NotFoundException();
+            if (
+              quote.status !== "ACTIVE" ||
+              quote.expiresAt <= new Date() ||
+              quote.draft.status !== "QUOTED" ||
+              quote.draft.version !== quote.draftVersion ||
+              quote.draft.layoutApprovalId !== approval.id ||
+              quote.layoutApprovalId !== approval.id ||
+              quote.layoutVersion !== layout.version ||
+              quote.catalogVersionId !== quote.draft.catalogVersionId ||
+              quote.catalogItemId !== quote.draft.catalogItemId ||
+              quote.draft.catalogVersion.status !== "ACTIVE" ||
+              quote.tariffVersionId !== tariff.id ||
+              quote.quantity !== input.quantity
+            )
+              throw new ConflictException({ code: "QUOTE_STALE" });
+            const rule = await tx.tariffRule.findUnique({
+              where: {
+                tariffVersionId_serviceCode: {
+                  tariffVersionId: tariff.id,
+                  serviceCode: quote.draft.serviceCode,
+                },
+              },
+            });
+            const recalculated = calculateCustomerPrice({
+              basePriceMinor: rule?.basePriceMinor ?? tariff.basePriceMinor,
+              perPagePriceMinor:
+                rule?.perPagePriceMinor ?? tariff.perPagePriceMinor,
+              optionPrices: rule?.optionPrices ?? {},
+              pageCount: printReady.pageCount,
+              quantity: input.quantity,
+              configuration: quote.draft.configuration as Record<
+                string,
+                unknown
+              >,
+            });
+            if (
+              recalculated.totalMinor !== quote.totalMinor ||
+              recalculated.subtotalMinor !== quote.subtotalMinor ||
+              JSON.stringify(recalculated.lineItems) !==
+                JSON.stringify(quote.lineItems)
+            )
+              throw new ConflictException({ code: "QUOTE_STALE" });
+            quoted = {
+              id: quote.id,
+              lineItems: quote.lineItems,
+              subtotalMinor: quote.subtotalMinor,
+              discountMinor: quote.discountMinor,
+              totalMinor: quote.totalMinor,
+              sourceParameters: quote.sourceParameters,
+            };
+          }
           const pageUnits = BigInt(printReady.pageCount * input.quantity);
           const pageTotal = tariff.perPagePriceMinor * pageUnits;
-          const subtotal = tariff.basePriceMinor + pageTotal;
+          const legacySubtotal = tariff.basePriceMinor + pageTotal;
           const created = await tx.order.create({
             data: {
               userId,
               layoutId: layout.id,
               layoutApprovalId: approval.id,
               printReadyVersionId: printReady.id,
+              orderDraftId: input.orderDraftId,
+              priceQuoteId: quoted?.id,
               priceSnapshot: {
                 create: {
                   tariffVersionId: tariff.id,
                   tariffVersion: tariff.version,
-                  sourceParameters: {
+                  sourceParameters: quoted?.sourceParameters ?? {
                     fileKind: layout.upload.fileKind,
                     pageCount: printReady.pageCount,
                     layoutSettings: layout.settings,
                   },
-                  lineItems: [
+                  lineItems: quoted?.lineItems ?? [
                     {
                       code: "BASE",
                       quantity: 1,
@@ -281,9 +381,9 @@ export class CommerceService {
                     },
                   ],
                   quantity: input.quantity,
-                  subtotalMinor: subtotal,
-                  discountMinor: 0n,
-                  totalMinor: subtotal,
+                  subtotalMinor: quoted?.subtotalMinor ?? legacySubtotal,
+                  discountMinor: quoted?.discountMinor ?? 0n,
+                  totalMinor: quoted?.totalMinor ?? legacySubtotal,
                   currency: "UZS",
                 },
               },
@@ -293,6 +393,20 @@ export class CommerceService {
           await tx.outboxEvent.create({
             data: outbox("order", created.id, created.version, "ORDER_CREATED"),
           });
+          if (quoted && input.orderDraftId) {
+            await tx.priceQuote.update({
+              where: { id: quoted.id },
+              data: { status: "CONSUMED", consumedAt: new Date() },
+            });
+            await tx.orderDraft.update({
+              where: { id: input.orderDraftId },
+              data: {
+                status: "CHECKED_OUT",
+                checkedOutAt: new Date(),
+                version: { increment: 1 },
+              },
+            });
+          }
           const response = orderView(created);
           await tx.idempotencyRecord.create({
             data: this.idempotency.data(

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   Inject,
   Param,
@@ -57,6 +58,11 @@ export class UploadsController {
   ) {
     const value = await readLimited(request, this.env.uploadMaxFileBytes);
     return this.uploads.putContent(user.id, id, value);
+  }
+
+  @Get(":id")
+  status(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.uploads.ownStatus(user.id, id);
   }
 
   @Delete(":id")

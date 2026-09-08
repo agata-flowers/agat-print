@@ -18,6 +18,9 @@ export default function AdminPage() {
         <a className="button" href="/admin/tariffs">
           Тарифы и финансовый аудит
         </a>
+        <a className="button" href="/admin/catalog">
+          Каталог клиентских услуг
+        </a>
         <a className="button" href="/admin/matching">
           История подбора партнёров
         </a>

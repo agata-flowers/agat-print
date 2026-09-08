@@ -266,6 +266,31 @@ export class UploadService {
     }
   }
 
+  async ownStatus(userId: string, id: string) {
+    const session = await this.prisma.uploadSession.findFirst({
+      where: { id, userId },
+      select: {
+        status: true,
+        rejectionCode: true,
+        expiresAt: true,
+        pageCount: true,
+      },
+    });
+    if (!session) throw new NotFoundException();
+    return {
+      ready: session.status === "READY",
+      failed: ["REJECTED", "CANCELLED", "EXPIRED", "FAILED"].includes(
+        session.status,
+      ),
+      processing: ["QUEUED", "PROCESSING", "SCANNING", "QUARANTINED"].includes(
+        session.status,
+      ),
+      errorCode: session.rejectionCode,
+      pageCount: session.pageCount,
+      expiresAt: session.expiresAt,
+    };
+  }
+
   async cancel(userId: string, id: string): Promise<void> {
     const session = await this.prisma.uploadSession.findUnique({
       where: { id },
