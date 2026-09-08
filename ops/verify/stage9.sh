@@ -53,11 +53,22 @@ phase=clean-repeatable-migrations
 "${compose[@]}" run --rm api pnpm --filter @agat/api exec prisma migrate deploy
 
 phase=stage9-db-e2e
+set +e
 "${compose[@]}" run --rm -e NODE_ENV=test -e RUN_STAGE9_E2E=1 \
   -e PROCESSING_DISPATCH_ENABLED=false -e MATCHING_DISPATCH_ENABLED=false \
   -e FULFILLMENT_DISPATCH_ENABLED=false -e AFTERCARE_DISPATCH_ENABLED=false \
   -e FINANCE_DISPATCH_ENABLED=false \
-  api pnpm --filter @agat/api exec vitest run test/stage7.e2e.spec.ts --no-file-parallelism
+  api pnpm --filter @agat/api exec vitest run test/stage7.e2e.spec.ts --no-file-parallelism 2>&1 | tee "work/stage9-db-e2e.log"
+db_status="${PIPESTATUS[0]}"
+set -e
+if [[ "$db_status" -ne 0 ]]; then
+  summary="$(grep -E 'FAIL|AssertionError|expected|Error:|Test Files|Tests ' work/stage9-db-e2e.log | tail -12 | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}/[id]/g; s/\+998[0-9]+/[phone]/g; s#(quarantine|objects|previews|print-ready)/[^ ]+#[object]/#g' | paste -sd ';' -)"
+  summary="${summary//'%'/'%25'}"
+  summary="${summary//$'\n'/'%0A'}"
+  summary="${summary//$'\r'/'%0D'}"
+  echo "::error title=Stage 9 DB-E2E failure::${summary:-no-safe-summary}"
+  exit "$db_status"
+fi
 db_e2e=passed
 
 phase=provider-config-and-finance-worker
