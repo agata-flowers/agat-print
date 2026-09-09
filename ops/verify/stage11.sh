@@ -120,6 +120,17 @@ wait_url http://localhost:4000/api/v1/health/ready
 wait_url http://localhost:3000
 
 phase=stage11-browser-e2e
+# Playwright's dependency installer runs apt-get update. The hosted runner also
+# carries an unrelated Google Chrome source whose CDN metadata can be out of
+# sync and fail with Hash Sum mismatch. Chromium comes from Playwright, so
+# exclude that third-party source deterministically before resolving OS libs.
+if [[ -f /etc/apt/sources.list.d/google-chrome.list ]]; then
+  if [[ -w /etc/apt/sources.list.d ]]; then
+    rm -f /etc/apt/sources.list.d/google-chrome.list
+  else
+    sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+  fi
+fi
 pnpm --filter @agat/web exec playwright install --with-deps chromium
 set +e
 STAGE11_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage11.spec.ts 2>&1 | tee "$work_dir/browser-e2e.log"

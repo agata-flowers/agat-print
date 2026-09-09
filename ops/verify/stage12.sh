@@ -112,6 +112,13 @@ wait_url http://localhost:4000/api/v1/health/ready
 wait_url http://localhost:3000
 
 phase=stage12-browser-e2e
+if [[ -f /etc/apt/sources.list.d/google-chrome.list ]]; then
+  if [[ -w /etc/apt/sources.list.d ]]; then
+    rm -f /etc/apt/sources.list.d/google-chrome.list
+  else
+    sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+  fi
+fi
 pnpm --filter @agat/web exec playwright install --with-deps chromium
 set +e
 STAGE12_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage12.spec.ts 2>&1 | tee "$work_dir/browser-e2e.log"
