@@ -129,7 +129,17 @@ jobs:
           path: outputs/stage7-verification-report.json
           if-no-files-found: error
       - name: Run stage 8 disputes, reprint, refund and retention verification
-        run: bash ops/verify/stage8.sh
+        run: |
+          set +e
+          bash ops/verify/stage8.sh
+          status=$?
+          set -e
+          if [[ "$status" -ne 0 ]]; then
+            phase="$(jq -r '.phase // "unknown"' outputs/stage8-verification-report.json)"
+            line="$(jq -r '.failureLine // "unknown"' outputs/stage8-verification-report.json)"
+            echo "::error title=Stage 8 verification failure::phase=$phase; failureLine=$line"
+            exit "$status"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

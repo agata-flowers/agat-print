@@ -2,14 +2,17 @@
 set -euo pipefail
 compose=(docker compose -f compose.yaml -f compose.verify.yaml --profile backup)
 report_dir="${VERIFY_REPORT_DIR:-outputs}"
-mkdir -p "$report_dir"
+work_dir="work/stage8-verification"
+mkdir -p "$report_dir" "$work_dir"
 phase=initialization
 rpo=null
 rto=null
+failure_line=null
 write_report() {
-  printf '{"result":"%s","phase":"%s","rpoSeconds":%s,"rtoSeconds":%s,"scope":"disputes-reprint-refund-retention","executionEnvironment":"%s","localDockerCheck":"unavailable-executable-not-installed","requiredInfrastructure":"GitHub Actions","databaseE2E":"%s"}\n' "$1" "$phase" "$rpo" "$rto" "${GITHUB_ACTIONS:+github-actions}" "${db_e2e:-not_run}" > "$report_dir/stage8-verification-report.json"
+  printf '{"result":"%s","phase":"%s","failureLine":%s,"rpoSeconds":%s,"rtoSeconds":%s,"scope":"disputes-reprint-refund-retention","executionEnvironment":"%s","localDockerCheck":"unavailable-executable-not-installed","requiredInfrastructure":"GitHub Actions","databaseE2E":"%s"}\n' "$1" "$phase" "$failure_line" "$rpo" "$rto" "${GITHUB_ACTIONS:+github-actions}" "${db_e2e:-not_run}" > "$report_dir/stage8-verification-report.json"
 }
 write_report running
+trap 'failure_line=$LINENO' ERR
 cleanup() {
   local result="$?"
   if [[ "$result" -ne 0 ]]; then
@@ -18,6 +21,7 @@ cleanup() {
     "${compose[@]}" ps >&2 || true
   fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  rm -rf "$work_dir"
   return "$result"
 }
 trap cleanup EXIT
@@ -43,10 +47,21 @@ phase=clean-repeatable-migrations
 "${compose[@]}" run --rm api pnpm --filter @agat/api exec prisma migrate deploy
 "${compose[@]}" run --rm api pnpm --filter @agat/api exec prisma migrate deploy
 phase=stage7-regression-and-stage8-db-e2e
+set +e
 "${compose[@]}" run --rm -e NODE_ENV=test -e RUN_STAGE8_E2E=1 \
   -e PROCESSING_DISPATCH_ENABLED=false -e MATCHING_DISPATCH_ENABLED=false \
   -e FULFILLMENT_DISPATCH_ENABLED=false -e AFTERCARE_DISPATCH_ENABLED=false \
-  api pnpm --filter @agat/api exec vitest run test/stage7.e2e.spec.ts --no-file-parallelism
+  api pnpm --filter @agat/api exec vitest run test/stage7.e2e.spec.ts --no-file-parallelism 2>&1 | tee "$work_dir/db-e2e.log"
+db_status="${PIPESTATUS[0]}"
+set -e
+if [[ "$db_status" -ne 0 ]]; then
+  summary="$(grep -E 'FAIL|AssertionError|expected|Error:|Test Files|Tests |PrismaClient' "$work_dir/db-e2e.log" | tail -16 | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}/[id]/g; s/\+998[0-9]+/[phone]/g; s#(quarantine|objects|previews|print-ready)/[^ ]+#[object]/#g' | paste -sd ';' -)"
+  summary="${summary//'%'/'%25'}"
+  summary="${summary//$'\n'/'%0A'}"
+  summary="${summary//$'\r'/'%0D'}"
+  echo "::error title=Stage 8 DB-E2E failure::${summary:-no-safe-summary}"
+  exit "$db_status"
+fi
 db_e2e=passed
 phase=aftercare-worker-and-privacy
 "${compose[@]}" up -d api
