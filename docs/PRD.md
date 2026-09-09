@@ -144,3 +144,16 @@ verification artifact. The full contract is defined in
 Inventory-backed stationery, multi-line/multi-partner carts, customer partner
 selection, advanced routing, editors, subscriptions and Stage 12 are outside
 this approval.
+
+## Stage 12 proposed boundary — Customer Studio Marketplace
+
+The next proposed stage exposes the moderated Stage 10 production network to
+customers and adds an optional, explicit studio preference to the existing
+Stage 11 draft and Stage 6/10 matcher. It preserves automatic assignment, one
+partner per order, authoritative eligibility/capacity checks and the existing
+offer, refund, fulfilment and finance state machines. Inventory-backed
+stationery and multi-partner carts remain outside the proposal.
+
+The complete proposal and acceptance criteria are defined in
+[`STAGE12_PROPOSAL.md`](STAGE12_PROPOSAL.md). No Stage 12 implementation is
+authorized by this documentation commit.
