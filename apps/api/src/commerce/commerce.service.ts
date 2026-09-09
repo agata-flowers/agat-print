@@ -977,10 +977,17 @@ export class CommerceService {
     error: unknown,
     prepared: ReturnType<IdempotencyService["prepare"]>,
   ): Promise<unknown> {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      ["P2002", "P2034"].includes(error.code)
-    ) {
+    const prismaError =
+      error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
+    const retryable =
+      prismaError?.code === "P2002" ||
+      prismaError?.code === "P2034" ||
+      (prismaError?.code === "P2010" &&
+        typeof prismaError.meta === "object" &&
+        prismaError.meta !== null &&
+        "code" in prismaError.meta &&
+        prismaError.meta.code === "40001");
+    if (retryable) {
       const existing = await this.prisma.idempotencyRecord.findUnique({
         where: {
           scope_keyDigest: {
