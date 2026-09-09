@@ -4,10 +4,21 @@ set -euo pipefail
 compose=(docker compose -f compose.yaml -f compose.verify.yaml --profile backup)
 report_dir="${VERIFY_REPORT_DIR:-outputs}"
 mkdir -p "$report_dir"
+phase=initialization
+failure_line=null
+
+write_failure_report() {
+  printf '{"result":"failure","phase":"%s","failureLine":%s,"requiredChecks":"not_completed"}\n' \
+    "$phase" "$failure_line" > "$report_dir/stage2-verification-report.json"
+}
+
+trap 'failure_line=$LINENO' ERR
 
 cleanup() {
   local status="$?"
   if [[ "$status" -ne 0 ]]; then
+    write_failure_report
+    echo "Stage 2 verification failed during phase: $phase" >&2
     "${compose[@]}" ps >&2 || true
     "${compose[@]}" logs --no-color --tail=100 api web postgres redis minio \
       backup-minio postgres-restore minio-restore >&2 || true
@@ -43,23 +54,28 @@ expect_startup_rejection() {
 }
 
 echo 'Verifying Compose configuration and building all stage 2 images.'
+phase=compose-build
 "${compose[@]}" config --quiet
 "${compose[@]}" build api web backup restore
 
+phase=dependency-health
 "${compose[@]}" up -d postgres redis minio backup-minio postgres-restore minio-restore
 for service in postgres redis minio backup-minio postgres-restore minio-restore; do
   wait_healthy "$service"
 done
 
 echo 'Applying migrations to a clean database twice.'
+phase=clean-repeatable-migrations
 "${compose[@]}" run --rm api pnpm --filter @agat/api exec prisma migrate deploy
 "${compose[@]}" run --rm api pnpm --filter @agat/api exec prisma migrate deploy
 
 echo 'Running all database E2E tests.'
+phase=foundation-db-e2e
 "${compose[@]}" run --rm -e NODE_ENV=test -e RUN_DB_E2E=1 -e AFTERCARE_DISPATCH_ENABLED=false api \
   pnpm --filter @agat/api test -- foundation.e2e.spec.ts
 
 echo 'Verifying production rejection of mock OTP and development secrets.'
+phase=production-config-rejection
 expect_startup_rejection mock-otp \
   -e NODE_ENV=production \
   -e WEB_ORIGIN=https://agat.example \
@@ -74,6 +90,7 @@ expect_startup_rejection development-secret \
   -e JWT_ACCESS_SECRET=development-only-change-me-at-least-32-chars
 
 "${compose[@]}" up -d api web
+phase=application-health
 wait_healthy api
 wait_healthy web
 curl --fail --silent http://localhost:4000/api/v1/health/live >/dev/null
@@ -81,6 +98,7 @@ curl --fail --silent http://localhost:4000/api/v1/health/ready >/dev/null
 curl --fail --silent http://localhost:3000 >/dev/null
 
 echo 'Creating synthetic database references and private objects.'
+phase=synthetic-backup-fixture
 "${compose[@]}" run --rm -T --entrypoint bash backup -seu <<'SCRIPT'
   retained_key="verification/retained.bin"
   tombstoned_key="verification/tombstoned.bin"
@@ -105,9 +123,11 @@ SQL
 SCRIPT
 
 backup_started="$(date +%s)"
+phase=off-host-backup
 "${compose[@]}" run --rm backup
 
 echo 'Deleting source data and seeding a stale object in the isolated restore target.'
+phase=source-deletion
 "${compose[@]}" run --rm -T --entrypoint bash backup -seu <<'SCRIPT'
   retained_key="verification/retained.bin"
   tombstoned_key="verification/tombstoned.bin"
@@ -129,10 +149,12 @@ SCRIPT
 SCRIPT
 
 restore_started="$(date +%s)"
+phase=isolated-restore
 "${compose[@]}" run --rm restore
 restore_finished="$(date +%s)"
 
 echo 'Validating the restored database, manifest object, checksum and tombstone replay.'
+phase=restore-integrity
 "${compose[@]}" run --rm -T --entrypoint bash restore -seu <<'SCRIPT'
   retained_key="verification/retained.bin"
   tombstoned_key="verification/tombstoned.bin"
@@ -158,6 +180,8 @@ rto_seconds="$((restore_finished - restore_started))"
 cat > "$report_dir/stage2-verification-report.json" <<JSON
 {
   "result": "success",
+  "phase": "complete",
+  "failureLine": null,
   "rpoSeconds": ${rpo_seconds},
   "rtoSeconds": ${rto_seconds},
   "rpoTargetSeconds": 86400,

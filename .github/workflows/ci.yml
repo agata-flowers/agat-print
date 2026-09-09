@@ -71,7 +71,17 @@ jobs:
           mkdir -p outputs
           printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage8-verification-report.json
       - name: Run stage 2 Docker and recovery drill
-        run: bash ops/verify/stage2.sh
+        run: |
+          set +e
+          bash ops/verify/stage2.sh
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            phase="$(jq -r '.phase // "unknown"' outputs/stage2-verification-report.json 2>/dev/null || printf unknown)"
+            line="$(jq -r '.failureLine // "unknown"' outputs/stage2-verification-report.json 2>/dev/null || printf unknown)"
+            echo "::error title=Stage 2 verification diagnostic::phase=${phase}; failureLine=${line}"
+            exit "$status"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
