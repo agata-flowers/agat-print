@@ -200,3 +200,26 @@ jobs:
           name: stage11-verification-report
           path: outputs/stage11-verification-report.json
           if-no-files-found: error
+      - name: Initialize stage 12 diagnostic artifact
+        if: always()
+        run: |
+          printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage12-verification-report.json
+      - name: Run stage 12 customer studio marketplace verification
+        run: |
+          set +e
+          bash ops/verify/stage12.sh
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            diagnostic="$(node -e 'const fs=require("node:fs"); const p="outputs/stage12-verification-report.json"; if(!fs.existsSync(p)){process.stdout.write("phase=report-missing; failureLine=unknown"); process.exit(0)} const r=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(`phase=${r.phase}; failureLine=${r.failureLine ?? "unknown"}`)')"
+            echo "::error title=Stage 12 verification diagnostic::$diagnostic"
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage12-verification-report
+          path: |
+            outputs/stage12-verification-report.json
+            outputs/stage12-verification-report.sha256
+          if-no-files-found: error

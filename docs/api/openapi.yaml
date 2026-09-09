@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.11.0
+  version: 0.12.0
 servers:
   - url: /api/v1
 paths:
@@ -1066,6 +1066,112 @@ paths:
       security: [{ AccessCookie: [] }]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       responses: { "201": { description: Read state stored or replayed } }
+  /studios:
+    get:
+      summary: Browse moderated eligible studios without internal identifiers
+      parameters:
+        - {
+            in: query,
+            name: serviceCode,
+            schema: { type: string, maxLength: 40 },
+          }
+        - {
+            in: query,
+            name: paperCode,
+            schema: { type: string, maxLength: 40 },
+          }
+        - {
+            in: query,
+            name: colorMode,
+            schema: { type: string, maxLength: 40 },
+          }
+        - {
+            in: query,
+            name: locationCode,
+            schema: { type: string, maxLength: 40 },
+          }
+        - { in: query, name: locale, schema: { type: string, enum: [ru, uz] } }
+      responses:
+        "200": { description: No-store bounded public studio projection }
+  /studios/{publicSlug}:
+    get:
+      summary: Read one currently published studio listing
+      parameters:
+        - {
+            in: path,
+            name: publicSlug,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Moderated public listing }
+        "404": { description: Listing is not currently discoverable }
+  /order-drafts/{draftId}/studio-preference:
+    put:
+      summary: Set automatic or preferred-studio fulfillment on an owned draft
+      description: >-
+        Pins the published listing and the current capability, operational,
+        catalog and capacity versions. Checkout rejects stale lineage and never
+        silently substitutes newer studio settings.
+      parameters:
+        - {
+            in: path,
+            name: draftId,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudioPreference" }
+      responses:
+        "200": { description: CAS-protected resumable preference }
+        "404": { description: Foreign and missing drafts are indistinguishable }
+        "409":
+          {
+            description: Stale draft,
+            incompatible studio or idempotency conflict,
+          }
+  /partner/network/listing:
+    get:
+      summary: Read only the authenticated partner's listing versions
+      responses:
+        "200": { description: Own listing workspace }
+        "403": { description: PARTNER role required }
+  /partner/network/listing/draft:
+    put:
+      summary: Save an own-branch bounded listing draft
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: Draft saved }
+        "404": { description: Branch does not belong to partner }
+  /partner/network/listing/{listingId}/submit:
+    post:
+      summary: Submit an own listing draft for moderation
+      responses:
+        "201": { description: Submitted }
+        "409": { description: Stale or non-draft version }
+  /admin/partner-listings:
+    get:
+      summary: Read the bounded studio-listing moderation queue
+      responses:
+        "200": { description: Moderation queue }
+        "403": { description: ADMIN role required }
+  /admin/partner-listings/{listingId}/decision:
+    post:
+      summary: Publish, reject or retire a version with CAS
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201":
+          { description: Moderation decision committed with outbox and audit }
+        "403": { description: ADMIN role required }
+        "409":
+          {
+            description: Invalid lifecycle,
+            stale version or network ineligible,
+          }
 components:
   securitySchemes:
     AccessCookie:
@@ -1144,6 +1250,19 @@ components:
       required: true
       schema: { type: string, minLength: 16, maxLength: 200 }
   schemas:
+    StudioPreference:
+      type: object
+      additionalProperties: false
+      required: [version, mode, fallbackPolicy]
+      properties:
+        version: { type: integer, minimum: 0 }
+        mode: { type: string, enum: [AUTO_ASSIGN, PREFERRED_STUDIO] }
+        fallbackPolicy:
+          {
+            type: string,
+            enum: [ALLOW_ELIGIBLE_ALTERNATIVE, STRICT_PREFERENCE],
+          }
+        studioSlug: { type: string, pattern: "^[a-z0-9][a-z0-9-]{2,79}$" }
     OpenDispute:
       type: object
       additionalProperties: false

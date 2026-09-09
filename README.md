@@ -185,7 +185,20 @@ PDF, DOCX, JPEG and PNG remain the only accepted formats. Run
 `bash ops/verify/stage11.sh` on a Docker host for clean/repeated migrations,
 DB-E2E, the Playwright mobile journey, privacy, backup and isolated restore.
 
+## Customer studio marketplace
+
+Stage 12 publishes a moderated customer-safe view of the Stage 10 studio
+network at `/studios`. An owned resumable draft can retain automatic assignment
+or a preferred studio with explicit fallback. Checkout freezes immutable
+listing and network lineage; the existing matcher still revalidates current
+capability, availability, capacity and lifecycle before reserving an offer.
+
+Partners prepare their own bounded listing under `/partner/listing`; only an
+administrator can publish or retire it under `/admin/partner-listings`. Run
+`bash ops/verify/stage12.sh` on a Docker host after all earlier gates.
+
 ## Scope boundary
 
-Customer partner browsing, advanced routing, document editing and any stage
-after Stage 11 require separate approval.
+Inventory-backed retail, multi-partner carts, advanced routing, reviews,
+messaging, document editing and any stage after Stage 12 require separate
+approval.

@@ -238,3 +238,17 @@ drafts and active quotes; existing unfinished-upload cleanup remains in force.
 Run `bash ops/verify/stage11.sh` on a Docker host. Production outbound
 notification delivery remains blocked on a contracted provider, while the
 in-app inbox has no external dependency.
+
+## Stage 12 marketplace rollout and recovery
+
+Deploy the additive migration before the API. Existing drafts and orders have
+nullable Stage 12 lineage and continue as automatic assignment. Partners create
+bounded drafts and an administrator explicitly publishes them; no data is
+auto-published. Rollback disables marketplace entry points and preference
+ranking and is forward-fix only after data exists—do not drop historical
+versions or snapshots.
+
+PostgreSQL backup includes all three Stage 12 tables. Isolated restore verifies
+listing history, preferences, one snapshot per order, object manifests,
+retention tombstones and legal holds before API enablement. Existing pilot
+targets remain RPO at most 24 hours and RTO at most 4 hours.

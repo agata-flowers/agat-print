@@ -1,6 +1,6 @@
 # Stage 12 proposal — Customer Studio Marketplace & Controlled Partner Preference
 
-Status: proposed; implementation requires separate approval.
+Status: approved and implemented; final verification is required before acceptance.
 
 Baseline: Stage 11 commit `1adee274d1913995cd6ad55c6211df94a3d751a1`
 and Actions run `34355205979`. Stages 1–11 remain authoritative.
@@ -153,8 +153,10 @@ Proposed additive Prisma changes:
 - `StudioListingVersion`: branch, sequence, bounded localized copy, public slug,
   moderation state, author/moderator, publication timestamps and immutable
   history.
-- `OrderDraftStudioPreference`: owned draft, mode, public listing lineage,
-  fallback policy, aggregate version and expiry/invalidation metadata.
+- `OrderDraftStudioPreference`: owned draft, mode, public listing plus exact
+  capability, operational, catalog and capacity version lineage, fallback
+  policy, aggregate version and expiry/invalidation metadata. Checkout rejects
+  the preference as stale if any authoritative version has changed.
 - `OrderStudioSelectionSnapshot`: immutable checkout snapshot linked one-to-one
   with an order and containing only bounded mode/fallback plus listing,
   capability, branch-catalog and operational version lineage.

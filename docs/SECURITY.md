@@ -192,3 +192,20 @@ included in customer/courier delivery views.
   provider references, filenames, object keys and persisted signed URLs.
 - Catalog/new-order/draft/order/notification routes are network-only and
   `no-store, private`; ephemeral preview URLs remain in component memory only.
+
+## Stage 12 marketplace controls
+
+- Public studio responses are explicit allow-list projections: moderated
+  localized copy, city/district, bounded opening state, service codes and an
+  approximate distance band only. Exact coordinates, workload, capacity,
+  contacts and internal identifiers are excluded.
+- Search coordinates are validated and transient; they are never persisted,
+  audited, logged or used as metric labels.
+- Preference access is owner-scoped. Partner listing writes are restricted to
+  own branches; only ADMIN may publish, reject or retire.
+- Listing text is bounded and absent from audit metadata and metric labels.
+  Marketplace, preference and order responses stay `no-store, private`, and
+  `/studios` is network-only in the service worker.
+- Published content and checkout selection snapshots have database
+  immutability triggers. Matching still enforces current lifecycle, capability,
+  service, availability, service-area, capacity and offer-acceptance checks.

@@ -379,3 +379,31 @@ erDiagram
   OutboxEvent ||--o| NotificationJob : dispatches
   User ||--o{ UserNotification : receives
 ```
+
+## ADR 12: moderated studio projection and controlled preference
+
+Stage 12 adds a moderated projection over the existing Stage 10 network.
+`StudioListingVersion` never becomes capability or capacity truth: discovery is
+indicative, while offer creation and acceptance revalidate the authoritative
+branch versions. An owned draft carries one CAS-protected preference and
+checkout freezes its lineage in one immutable
+`OrderStudioSelectionSnapshot`.
+
+```mermaid
+erDiagram
+  Branch ||--o{ StudioListingVersion : publishes
+  OrderDraft ||--o| OrderDraftStudioPreference : resumes
+  StudioListingVersion ||--o{ OrderDraftStudioPreference : preferred
+  BranchCapabilityVersion ||--o{ OrderDraftStudioPreference : pins
+  BranchOperationalVersion ||--o{ OrderDraftStudioPreference : pins
+  BranchCatalogVersion ||--o{ OrderDraftStudioPreference : pins
+  BranchCapacityVersion ||--o{ OrderDraftStudioPreference : pins
+  Order ||--o| OrderStudioSelectionSnapshot : freezes
+  StudioListingVersion ||--o{ OrderStudioSelectionSnapshot : lineage
+  Branch ||--o{ OrderStudioSelectionSnapshot : selected
+```
+
+The existing matcher ranks a fully eligible preferred branch first with
+`CUSTOMER_PREFERRED`. Allowed fallback uses the unchanged deterministic Stage
+10 score. Strict preference creates no incompatible offer and reaches the
+existing single `MATCHING_EXHAUSTED` refund command.

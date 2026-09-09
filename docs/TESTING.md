@@ -156,3 +156,13 @@ preview, approval, quote, checkout and timeline. Cache/privacy checks and an
 encrypted backup plus isolated restore record measured RPO/RTO. Actions runs
 Stage 2–10 first and uploads the diagnostic report with `if: always()` without
 turning a failed assertion into success.
+
+## Stage 12 gate
+
+`bash ops/verify/stage12.sh` runs only after Stage 1–11 regression gates. It
+builds and health-checks Compose services, deploys migrations twice, runs four
+Stage 12 DB-E2E scenarios and two mobile Playwright journeys, then checks
+no-store, privacy, metrics and service-worker rules. Encrypted backup and
+isolated restore retain listing, preference and immutable selection lineage
+while enforcing pilot RPO/RTO. The script always emits a diagnostic JSON report
+and SHA-256 sidecar; a failed assertion remains a failed CI job.
