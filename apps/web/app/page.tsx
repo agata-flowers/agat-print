@@ -23,6 +23,9 @@ export default function HomePage() {
           <Link className="button secondary" href={`/orders?lang=${locale}`}>
             {text.orders}
           </Link>
+          <Link className="button secondary" href={`/studios?lang=${locale}`}>
+            {text.studios}
+          </Link>
         </div>
         <ol className="journey">
           <li>

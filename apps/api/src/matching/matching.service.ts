@@ -23,7 +23,7 @@ import type {
 } from "./dto";
 import {
   activePartnerStatuses,
-  compareCandidateScore,
+  comparePreferredCandidateScore,
   evaluateNetworkCandidate,
   isOpenAt,
   type WeeklyWindow,
@@ -60,7 +60,7 @@ const offerInclude = {
 } satisfies Prisma.PartnerOfferInclude;
 
 const decisionOfferInclude = {
-  order: true,
+  order: { include: { studioSelection: { include: { listing: true } } } },
   payoutSnapshot: true,
   branch: { include: { partner: true, availabilityExceptions: true } },
   capabilityVersion: true,
@@ -165,6 +165,7 @@ export class MatchingService {
                 priceSnapshot: true,
                 matching: true,
                 layout: { include: { upload: true } },
+                studioSelection: true,
               },
             });
             if (!order || !order.priceSnapshot) throw new NotFoundException();
@@ -341,6 +342,7 @@ export class MatchingService {
               include: {
                 priceSnapshot: true,
                 layout: { include: { upload: true } },
+                studioSelection: true,
               },
             },
           },
@@ -681,6 +683,12 @@ export class MatchingService {
     if (!offer.payoutSnapshot)
       throw new ConflictException({ code: "PAYOUT_SNAPSHOT_MISSING" });
     if (
+      offer.order.studioSelection?.mode === "PREFERRED_STUDIO" &&
+      offer.order.studioSelection.branchId === offer.branchId &&
+      offer.order.studioSelection.listing?.status !== "PUBLISHED"
+    )
+      return this.invalidateOffer(tx, offer, "PREFERRED_STUDIO_RETIRED");
+    if (
       !activePartnerStatuses.includes(offer.branch.partner.status) ||
       !offer.branch.active ||
       !offer.branch.acceptingOrders
@@ -820,7 +828,11 @@ export class MatchingService {
       });
     const fullOrder = await tx.order.findUniqueOrThrow({
       where: { id: offer.orderId },
-      include: { priceSnapshot: true, layout: { include: { upload: true } } },
+      include: {
+        priceSnapshot: true,
+        layout: { include: { upload: true } },
+        studioSelection: true,
+      },
     });
     const next = await this.createNextOffer(tx, fullOrder, 0);
     return {
@@ -852,7 +864,11 @@ export class MatchingService {
       });
     const fullOrder = await tx.order.findUniqueOrThrow({
       where: { id: offer.orderId },
-      include: { priceSnapshot: true, layout: { include: { upload: true } } },
+      include: {
+        priceSnapshot: true,
+        layout: { include: { upload: true } },
+        studioSelection: true,
+      },
     });
     await this.createNextOffer(tx, fullOrder, 0);
     return { conflictCode };
@@ -861,7 +877,11 @@ export class MatchingService {
   private async createNextOffer(
     tx: Prisma.TransactionClient,
     order: Prisma.OrderGetPayload<{
-      include: { priceSnapshot: true; layout: { include: { upload: true } } };
+      include: {
+        priceSnapshot: true;
+        layout: { include: { upload: true } };
+        studioSelection: true;
+      };
     }>,
     matchingVersion: number,
     expectedOrderVersion = order.version,
@@ -898,6 +918,13 @@ export class MatchingService {
       select: { branchId: true },
     });
     const now = new Date();
+    const preferredBranchId =
+      order.studioSelection?.mode === "PREFERRED_STUDIO"
+        ? order.studioSelection.branchId
+        : null;
+    const strictPreference =
+      order.studioSelection?.mode === "PREFERRED_STUDIO" &&
+      order.studioSelection.fallbackPolicy === "STRICT_PREFERENCE";
     const branches = await tx.branch.findMany({
       where: {
         id: { notIn: excluded.map((item) => item.branchId) },
@@ -1035,13 +1062,20 @@ export class MatchingService {
           priority: capability?.priority ?? 1000,
           distanceMeters: distance,
           workloadBasisPoints: Math.floor((workload * 10_000) / capacityLimit),
+          preferred: branch.id === preferredBranchId,
         };
       }),
     );
+    for (const candidate of evaluated) {
+      if (candidate.preferred && candidate.reasons[0] === "ELIGIBLE")
+        candidate.reasons.push("CUSTOMER_PREFERRED");
+    }
     const eligible = evaluated
       .filter((candidate) => candidate.reasons[0] === "ELIGIBLE")
-      .sort(compareCandidateScore);
-    let selected = eligible[0] ?? null;
+      .sort((left, right) => comparePreferredCandidateScore(left, right));
+    let selected = strictPreference
+      ? (eligible.find((candidate) => candidate.preferred) ?? null)
+      : (eligible[0] ?? null);
     while (selected?.capacity) {
       await tx.$queryRaw`SELECT id FROM "BranchCapacityVersion" WHERE id = ${selected.capacity.id}::uuid FOR UPDATE`;
       const [assignments, reservations] = await Promise.all([
@@ -1059,15 +1093,16 @@ export class MatchingService {
       if (assignments + reservations < selected.capacity.maxConcurrentOrders)
         break;
       selected.reasons = ["CAPACITY_FULL"];
-      selected =
-        eligible.find(
-          (candidate) =>
-            candidate !== selected && candidate.reasons[0] === "ELIGIBLE",
-        ) ?? null;
+      selected = strictPreference
+        ? null
+        : (eligible.find(
+            (candidate) =>
+              candidate !== selected && candidate.reasons[0] === "ELIGIBLE",
+          ) ?? null);
     }
     const ranked = evaluated
       .filter((candidate) => candidate.reasons[0] === "ELIGIBLE")
-      .sort(compareCandidateScore);
+      .sort((left, right) => comparePreferredCandidateScore(left, right));
     const evaluationIds = new Map<string, string>();
     for (const candidate of evaluated) {
       const rank = ranked.findIndex(

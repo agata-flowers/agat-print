@@ -49,6 +49,11 @@ const draftInclude = {
   },
   quotes: { orderBy: { sequence: "desc" as const }, take: 1 },
   order: { select: { id: true } },
+  studioPreference: {
+    include: {
+      listing: { select: { publicSlug: true, titleRu: true, titleUz: true } },
+    },
+  },
 } satisfies Prisma.OrderDraftInclude;
 
 type DraftRow = Prisma.OrderDraftGetPayload<{ include: typeof draftInclude }>;
@@ -77,6 +82,7 @@ const draftView = (draft: DraftRow) => ({
   id: draft.id,
   version: draft.version,
   service: {
+    code: draft.serviceCode,
     slug: draft.catalogItem.slug,
     title:
       draft.locale === "uz"
@@ -86,6 +92,25 @@ const draftView = (draft: DraftRow) => ({
   locale: draft.locale,
   configuration: draft.configuration,
   quantity: draft.quantity,
+  studioPreference: draft.studioPreference
+    ? {
+        mode: draft.studioPreference.mode,
+        fallbackPolicy: draft.studioPreference.fallbackPolicy,
+        studio: draft.studioPreference.listing
+          ? {
+              slug: draft.studioPreference.listing.publicSlug,
+              name:
+                draft.locale === "uz"
+                  ? draft.studioPreference.listing.titleUz
+                  : draft.studioPreference.listing.titleRu,
+            }
+          : null,
+      }
+    : {
+        mode: "AUTO_ASSIGN",
+        fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE",
+        studio: null,
+      },
   step: stepFor(draft),
   upload: draft.upload
     ? {

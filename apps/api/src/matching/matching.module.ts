@@ -24,6 +24,6 @@ import { MAPS_PROVIDER } from "../providers/provider-tokens";
     MockNotificationProvider,
     PartnerNetworkService,
   ],
-  exports: [MatchingService, MatchingQueueService],
+  exports: [MatchingService, MatchingQueueService, MAPS_PROVIDER],
 })
 export class MatchingModule {}

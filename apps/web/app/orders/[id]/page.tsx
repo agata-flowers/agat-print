@@ -15,6 +15,11 @@ type OrderView = {
     status: string;
     deliveryStatus: string | null;
   };
+  studioPreference: null | {
+    mode: "AUTO_ASSIGN" | "PREFERRED_STUDIO";
+    fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE" | "STRICT_PREFERENCE";
+    studio: null | { slug: string; titleRu: string; titleUz: string };
+  };
 };
 type DisputeView = {
   id: string;
@@ -44,6 +49,8 @@ const copy = {
     cancel: "Отменить обращение",
     unavailable: "Заказ недоступен или принадлежит другому пользователю.",
     timeline: "Ход заказа",
+    studio: "Выбранная студия",
+    automaticStudio: "Студия будет подобрана автоматически",
   },
   uz: {
     title: "Buyurtmangiz",
@@ -62,6 +69,8 @@ const copy = {
     cancel: "Murojaatni bekor qilish",
     unavailable: "Buyurtma mavjud emas yoki boshqa foydalanuvchiga tegishli.",
     timeline: "Buyurtma jarayoni",
+    studio: "Tanlangan studiya",
+    automaticStudio: "Studiya avtomatik tanlanadi",
   },
 } as const;
 const stateLabels = {
@@ -255,6 +264,19 @@ export default function OrderPage() {
       <h1>{text.title}</h1>
       <section className="panel draft-flow" data-testid="order-status">
         <h2>{state}</h2>
+        {order?.studioPreference?.mode === "PREFERRED_STUDIO" &&
+        order.studioPreference.studio ? (
+          <p data-testid="studio-preference">
+            {text.studio}:{" "}
+            {locale === "uz"
+              ? order.studioPreference.studio.titleUz
+              : order.studioPreference.studio.titleRu}
+          </p>
+        ) : (
+          order?.studioPreference && (
+            <p data-testid="studio-preference">{text.automaticStudio}</p>
+          )
+        )}
         {order?.price && (
           <p>
             <strong>

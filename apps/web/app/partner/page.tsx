@@ -121,6 +121,9 @@ export default function PartnerPage() {
         <a className="button" href="/partner/finance">
           Реестр начислений
         </a>
+        <a className="button" href="/partner/listing">
+          Публичная карточка
+        </a>
       </p>
       <section className="panel review-list">
         <h2>Предложения</h2>

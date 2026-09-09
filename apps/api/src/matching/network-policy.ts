@@ -120,3 +120,13 @@ export function compareCandidateScore(
     left.branchId.localeCompare(right.branchId)
   );
 }
+
+export function comparePreferredCandidateScore(
+  left: Parameters<typeof compareCandidateScore>[0] & { preferred: boolean },
+  right: Parameters<typeof compareCandidateScore>[0] & { preferred: boolean },
+) {
+  return (
+    Number(right.preferred) - Number(left.preferred) ||
+    compareCandidateScore(left, right)
+  );
+}

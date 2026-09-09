@@ -13,6 +13,7 @@ const NEVER_CACHE = [
   "/orders/",
   "/order-drafts/",
   "/catalog",
+  "/studios",
   "/new-order",
   "/drafts/",
   "/notifications",

@@ -11,7 +11,7 @@ import {
 type Draft = {
   id: string;
   version: number;
-  service: { title: string };
+  service: { code: string; title: string };
   step: string;
   upload: null | {
     accepted: boolean;
@@ -25,6 +25,19 @@ type Draft = {
   };
   quote: null | { totalMinor: string; currency: string; active: boolean };
   orderPath: string | null;
+  studioPreference: {
+    mode: "AUTO_ASSIGN" | "PREFERRED_STUDIO";
+    fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE" | "STRICT_PREFERENCE";
+    studio: null | { slug: string; name: string };
+  };
+};
+
+type Studio = {
+  slug: string;
+  name: string;
+  city: string;
+  district: string | null;
+  openingState: string;
 };
 
 export default function DraftPage() {
@@ -36,11 +49,26 @@ export default function DraftPage() {
   const [preview, setPreview] = useState<string>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [selectedStudio, setSelectedStudio] = useState("");
+  const [strict, setStrict] = useState(false);
   const load = useCallback(async () => {
     try {
       const response = await apiRequest(`/order-drafts/${id}`);
       const next = (await response.json()) as Draft;
       setDraft(next);
+      setSelectedStudio(next.studioPreference.studio?.slug ?? "");
+      setStrict(next.studioPreference.fallbackPolicy === "STRICT_PREFERENCE");
+      if (!next.upload) {
+        const studiosResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:4000"}/api/v1/studios?serviceCode=${encodeURIComponent(next.service.code)}&locale=${locale}`,
+          { cache: "no-store" },
+        );
+        if (studiosResponse.ok)
+          setStudios(
+            ((await studiosResponse.json()) as { studios: Studio[] }).studios,
+          );
+      }
       if (next.orderPath)
         window.location.assign(`${next.orderPath}?lang=${locale}`);
       if (next.layout?.previewAvailable && !preview) {
@@ -131,6 +159,40 @@ export default function DraftPage() {
       setBusy(false);
     }
   };
+  const saveStudio = async () => {
+    if (!draft) return;
+    setBusy(true);
+    try {
+      const response = await apiRequest(
+        `/order-drafts/${id}/studio-preference`,
+        {
+          method: "PUT",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: JSON.stringify({
+            version: draft.version,
+            mode: selectedStudio ? "PREFERRED_STUDIO" : "AUTO_ASSIGN",
+            fallbackPolicy: strict
+              ? "STRICT_PREFERENCE"
+              : "ALLOW_ELIGIBLE_ALTERNATIVE",
+            ...(selectedStudio ? { studioSlug: selectedStudio } : {}),
+          }),
+        },
+      );
+      await response.json();
+      setMessage(text.studioSaved);
+      await load();
+    } catch (error) {
+      setMessage(
+        customerError(
+          error instanceof ApiError ? error.code : "REQUEST_FAILED",
+          locale,
+        ),
+      );
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
   if (!draft)
     return (
       <main className="narrow">
@@ -148,6 +210,48 @@ export default function DraftPage() {
             : text.configure}
       </h1>
       <section className="panel draft-flow">
+        {!draft.upload && (
+          <fieldset className="studio-choice">
+            <legend>{text.studioChoice}</legend>
+            <label>
+              <input
+                type="radio"
+                name="studio"
+                checked={!selectedStudio}
+                onChange={() => setSelectedStudio("")}
+              />{" "}
+              {text.autoAssign}
+            </label>
+            {studios.map((studio) => (
+              <label key={studio.slug}>
+                <input
+                  type="radio"
+                  name="studio"
+                  checked={selectedStudio === studio.slug}
+                  onChange={() => setSelectedStudio(studio.slug)}
+                />{" "}
+                {studio.name} · {studio.district ?? studio.city}
+              </label>
+            ))}
+            {selectedStudio && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={strict}
+                  onChange={(event) => setStrict(event.target.checked)}
+                />{" "}
+                {strict ? text.strictPreference : text.allowFallback}
+              </label>
+            )}
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={saveStudio}
+            >
+              {locale === "uz" ? "Tanlovni saqlash" : "Сохранить выбор"}
+            </button>
+          </fieldset>
+        )}
         {!draft.upload && (
           <>
             <label className="file-picker">

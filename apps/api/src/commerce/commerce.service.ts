@@ -73,6 +73,11 @@ const orderInclude = {
     orderBy: { createdAt: "desc" as const },
     select: { type: true, status: true, amountMinor: true, currency: true },
   },
+  studioSelection: {
+    include: {
+      listing: { select: { publicSlug: true, titleRu: true, titleUz: true } },
+    },
+  },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithFinance = Prisma.OrderGetPayload<{
@@ -87,6 +92,19 @@ const orderView = (order: OrderWithFinance) => ({
   status: order.status,
   version: order.version,
   createdAt: order.createdAt,
+  studioPreference: order.studioSelection
+    ? {
+        mode: order.studioSelection.mode,
+        fallbackPolicy: order.studioSelection.fallbackPolicy,
+        studio: order.studioSelection.listing
+          ? {
+              slug: order.studioSelection.listing.publicSlug,
+              titleRu: order.studioSelection.listing.titleRu,
+              titleUz: order.studioSelection.listing.titleUz,
+            }
+          : null,
+      }
+    : null,
   price: order.priceSnapshot
     ? {
         tariffVersion: order.priceSnapshot.tariffVersion,
@@ -284,13 +302,54 @@ export class CommerceService {
                 sourceParameters: Prisma.JsonValue;
               }
             | undefined;
+          let studioSelection:
+            | Prisma.OrderStudioSelectionSnapshotCreateWithoutOrderInput
+            | undefined;
           if (input.orderDraftId || input.priceQuoteId) {
             if (!input.orderDraftId || !input.priceQuoteId)
               throw new ConflictException({ code: "QUOTE_LINEAGE_REQUIRED" });
             const quote = await tx.priceQuote.findFirst({
               where: { id: input.priceQuoteId, draftId: input.orderDraftId },
               include: {
-                draft: { include: { catalogVersion: true, catalogItem: true } },
+                draft: {
+                  include: {
+                    catalogVersion: true,
+                    catalogItem: true,
+                    studioPreference: {
+                      include: {
+                        listing: {
+                          include: {
+                            branch: {
+                              include: {
+                                partner: true,
+                                capabilityVersions: {
+                                  where: { status: "ACTIVE" },
+                                  orderBy: { version: "desc" },
+                                  take: 1,
+                                },
+                                operationalVersions: {
+                                  where: { status: "ACTIVE" },
+                                  orderBy: { version: "desc" },
+                                  take: 1,
+                                },
+                                catalogVersions: {
+                                  where: { status: "ACTIVE" },
+                                  orderBy: { version: "desc" },
+                                  take: 1,
+                                },
+                                capacityVersions: {
+                                  where: { status: "ACTIVE" },
+                                  orderBy: { version: "desc" },
+                                  take: 1,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             });
             if (!quote || quote.draft.userId !== userId)
@@ -347,6 +406,50 @@ export class CommerceService {
               totalMinor: quote.totalMinor,
               sourceParameters: quote.sourceParameters,
             };
+            const preference = quote.draft.studioPreference;
+            if (preference?.mode === "PREFERRED_STUDIO") {
+              const listing = preference.listing;
+              const branch = listing?.branch;
+              const capability = branch?.capabilityVersions[0];
+              const operational = branch?.operationalVersions[0];
+              const catalog = branch?.catalogVersions[0];
+              const capacity = branch?.capacityVersions[0];
+              if (
+                !listing ||
+                listing.status !== "PUBLISHED" ||
+                !branch ||
+                !branch.active ||
+                !branch.acceptingOrders ||
+                !["ACTIVE", "APPROVED"].includes(branch.partner.status) ||
+                !capability ||
+                !operational ||
+                !catalog ||
+                !capacity ||
+                preference.capabilityVersionId !== capability.id ||
+                preference.operationalVersionId !== operational.id ||
+                preference.catalogVersionId !== catalog.id ||
+                preference.capacityVersionId !== capacity.id
+              )
+                throw new ConflictException({
+                  code: "STUDIO_PREFERENCE_STALE",
+                });
+              studioSelection = {
+                mode: preference.mode,
+                fallbackPolicy: preference.fallbackPolicy,
+                listingSequence: listing.sequence,
+                listing: { connect: { id: listing.id } },
+                branch: { connect: { id: branch.id } },
+                capabilityVersion: { connect: { id: capability.id } },
+                operationalVersion: { connect: { id: operational.id } },
+                catalogVersion: { connect: { id: catalog.id } },
+                capacityVersion: { connect: { id: capacity.id } },
+              };
+            } else {
+              studioSelection = {
+                mode: "AUTO_ASSIGN",
+                fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE",
+              };
+            }
           }
           const pageUnits = BigInt(printReady.pageCount * input.quantity);
           const pageTotal = tariff.perPagePriceMinor * pageUnits;
@@ -389,6 +492,9 @@ export class CommerceService {
                   currency: "UZS",
                 },
               },
+              studioSelection: studioSelection
+                ? { create: studioSelection }
+                : undefined,
             },
             include: orderInclude,
           });

@@ -15,6 +15,9 @@ export default function AdminPage() {
         <a className="button" href="/admin/partners">
           Партнёрская сеть
         </a>
+        <a className="button" href="/admin/partner-listings">
+          Публичные карточки студий
+        </a>
         <a className="button" href="/admin/tariffs">
           Тарифы и финансовый аудит
         </a>

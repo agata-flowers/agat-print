@@ -8,6 +8,7 @@ const copy = {
     catalog: "Услуги",
     orders: "Мои заказы",
     notifications: "Уведомления",
+    studios: "Студии",
     hero: "Печать и фотоуслуги — онлайн",
     lead: "Загрузите файл, проверьте макет и узнайте итоговую цену до оплаты. Заказ выполнит подходящая студия AGAT PRINT.",
     choose: "Выберите услугу",
@@ -29,12 +30,19 @@ const copy = {
     retry: "Повторить",
     emptyOrders: "У вас пока нет заказов.",
     emptyNotifications: "Новых уведомлений нет.",
+    studioChoice: "Выбор студии",
+    autoAssign: "Подобрать студию автоматически",
+    preferredStudio: "Предпочитаемая студия",
+    allowFallback: "Если студия занята, подобрать другую",
+    strictPreference: "Только выбранная студия",
+    studioSaved: "Выбор студии сохранён.",
   },
   uz: {
     start: "Buyurtma yaratish",
     catalog: "Xizmatlar",
     orders: "Buyurtmalarim",
     notifications: "Bildirishnomalar",
+    studios: "Studiyalar",
     hero: "Bosma va foto xizmatlari — onlayn",
     lead: "Faylni yuklang, maketni tekshiring va to‘lovdan oldin yakuniy narxni biling. Buyurtmani mos AGAT PRINT studiyasi bajaradi.",
     choose: "Xizmatni tanlang",
@@ -56,6 +64,12 @@ const copy = {
     retry: "Qayta urinish",
     emptyOrders: "Sizda hali buyurtmalar yo‘q.",
     emptyNotifications: "Yangi bildirishnomalar yo‘q.",
+    studioChoice: "Studiyani tanlash",
+    autoAssign: "Studiyani avtomatik tanlash",
+    preferredStudio: "Afzal studiya",
+    allowFallback: "Studiya band bo‘lsa, boshqasini tanlash",
+    strictPreference: "Faqat tanlangan studiya",
+    studioSaved: "Studiya tanlovi saqlandi.",
   },
 } as const;
 
@@ -87,6 +101,9 @@ export const customerError = (code: string, locale: CustomerLocale) => {
         "Макет изменился и требует повторного подтверждения.",
       PARTNER_UNAVAILABLE:
         "Сейчас нет доступной студии. Оплата будет безопасно возвращена.",
+      STUDIO_NOT_ELIGIBLE: "Эта студия сейчас не подходит для заказа.",
+      STUDIO_PREFERENCE_STALE:
+        "Данные студии изменились. Выберите студию повторно.",
       DRAFT_VERSION_CONFLICT:
         "Заказ изменился на другом устройстве. Страница обновлена.",
       CONCURRENT_CHANGE: "Запрос уже выполняется. Обновите состояние заказа.",
@@ -106,6 +123,9 @@ export const customerError = (code: string, locale: CustomerLocale) => {
         "Maket o‘zgardi va qayta tasdiqlanishi kerak.",
       PARTNER_UNAVAILABLE:
         "Hozir mos studiya yo‘q. To‘lov xavfsiz qaytariladi.",
+      STUDIO_NOT_ELIGIBLE: "Bu studiya hozir buyurtmaga mos emas.",
+      STUDIO_PREFERENCE_STALE:
+        "Studiya ma’lumotlari o‘zgardi. Uni qayta tanlang.",
       DRAFT_VERSION_CONFLICT:
         "Buyurtma boshqa qurilmada o‘zgardi. Sahifa yangilandi.",
       CONCURRENT_CHANGE: "So‘rov bajarilmoqda. Buyurtma holatini yangilang.",

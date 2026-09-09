@@ -18,6 +18,7 @@ import { UploadsModule } from "./uploads/uploads.module";
 import { DisputesModule } from "./disputes/disputes.module";
 import { FinanceModule } from "./finance/finance.module";
 import { OrderingModule } from "./ordering/ordering.module";
+import { MarketplaceModule } from "./marketplace/marketplace.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { OrderingModule } from "./ordering/ordering.module";
     DisputesModule,
     FinanceModule,
     OrderingModule,
+    MarketplaceModule,
   ],
   controllers: [HealthController],
   providers: [
