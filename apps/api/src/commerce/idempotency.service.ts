@@ -3,12 +3,12 @@ import { ConflictException, Inject, Injectable } from "@nestjs/common";
 import type { IdempotencyRecord, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
-const canonical = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+export const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object")
     return `{${Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`)
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
       .join(",")}}`;
   return JSON.stringify(value);
 };
@@ -26,7 +26,7 @@ export class IdempotencyService {
     return {
       scope,
       keyDigest: sha256(key),
-      requestHash: sha256(canonical(payload)),
+      requestHash: sha256(canonicalJson(payload)),
     };
   }
 

@@ -20,7 +20,7 @@ import type {
   PaymentCallbackDto,
   StartPaymentDto,
 } from "./dto";
-import { IdempotencyService } from "./idempotency.service";
+import { canonicalJson, IdempotencyService } from "./idempotency.service";
 import { MockPaymentProvider } from "./mock-payment.provider";
 import { calculateCustomerPrice } from "../ordering/pricing";
 
@@ -333,8 +333,8 @@ export class CommerceService {
             if (
               recalculated.totalMinor !== quote.totalMinor ||
               recalculated.subtotalMinor !== quote.subtotalMinor ||
-              JSON.stringify(recalculated.lineItems) !==
-                JSON.stringify(quote.lineItems)
+              canonicalJson(recalculated.lineItems) !==
+                canonicalJson(quote.lineItems)
             )
               throw new ConflictException({ code: "QUOTE_STALE" });
             quoted = {
