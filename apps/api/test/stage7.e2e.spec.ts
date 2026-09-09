@@ -1392,13 +1392,14 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
             { cutoffAt: new Date().toISOString() },
           ).expect(403);
           const key = randomUUID();
+          const cutoffAt = new Date().toISOString();
           const create = () =>
             admin.agent
               .post("/api/v1/admin/finance/settlement-batches")
               .set("Origin", origin)
               .set("X-CSRF-Token", admin.csrf)
               .set("Idempotency-Key", key)
-              .send({ cutoffAt: new Date().toISOString() });
+              .send({ cutoffAt });
           const [first, replay] = await Promise.all([
             create().expect(201),
             create().expect(201),
