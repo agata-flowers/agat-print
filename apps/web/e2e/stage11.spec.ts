@@ -37,9 +37,9 @@ test("customer completes catalog to checkout and resumes the order timeline", as
     page.getByRole("heading", { name: "Настройте заказ" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Продолжить" }).click();
-  await expect(
-    page.getByText("Выберите файл PDF, DOCX, JPG или PNG"),
-  ).toBeVisible();
+  await expect(page.locator("label.file-picker")).toContainText(
+    "Выберите файл PDF, DOCX, JPG или PNG",
+  );
   await page.locator('input[type="file"]').setInputFiles({
     name: "synthetic.pdf",
     mimeType: "application/pdf",
