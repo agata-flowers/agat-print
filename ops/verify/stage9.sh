@@ -62,7 +62,7 @@ set +e
 db_status="${PIPESTATUS[0]}"
 set -e
 if [[ "$db_status" -ne 0 ]]; then
-  summary="$(grep -E 'FAIL|AssertionError|expected|Error:|Test Files|Tests ' work/stage9-db-e2e.log | tail -12 | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}/[id]/g; s/\+998[0-9]+/[phone]/g; s#(quarantine|objects|previews|print-ready)/[^ ]+#[object]/#g' | paste -sd ';' -)"
+  summary="$(grep -E 'FAIL|AssertionError|expected|Error:|PrismaClientKnownRequestError|Unique constraint|Foreign key constraint|Transaction API error|code: .P[0-9]+.|meta:|Test Files|Tests ' work/stage9-db-e2e.log | tail -16 | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}/[id]/g; s/\+998[0-9]+/[phone]/g; s#(quarantine|objects|previews|print-ready)/[^ ]+#[object]/#g' | paste -sd ';' -)"
   summary="${summary//'%'/'%25'}"
   summary="${summary//$'\n'/'%0A'}"
   summary="${summary//$'\r'/'%0D'}"
