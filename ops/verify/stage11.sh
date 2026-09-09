@@ -121,7 +121,18 @@ wait_url http://localhost:3000
 
 phase=stage11-browser-e2e
 pnpm --filter @agat/web exec playwright install --with-deps chromium
-STAGE11_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage11.spec.ts
+set +e
+STAGE11_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage11.spec.ts 2>&1 | tee "$work_dir/browser-e2e.log"
+browser_status="${PIPESTATUS[0]}"
+set -e
+if [[ "$browser_status" -ne 0 ]]; then
+  summary="$(grep -E 'Error:|Timeout|expect\(|Expected:|Received:|stage11\.spec\.ts:|failed|passed' "$work_dir/browser-e2e.log" | tail -16 | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}/[id]/g; s/\+998[0-9]+/[phone]/g; s#(quarantine|objects|previews|print-ready)/[^ ]+#[object]/#g' | paste -sd ';' -)"
+  summary="${summary//'%'/'%25'}"
+  summary="${summary//$'\n'/'%0A'}"
+  summary="${summary//$'\r'/'%0D'}"
+  echo "::error title=Stage 11 browser E2E failure::${summary:-no-safe-summary}"
+  exit "$browser_status"
+fi
 browser_e2e=passed
 
 phase=privacy-cache-and-worker
