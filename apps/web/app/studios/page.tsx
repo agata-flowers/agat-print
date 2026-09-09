@@ -22,7 +22,19 @@ export default function StudiosPage() {
   const [studios, setStudios] = useState<Studio[]>([]);
   const [message, setMessage] = useState("");
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const routeParams = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams();
+    for (const key of [
+      "serviceCode",
+      "paperCode",
+      "colorMode",
+      "locationCode",
+      "latitude",
+      "longitude",
+    ]) {
+      const value = routeParams.get(key);
+      if (value) params.set(key, value);
+    }
     params.set("locale", locale);
     publicApiRequest(`/studios?${params.toString()}`)
       .then((response) => response.json())
