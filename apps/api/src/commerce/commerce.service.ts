@@ -221,7 +221,7 @@ export class CommerceService {
   async createOrder(
     userId: string,
     key: string | undefined,
-    input: CreateOrderDto,
+    input: CreateOrderDto & { orderDraftVersion?: number },
   ) {
     const prepared = this.idempotency.prepare(
       `order:create:${userId}`,
@@ -300,6 +300,8 @@ export class CommerceService {
               quote.expiresAt <= new Date() ||
               quote.draft.status !== "QUOTED" ||
               quote.draft.version !== quote.draftVersion ||
+              (input.orderDraftVersion !== undefined &&
+                quote.draftVersion !== input.orderDraftVersion) ||
               quote.draft.layoutApprovalId !== approval.id ||
               quote.layoutApprovalId !== approval.id ||
               quote.layoutVersion !== layout.version ||
@@ -989,6 +991,7 @@ export class CommerceService {
       });
       if (existing)
         return this.idempotency.assertCompatible(existing, prepared);
+      throw new ConflictException({ code: "CONCURRENT_CHANGE" });
     }
     throw error;
   }

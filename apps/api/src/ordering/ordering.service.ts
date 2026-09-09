@@ -790,13 +790,12 @@ export class OrderingService {
     const quote = draft.quotes[0];
     if (!quote || !draft.layoutApprovalId)
       throw new ConflictException({ code: "QUOTE_REQUIRED" });
-    if (draft.version !== input.version)
-      throw new ConflictException({ code: "DRAFT_VERSION_CONFLICT" });
     return this.commerce.createOrder(userId, key, {
       layoutApprovalId: draft.layoutApprovalId,
       quantity: draft.quantity,
       orderDraftId: draft.id,
       priceQuoteId: quote.id,
+      orderDraftVersion: input.version,
     });
   }
 
