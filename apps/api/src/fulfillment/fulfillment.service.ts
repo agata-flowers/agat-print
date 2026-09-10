@@ -108,107 +108,114 @@ export class FulfillmentService {
     const address = input.deliveryAddress
       ? this.crypto.encryptAddress(input.deliveryAddress)
       : null;
-    try {
-      const value = await this.prisma.$transaction(
-        async (tx) => {
-          await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
-          const insideExisting = await tx.orderFulfillment.findFirst({
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const value = await this.prisma.$transaction(
+          async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
+            const insideExisting = await tx.orderFulfillment.findFirst({
+              where: { productionCycleId: currentCycle.id },
+              include: { order: { select: { userId: true, status: true } } },
+            });
+            if (insideExisting)
+              return this.replayFulfillment(userId, insideExisting, prepared);
+            const order = await tx.order.findFirst({
+              where: { id: orderId, userId },
+              include: {
+                assignments: { orderBy: { acceptedAt: "desc" } },
+                productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
+              },
+            });
+            if (!order) throw new NotFoundException();
+            if (
+              order.status !== "READY" ||
+              !order.productionCycles[0] ||
+              order.productionCycles[0].id !== currentCycle.id ||
+              order.assignments[0]?.status !== "READY"
+            )
+              throw new ConflictException({ code: "ORDER_NOT_READY" });
+            const created = await tx.orderFulfillment.create({
+              data: {
+                orderId,
+                productionCycleId: order.productionCycles[0].id,
+                mode: input.mode,
+                requestKeyDigest: prepared.keyDigest,
+                requestHash: prepared.requestHash,
+                completionNonce,
+                completionPinDigest: this.crypto.pinDigest(
+                  "completion",
+                  completionNonce,
+                  completionPin,
+                ),
+                completionExpiresAt: new Date(
+                  Date.now() + this.env.pickupPinTtlSeconds * 1_000,
+                ),
+                handoffNonce,
+                handoffPinDigest: handoffNonce
+                  ? this.crypto.pinDigest(
+                      "handoff",
+                      handoffNonce,
+                      this.crypto.pin("handoff", handoffNonce),
+                    )
+                  : null,
+                ...(address ?? {}),
+              },
+            });
+            const changed = await tx.order.updateMany({
+              where: { id: orderId, version: order.version, status: "READY" },
+              data: { status: "AWAITING_PICKUP", version: { increment: 1 } },
+            });
+            if (changed.count !== 1)
+              throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+            await tx.productionCycle.update({
+              where: { id: order.productionCycles[0].id },
+              data: { status: "FULFILLING", version: { increment: 1 } },
+            });
+            await tx.outboxEvent.create({
+              data: outbox(
+                "order",
+                orderId,
+                order.version + 1,
+                input.mode === "DELIVERY"
+                  ? "DELIVERY_REQUESTED"
+                  : "PICKUP_REQUESTED",
+              ),
+            });
+            return {
+              orderId,
+              fulfillmentId: created.id,
+              mode: created.mode,
+              orderStatus: "AWAITING_PICKUP",
+              completionPin,
+              expiresAt: created.completionExpiresAt,
+            };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        await this.audit.record("FULFILLMENT_REQUESTED", userId, "order", {
+          status: "AWAITING_PICKUP",
+          operation: input.mode,
+        });
+        return value;
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          ["P2002", "P2034"].includes(error.code)
+        ) {
+          const raced = await this.prisma.orderFulfillment.findFirst({
             where: { productionCycleId: currentCycle.id },
             include: { order: { select: { userId: true, status: true } } },
           });
-          if (insideExisting)
-            return this.replayFulfillment(userId, insideExisting, prepared);
-          const order = await tx.order.findFirst({
-            where: { id: orderId, userId },
-            include: {
-              assignments: { orderBy: { acceptedAt: "desc" } },
-              productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
-            },
-          });
-          if (!order) throw new NotFoundException();
-          if (
-            order.status !== "READY" ||
-            !order.productionCycles[0] ||
-            order.productionCycles[0].id !== currentCycle.id ||
-            order.assignments[0]?.status !== "READY"
-          )
-            throw new ConflictException({ code: "ORDER_NOT_READY" });
-          const created = await tx.orderFulfillment.create({
-            data: {
-              orderId,
-              productionCycleId: order.productionCycles[0].id,
-              mode: input.mode,
-              requestKeyDigest: prepared.keyDigest,
-              requestHash: prepared.requestHash,
-              completionNonce,
-              completionPinDigest: this.crypto.pinDigest(
-                "completion",
-                completionNonce,
-                completionPin,
-              ),
-              completionExpiresAt: new Date(
-                Date.now() + this.env.pickupPinTtlSeconds * 1_000,
-              ),
-              handoffNonce,
-              handoffPinDigest: handoffNonce
-                ? this.crypto.pinDigest(
-                    "handoff",
-                    handoffNonce,
-                    this.crypto.pin("handoff", handoffNonce),
-                  )
-                : null,
-              ...(address ?? {}),
-            },
-          });
-          const changed = await tx.order.updateMany({
-            where: { id: orderId, version: order.version, status: "READY" },
-            data: { status: "AWAITING_PICKUP", version: { increment: 1 } },
-          });
-          if (changed.count !== 1)
-            throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
-          await tx.productionCycle.update({
-            where: { id: order.productionCycles[0].id },
-            data: { status: "FULFILLING", version: { increment: 1 } },
-          });
-          await tx.outboxEvent.create({
-            data: outbox(
-              "order",
-              orderId,
-              order.version + 1,
-              input.mode === "DELIVERY"
-                ? "DELIVERY_REQUESTED"
-                : "PICKUP_REQUESTED",
-            ),
-          });
-          return {
-            orderId,
-            fulfillmentId: created.id,
-            mode: created.mode,
-            orderStatus: "AWAITING_PICKUP",
-            completionPin,
-            expiresAt: created.completionExpiresAt,
-          };
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-      await this.audit.record("FULFILLMENT_REQUESTED", userId, "order", {
-        status: "AWAITING_PICKUP",
-        operation: input.mode,
-      });
-      return value;
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ["P2002", "P2034"].includes(error.code)
-      ) {
-        const raced = await this.prisma.orderFulfillment.findFirst({
-          where: { productionCycleId: currentCycle.id },
-          include: { order: { select: { userId: true, status: true } } },
-        });
-        if (raced) return this.replayFulfillment(userId, raced, prepared);
+          if (raced) return this.replayFulfillment(userId, raced, prepared);
+          if (error.code === "P2034" && attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            continue;
+          }
+        }
+        throw error;
       }
-      throw error;
     }
+    throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
   }
 
   async applyCourier(userId: string, input: CourierApplicationDto) {
