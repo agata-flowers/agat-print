@@ -17,6 +17,52 @@ const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const opaque = (prefix: string) =>
   `${prefix}/${randomUUID().replaceAll("-", "").padEnd(64, "0")}`;
+const documentPrintOptions = {
+  fields: [
+    {
+      code: "WIDTH_MM",
+      labelRu: "Ширина",
+      labelUz: "Kenglik",
+      required: true,
+      values: [{ code: "210", labelRu: "210 мм", labelUz: "210 mm" }],
+    },
+    {
+      code: "HEIGHT_MM",
+      labelRu: "Высота",
+      labelUz: "Balandlik",
+      required: true,
+      values: [{ code: "297", labelRu: "297 мм", labelUz: "297 mm" }],
+    },
+    {
+      code: "MIN_DPI",
+      labelRu: "Качество",
+      labelUz: "Sifat",
+      required: true,
+      values: [{ code: "300", labelRu: "Стандарт", labelUz: "Standart" }],
+    },
+    {
+      code: "PAPER",
+      labelRu: "Бумага",
+      labelUz: "Qog‘oz",
+      required: true,
+      values: [{ code: "STANDARD", labelRu: "Обычная", labelUz: "Oddiy" }],
+    },
+    {
+      code: "COLOR",
+      labelRu: "Цвет",
+      labelUz: "Rang",
+      required: true,
+      values: [{ code: "COLOR", labelRu: "Цветная", labelUz: "Rangli" }],
+    },
+    {
+      code: "PHOTO_DOCUMENT",
+      labelRu: "Фото на документы",
+      labelUz: "Hujjat uchun foto",
+      required: true,
+      values: [{ code: "NO", labelRu: "Нет", labelUz: "Yo‘q" }],
+    },
+  ],
+};
 
 describe.skipIf(!enabled)("stage 12 customer studio marketplace DB-E2E", () => {
   let app: INestApplication;
@@ -81,7 +127,7 @@ describe.skipIf(!enabled)("stage 12 customer studio marketplace DB-E2E", () => {
             descriptionRu: "Документы",
             descriptionUz: "Hujjatlar",
             acceptedFileKinds: ["PDF", "DOCX", "JPEG", "PNG"],
-            optionSchema: { fields: [] },
+            optionSchema: documentPrintOptions,
             sortOrder: 1,
           },
         },
