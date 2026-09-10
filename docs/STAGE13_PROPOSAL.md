@@ -6,6 +6,15 @@ Baseline: Stage 12 commit
 `a5e3276d9983ad88a624c6bbafa4a48bf06d1982` and GitHub Actions run
 `34495169708`. Stages 1–12 remain authoritative and unchanged.
 
+Implementation clarification: Stage 13 acceptance has no external-provider
+dependency. `PICKUP` is a complete first-class path with no provider call.
+`DELIVERY` uses the production-capable internal deterministic Tashkent zonal
+pricing, service-area and courier assignment implementation already bounded by
+provider-neutral ports. External maps, geocoding, courier, payment, SMS/OTP and
+fiscal credentials are neither introduced nor required by the Stage 13 gate.
+Future adapters may replace only the port implementation; they must not change
+the checkout contract or any historical fulfillment or price snapshot.
+
 ## Problem statement and product goal
 
 AGAT PRINT already lets a customer configure and approve one print service,
@@ -501,9 +510,9 @@ SHA:
 
 ## External blockers and dependencies
 
-- Production courier dispatch needs a contracted delivery provider, certified
-  webhook/operations behavior and secret-store credentials. CI can verify only
-  the provider-neutral contract and deterministic adapter.
+- A contracted courier adapter may replace the internal deterministic delivery
+  adapter after separate certification, but is not a Stage 13 runtime or
+  acceptance dependency.
 - Exact-address validation, geocoding, road distance and ETA require a maps
   provider contract, credentials and privacy assessment. They are not required
   for the bounded Tashkent zone model.
@@ -514,9 +523,10 @@ SHA:
 - Operations must approve bounded location codes, delivery fees, service areas,
   courier coverage and escalation procedures before enabling delivery.
 
-Pickup can satisfy the full internal MVP journey without these external
-providers. Production delivery cannot be declared externally certified until
-the relevant contracts and credentials are supplied.
+Both pickup and deterministic zonal delivery satisfy the Stage 13 internal MVP
+journey without external providers. Only optional vendor-specific delivery and
+maps behavior remains uncertified until relevant contracts and credentials are
+supplied.
 
 ## Proposed deliverables
 
