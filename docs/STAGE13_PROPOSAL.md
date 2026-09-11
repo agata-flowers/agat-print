@@ -1,6 +1,6 @@
 # Stage 13 proposal — Checkout Fulfillment Commitment & Delivery Pricing
 
-Status: proposed; implementation requires separate approval.
+Status: approved for implementation with the provider-independent clarification below.
 
 Baseline: Stage 12 commit
 `a5e3276d9983ad88a624c6bbafa4a48bf06d1982` and GitHub Actions run
@@ -565,4 +565,4 @@ supplied.
     one final SHA has green `quality`, `infrastructure` and a verified Stage 13
     artifact.
 
-No Stage 13 production/domain implementation is authorized by this proposal.
+Stage 13 implementation is authorized only within this contract. Stage 14 is not authorized.

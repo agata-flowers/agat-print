@@ -407,3 +407,29 @@ The existing matcher ranks a fully eligible preferred branch first with
 `CUSTOMER_PREFERRED`. Allowed fallback uses the unchanged deterministic Stage
 10 score. Strict preference creates no incompatible offer and reaches the
 existing single `MATCHING_EXHAUSTED` refund command.
+
+## ADR 13: checkout-time fulfillment commitment
+
+Stage 13 extends the existing draft, pricing, matching and fulfillment
+aggregates; it does not add another order state machine. A mutable, owner-scoped
+`OrderDraftFulfillmentPreference` is encrypted immediately for delivery and is
+versioned by the draft CAS. The active `TariffVersion` owns immutable
+`FulfillmentTariffRule` rows. Quote binds both versions and checkout creates one
+immutable `OrderFulfillmentSelectionSnapshot` in the order/`PriceSnapshot`
+transaction.
+
+```mermaid
+erDiagram
+  TariffVersion ||--o{ FulfillmentTariffRule : prices
+  OrderDraft ||--o| OrderDraftFulfillmentPreference : commits
+  OrderDraft ||--o{ PriceQuote : freezes
+  FulfillmentTariffRule ||--o{ PriceQuote : quotes
+  Order ||--o| OrderFulfillmentSelectionSnapshot : freezes
+  FulfillmentTariffRule ||--o{ OrderFulfillmentSelectionSnapshot : lineage
+  OrderFulfillmentSelectionSnapshot ||--o{ OrderFulfillment : activates
+```
+
+Pickup stores no address and has no provider dependency. Delivery uses the
+bounded internal `TASHKENT` zone and the provider-neutral delivery port. The
+matcher treats that frozen zone as a hard eligibility guard at offer creation
+and acceptance. Legacy null-lineage orders keep the Stage 7 late-choice path.

@@ -209,3 +209,18 @@ included in customer/courier delivery views.
 - Published content and checkout selection snapshots have database
   immutability triggers. Matching still enforces current lifecycle, capability,
   service, availability, service-area, capacity and offer-acceptance checks.
+
+## Stage 13 fulfillment commitment controls
+
+- Delivery address is accepted only on the owner-scoped preference mutation,
+  normalized and encrypted with existing AES-256-GCM key material before it is
+  stored. Pickup rejects address input and stores no address fields.
+- Draft, quote, order and ordinary admin/partner projections expose only mode,
+  bounded location code and integer fee. Ciphertext, address plaintext, tariff
+  rule IDs, PINs and provider references are excluded.
+- Preference/clear/activation mutations require CSRF, `Idempotency-Key`, owner
+  checks and draft/order CAS. Audit metadata contains only bounded mode/status.
+- Matching rechecks the frozen delivery zone at offer creation and acceptance;
+  preference never bypasses capability, lifecycle, availability or capacity.
+- Legacy null-lineage orders retain the existing Stage 7 endpoint; a Stage 13
+  selection is immutable and conflicting late mode selection fails closed.

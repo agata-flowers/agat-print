@@ -157,3 +157,13 @@ stationery and multi-partner carts remain outside the proposal.
 The complete scope and acceptance criteria are defined in
 [`STAGE12_PROPOSAL.md`](STAGE12_PROPOSAL.md). Later product stages remain
 outside this approval.
+
+## Stage 13 approved boundary — Fulfillment commitment and delivery pricing
+
+New pilot drafts require pickup or bounded-zone delivery before quote. The
+complete integer UZS total includes the immutable fulfillment tariff line;
+checkout freezes mode, safe zone, encrypted address and rule lineage. Matching
+uses that zone as a hard eligibility input and `READY` activates the existing
+PIN/courier fulfillment lifecycle. Pickup and internal deterministic Tashkent
+delivery require no new external provider. Legacy drafts/orders remain
+compatible. The complete contract is [`STAGE13_PROPOSAL.md`](STAGE13_PROPOSAL.md).

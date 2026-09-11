@@ -223,3 +223,26 @@ jobs:
             outputs/stage12-verification-report.json
             outputs/stage12-verification-report.sha256
           if-no-files-found: error
+      - name: Initialize stage 13 diagnostic artifact
+        if: always()
+        run: |
+          printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage13-verification-report.json
+      - name: Run stage 13 fulfillment commitment and delivery pricing verification
+        run: |
+          set +e
+          bash ops/verify/stage13.sh
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            diagnostic="$(node -e 'const fs=require("node:fs"); const p="outputs/stage13-verification-report.json"; if(!fs.existsSync(p)){process.stdout.write("phase=report-missing; failureLine=unknown"); process.exit(0)} const r=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(`phase=${r.phase}; failureLine=${r.failureLine ?? "unknown"}`)')"
+            echo "::error title=Stage 13 verification diagnostic::$diagnostic"
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage13-verification-report
+          path: |
+            outputs/stage13-verification-report.json
+            outputs/stage13-verification-report.sha256
+          if-no-files-found: error

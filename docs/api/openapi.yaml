@@ -545,6 +545,20 @@ paths:
         "201": { description: Order moved to AWAITING_PICKUP }
         "404": { description: Order not owned }
         "409": { description: Order not READY or idempotency conflict }
+  /orders/{orderId}/fulfillment/activate:
+    post:
+      summary: Activate the immutable checkout-time fulfillment selection
+      description: >-
+        Owner-only activation at READY. Reuses the existing per-production-cycle
+        PIN and courier workflow; no address is accepted or returned.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Frozen pickup or delivery intent activated }
+        "404": { description: Order not owned }
+        "409":
+          { description: Missing selection, not READY or conflicting replay }
   /couriers:
     post:
       summary: Submit a courier application
@@ -1038,7 +1052,50 @@ paths:
       responses:
         "201": { description: UZS integer-minor-unit quote }
         "409":
-          { description: Stale catalog, tariff, source, layout or approval }
+          {
+            description: Missing fulfillment choice or stale catalog,
+            tariff,
+            source,
+            layout or approval,
+          }
+  /order-drafts/{draftId}/fulfillment-options:
+    get:
+      summary: Read safe pickup and bounded-zone delivery choices for an owned draft
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200":
+          {
+            description: Bounded mode,
+            location code and indicative integer UZS fee; no address or internal IDs,
+          }
+        "404": { description: Foreign and missing drafts are indistinguishable }
+  /order-drafts/{draftId}/fulfillment-preference:
+    put:
+      summary: Set the pre-quote pickup or delivery commitment
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FulfillmentPreference" }
+      responses:
+        "200":
+          {
+            description: CAS-protected preference stored; delivery address encrypted,
+          }
+        "404": { description: Foreign and missing drafts are indistinguishable }
+        "409":
+          {
+            description: Invalid/unavailable choice,
+            stale version or conflicting replay,
+          }
+    delete:
+      summary: Clear an unconsumed fulfillment preference and stale active quotes
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: Preference cleared or safely replayed }
   /order-drafts/{draftId}/checkout:
     post:
       summary: Recompute and create one order with immutable PriceSnapshot
@@ -1377,6 +1434,26 @@ components:
       properties:
         basePriceMinor: { type: string, pattern: "^\\d{1,15}$" }
         perPagePriceMinor: { type: string, pattern: "^\\d{1,15}$" }
+        fulfillmentRules:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [mode, locationCode, feeMinor]
+            properties:
+              mode: { type: string, enum: [PICKUP, DELIVERY] }
+              locationCode: { type: string, pattern: "^[A-Z0-9_]{2,40}$" }
+              feeMinor: { type: string, pattern: "^\\d{1,15}$" }
+              enabled: { type: boolean, default: true }
+    FulfillmentPreference:
+      type: object
+      additionalProperties: false
+      required: [version, mode, locationCode]
+      properties:
+        version: { type: integer, minimum: 0 }
+        mode: { type: string, enum: [PICKUP, DELIVERY] }
+        locationCode: { type: string, pattern: "^[A-Z0-9_]{2,40}$" }
+        address: { type: string, minLength: 5, maxLength: 500 }
     CreateOrder:
       type: object
       additionalProperties: false

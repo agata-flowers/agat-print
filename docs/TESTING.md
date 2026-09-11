@@ -166,3 +166,14 @@ no-store, privacy, metrics and service-worker rules. Encrypted backup and
 isolated restore retain listing, preference and immutable selection lineage
 while enforcing pilot RPO/RTO. The script always emits a diagnostic JSON report
 and SHA-256 sidecar; a failed assertion remains a failed CI job.
+
+## Stage 13 gate
+
+`bash ops/verify/stage13.sh` runs after the complete Stage 1–12 chain. It
+deploys the additive migration twice, runs pickup/delivery pricing, encrypted
+preference, immutable checkout lineage, zone matching, ownership, replay and
+activation DB-E2E, and exercises RU pickup plus UZ delivery in Playwright.
+Privacy/cache/audit assertions, Compose health, encrypted backup and isolated
+restore remain mandatory. The report records DB/browser results, regression,
+RPO/RTO, final SHA and evidence SHA-256 and is uploaded even on failure without
+masking the failed job.

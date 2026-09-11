@@ -252,3 +252,17 @@ PostgreSQL backup includes all three Stage 12 tables. Isolated restore verifies
 listing history, preferences, one snapshot per order, object manifests,
 retention tombstones and legal holds before API enablement. Existing pilot
 targets remain RPO at most 24 hours and RTO at most 4 hours.
+
+## Stage 13 fulfillment rollout and recovery
+
+Publish an active tariff containing `PICKUP/PICKUP` and the approved bounded
+delivery-zone rules before setting `STAGE13_FULFILLMENT_ENABLED=true`. Roll out
+pickup first; the internal deterministic `TASHKENT` delivery dispatcher needs
+no external credentials. Disabling the flag stops creation of newly required
+drafts but does not rewrite existing preferences, quotes or snapshots.
+
+Backup includes encrypted draft preferences, immutable order selections and
+fulfillment tariff lineage. Restore must validate one selection per order,
+matching quote/snapshot totals, pickup null-address constraints, authenticated
+delivery ciphertext, active-cycle fulfillment linkage, tombstones and legal
+holds before API enablement. Database rollback is forward-fix only.
