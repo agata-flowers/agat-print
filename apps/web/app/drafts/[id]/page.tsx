@@ -362,68 +362,64 @@ export default function DraftPage() {
             {text.approve}
           </button>
         )}
-        {draft.layout?.approved &&
-          draft.fulfillmentRequired &&
-          !draft.fulfillmentPreference && (
-            <fieldset className="studio-choice" data-testid="fulfillment-step">
-              <legend>
-                {locale === "uz" ? "Olish usuli" : "Способ получения"}
-              </legend>
-              {fulfillmentOptions.map((option) => (
-                <label key={`${option.mode}-${option.locationCode}`}>
-                  <input
-                    type="radio"
-                    name="fulfillment"
-                    checked={fulfillmentMode === option.mode}
-                    onChange={() => setFulfillmentMode(option.mode)}
-                  />{" "}
-                  {option.mode === "PICKUP"
-                    ? locale === "uz"
-                      ? "Studiyadan olib ketish"
-                      : "Самовывоз из студии"
-                    : locale === "uz"
-                      ? "Yetkazib berish"
-                      : "Доставка"}{" "}
-                  · {option.feeMinor} UZS
-                </label>
-              ))}
-              {fulfillmentMode === "DELIVERY" && (
-                <label>
-                  {locale === "uz" ? "Yetkazish manzili" : "Адрес доставки"}
-                  <input
-                    value={deliveryAddress}
-                    onChange={(event) => setDeliveryAddress(event.target.value)}
-                    autoComplete="street-address"
-                    minLength={5}
-                    maxLength={500}
-                  />
-                </label>
-              )}
-              <button
-                className="button primary"
-                disabled={
-                  busy ||
-                  fulfillmentOptions.length === 0 ||
-                  (fulfillmentMode === "DELIVERY" &&
-                    deliveryAddress.trim().length < 5)
-                }
-                onClick={saveFulfillment}
-              >
-                {locale === "uz" ? "Davom etish" : "Продолжить"}
-              </button>
-            </fieldset>
-          )}
-        {draft.layout?.approved &&
-          (!draft.fulfillmentRequired || draft.fulfillmentPreference) &&
-          !draft.quote?.active && (
+        {draft.step === "fulfillment" && (
+          <fieldset className="studio-choice" data-testid="fulfillment-step">
+            <legend>
+              {locale === "uz" ? "Olish usuli" : "Способ получения"}
+            </legend>
+            {fulfillmentOptions.map((option) => (
+              <label key={`${option.mode}-${option.locationCode}`}>
+                <input
+                  type="radio"
+                  name="fulfillment"
+                  checked={fulfillmentMode === option.mode}
+                  onChange={() => setFulfillmentMode(option.mode)}
+                />{" "}
+                {option.mode === "PICKUP"
+                  ? locale === "uz"
+                    ? "Studiyadan olib ketish"
+                    : "Самовывоз из студии"
+                  : locale === "uz"
+                    ? "Yetkazib berish"
+                    : "Доставка"}{" "}
+                · {option.feeMinor} UZS
+              </label>
+            ))}
+            {fulfillmentMode === "DELIVERY" && (
+              <label>
+                {locale === "uz" ? "Yetkazish manzili" : "Адрес доставки"}
+                <input
+                  value={deliveryAddress}
+                  onChange={(event) => setDeliveryAddress(event.target.value)}
+                  autoComplete="street-address"
+                  minLength={5}
+                  maxLength={500}
+                />
+              </label>
+            )}
             <button
               className="button primary"
-              disabled={busy}
-              onClick={() => act("quote", { version: draft.version })}
+              disabled={
+                busy ||
+                fulfillmentOptions.length === 0 ||
+                (fulfillmentMode === "DELIVERY" &&
+                  deliveryAddress.trim().length < 5)
+              }
+              onClick={saveFulfillment}
             >
-              {text.quote}
+              {locale === "uz" ? "Davom etish" : "Продолжить"}
             </button>
-          )}
+          </fieldset>
+        )}
+        {draft.step === "quote" && !draft.quote?.active && (
+          <button
+            className="button primary"
+            disabled={busy}
+            onClick={() => act("quote", { version: draft.version })}
+          >
+            {text.quote}
+          </button>
+        )}
         {draft.quote?.active && (
           <div className="quote">
             {draft.fulfillmentPreference && (

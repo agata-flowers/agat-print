@@ -26,7 +26,7 @@ async function reachApprovedLayout(
     .fill(phone);
   await page
     .getByRole("button", {
-      name: locale === "ru" ? "Получить код" : "Kodni olish",
+      name: locale === "ru" ? "Получить код" : "Kod olish",
     })
     .click();
   await page
