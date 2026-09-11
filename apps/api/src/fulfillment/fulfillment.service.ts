@@ -217,16 +217,22 @@ export class FulfillmentService {
         });
         return value;
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          ["P2002", "P2034"].includes(error.code)
-        ) {
+        const prismaError =
+          error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
+        const serializationFailure =
+          prismaError?.code === "P2034" ||
+          (prismaError?.code === "P2010" &&
+            typeof prismaError.meta === "object" &&
+            prismaError.meta !== null &&
+            "code" in prismaError.meta &&
+            prismaError.meta.code === "40001");
+        if (prismaError?.code === "P2002" || serializationFailure) {
           const raced = await this.prisma.orderFulfillment.findFirst({
             where: { productionCycleId: currentCycle.id },
             include: { order: { select: { userId: true, status: true } } },
           });
           if (raced) return this.replayFulfillment(userId, raced, prepared);
-          if (error.code === "P2034" && attempt < 2) {
+          if (serializationFailure && attempt < 2) {
             await new Promise((resolve) => setTimeout(resolve, 20));
             continue;
           }
