@@ -8,6 +8,7 @@ type PricingInput = {
   pageCount: number;
   quantity: number;
   configuration: Record<string, unknown>;
+  fulfillmentFeeMinor?: bigint;
 };
 
 export function calculateCustomerPrice(input: PricingInput) {
@@ -53,7 +54,16 @@ export function calculateCustomerPrice(input: PricingInput) {
       totalMinor: total.toString(),
     });
   }
-  const subtotalMinor = input.basePriceMinor + pageTotal + optionTotal;
+  const fulfillmentFee = input.fulfillmentFeeMinor ?? 0n;
+  if (input.fulfillmentFeeMinor !== undefined)
+    lineItems.push({
+      code: "FULFILLMENT",
+      quantity: 1,
+      unitPriceMinor: fulfillmentFee.toString(),
+      totalMinor: fulfillmentFee.toString(),
+    });
+  const subtotalMinor =
+    input.basePriceMinor + pageTotal + optionTotal + fulfillmentFee;
   if (subtotalMinor <= 0n) throw new CatalogPolicyError("EMPTY_TARIFF");
   return {
     lineItems,

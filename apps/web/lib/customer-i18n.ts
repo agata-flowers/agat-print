@@ -104,6 +104,13 @@ export const customerError = (code: string, locale: CustomerLocale) => {
       STUDIO_NOT_ELIGIBLE: "Эта студия сейчас не подходит для заказа.",
       STUDIO_PREFERENCE_STALE:
         "Данные студии изменились. Выберите студию повторно.",
+      FULFILLMENT_SELECTION_REQUIRED: "Выберите способ получения заказа.",
+      FULFILLMENT_UNAVAILABLE:
+        "Этот способ получения сейчас недоступен. Выберите другой.",
+      INVALID_FULFILLMENT_SELECTION:
+        "Проверьте способ получения и адрес доставки.",
+      FULFILLMENT_SELECTION_IMMUTABLE:
+        "Способ получения уже зафиксирован в заказе.",
       DRAFT_VERSION_CONFLICT:
         "Заказ изменился на другом устройстве. Страница обновлена.",
       CONCURRENT_CHANGE: "Запрос уже выполняется. Обновите состояние заказа.",
@@ -126,6 +133,13 @@ export const customerError = (code: string, locale: CustomerLocale) => {
       STUDIO_NOT_ELIGIBLE: "Bu studiya hozir buyurtmaga mos emas.",
       STUDIO_PREFERENCE_STALE:
         "Studiya ma’lumotlari o‘zgardi. Uni qayta tanlang.",
+      FULFILLMENT_SELECTION_REQUIRED: "Buyurtmani olish usulini tanlang.",
+      FULFILLMENT_UNAVAILABLE:
+        "Bu olish usuli hozir mavjud emas. Boshqasini tanlang.",
+      INVALID_FULFILLMENT_SELECTION:
+        "Olish usuli va yetkazish manzilini tekshiring.",
+      FULFILLMENT_SELECTION_IMMUTABLE:
+        "Olish usuli buyurtmada allaqachon saqlangan.",
       DRAFT_VERSION_CONFLICT:
         "Buyurtma boshqa qurilmada o‘zgardi. Sahifa yangilandi.",
       CONCURRENT_CHANGE: "So‘rov bajarilmoqda. Buyurtma holatini yangilang.",

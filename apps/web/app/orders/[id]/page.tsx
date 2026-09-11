@@ -20,6 +20,12 @@ type OrderView = {
     fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE" | "STRICT_PREFERENCE";
     studio: null | { slug: string; titleRu: string; titleUz: string };
   };
+  fulfillmentSelection: null | {
+    mode: "PICKUP" | "DELIVERY";
+    locationCode: string;
+    feeMinor: string;
+    currency: string;
+  };
 };
 type DisputeView = {
   id: string;
@@ -228,6 +234,22 @@ export default function OrderPage() {
       setMessage(customerError("REQUEST_FAILED", locale));
     }
   };
+  const activateCommittedFulfillment = async () => {
+    try {
+      const response = await apiRequest(`/orders/${id}/fulfillment/activate`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: "{}",
+      });
+      setCompletionPin(
+        ((await response.json()) as { completionPin: string }).completionPin,
+      );
+      setMessage(text.savePin);
+      await load();
+    } catch {
+      setMessage(customerError("REQUEST_FAILED", locale));
+    }
+  };
   const openDispute = async () => {
     try {
       await apiRequest(`/orders/${id}/disputes`, {
@@ -285,12 +307,41 @@ export default function OrderPage() {
             · {order.price.quantity}
           </p>
         )}
+        {order?.fulfillmentSelection && (
+          <p data-testid="fulfillment-selection">
+            {order.fulfillmentSelection.mode === "PICKUP"
+              ? locale === "uz"
+                ? "Studiyadan olib ketish"
+                : "Самовывоз из студии"
+              : locale === "uz"
+                ? "Toshkent bo‘ylab yetkazib berish"
+                : "Доставка по Ташкенту"}{" "}
+            · {order.fulfillmentSelection.feeMinor}{" "}
+            {order.fulfillmentSelection.currency}
+          </p>
+        )}
         {order?.status === "AWAITING_PAYMENT" && (
           <button className="button primary" onClick={pay}>
             {text.payment}
           </button>
         )}
-        {order?.status === "READY" && (
+        {order?.status === "READY" && order.fulfillmentSelection && (
+          <div className="auth-form">
+            <h2>{locale === "uz" ? "Buyurtmani olish" : "Получение заказа"}</h2>
+            <p>
+              {order.fulfillmentSelection.mode === "PICKUP"
+                ? text.pickup
+                : text.delivery}
+            </p>
+            <button
+              className="button primary"
+              onClick={activateCommittedFulfillment}
+            >
+              {locale === "uz" ? "Olishni boshlash" : "Начать получение"}
+            </button>
+          </div>
+        )}
+        {order?.status === "READY" && !order.fulfillmentSelection && (
           <div className="auth-form">
             <h2>{locale === "uz" ? "Buyurtmani olish" : "Получение заказа"}</h2>
             <button

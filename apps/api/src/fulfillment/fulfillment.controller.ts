@@ -47,6 +47,15 @@ export class CustomerFulfillmentController {
   ) {
     return this.fulfillment.requestFulfillment(user.id, id, key, input);
   }
+
+  @Post(":id/fulfillment/activate")
+  activate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+  ) {
+    return this.fulfillment.activateCommittedFulfillment(user.id, id, key);
+  }
 }
 
 @Controller("couriers")

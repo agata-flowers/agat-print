@@ -27,6 +27,10 @@ import type {
   StartDraftUploadDto,
 } from "./dto";
 import { calculateCustomerPrice } from "./pricing";
+import { FulfillmentCrypto } from "../fulfillment/fulfillment.crypto";
+import type { AppEnvironment } from "../config/environment";
+import { APP_ENVIRONMENT } from "../uploads/private-object-storage.service";
+import type { FulfillmentPreferenceDto } from "./dto";
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -54,6 +58,7 @@ const draftInclude = {
       listing: { select: { publicSlug: true, titleRu: true, titleUz: true } },
     },
   },
+  fulfillmentPreference: true,
 } satisfies Prisma.OrderDraftInclude;
 
 type DraftRow = Prisma.OrderDraftGetPayload<{ include: typeof draftInclude }>;
@@ -74,6 +79,11 @@ const stepFor = (draft: DraftRow) => {
   )
     return "approval";
   if (!draft.layoutApprovalId) return "approval";
+  if (
+    draft.fulfillmentRequired &&
+    (!draft.fulfillmentPreference || draft.fulfillmentPreference.invalidatedAt)
+  )
+    return "fulfillment";
   if (!draft.quotes[0] || draft.quotes[0].status !== "ACTIVE") return "quote";
   return "checkout";
 };
@@ -92,6 +102,15 @@ const draftView = (draft: DraftRow) => ({
   locale: draft.locale,
   configuration: draft.configuration,
   quantity: draft.quantity,
+  fulfillmentRequired: draft.fulfillmentRequired,
+  fulfillmentPreference:
+    draft.fulfillmentPreference && !draft.fulfillmentPreference.invalidatedAt
+      ? {
+          mode: draft.fulfillmentPreference.mode,
+          locationCode: draft.fulfillmentPreference.locationCode,
+          version: draft.fulfillmentPreference.version,
+        }
+      : null,
   studioPreference: draft.studioPreference
     ? {
         mode: draft.studioPreference.mode,
@@ -163,6 +182,9 @@ export class OrderingService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(UploadService) private readonly uploads: UploadService,
     @Inject(LayoutsService) private readonly layouts: LayoutsService,
+    @Inject(FulfillmentCrypto)
+    private readonly fulfillmentCrypto: FulfillmentCrypto,
+    @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
   ) {}
 
   async catalog(locale: "ru" | "uz") {
@@ -327,6 +349,7 @@ export class OrderingService {
               locale: input.locale,
               configuration: configuration as Prisma.InputJsonValue,
               quantity: input.quantity,
+              fulfillmentRequired: this.env.stage13FulfillmentEnabled,
               expiresAt: new Date(Date.now() + 86_400_000),
             },
             include: draftInclude,
@@ -666,6 +689,165 @@ export class OrderingService {
     });
   }
 
+  async fulfillmentOptions(userId: string, id: string) {
+    const draft = await this.prisma.orderDraft.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!draft) throw new NotFoundException();
+    const tariff = await this.prisma.tariffVersion.findFirst({
+      where: { status: "ACTIVE" },
+      orderBy: { version: "desc" },
+      include: {
+        fulfillmentRules: {
+          where: { enabled: true },
+          orderBy: [{ mode: "asc" }, { locationCode: "asc" }],
+        },
+      },
+    });
+    if (!tariff) throw new ConflictException({ code: "NO_ACTIVE_TARIFF" });
+    return {
+      currency: tariff.currency,
+      options: tariff.fulfillmentRules.map((rule) => ({
+        mode: rule.mode,
+        locationCode: rule.locationCode,
+        feeMinor: rule.feeMinor.toString(),
+      })),
+    };
+  }
+
+  async setFulfillmentPreference(
+    userId: string,
+    id: string,
+    key: string | undefined,
+    input: FulfillmentPreferenceDto,
+  ) {
+    const prepared = this.idempotency.prepare(
+      `draft:fulfillment:${userId}:${id}`.slice(0, 80),
+      key,
+      input,
+    );
+    return this.mutateDraft(userId, id, prepared, async (tx, draft) => {
+      if (["CHECKED_OUT", "CANCELLED", "EXPIRED"].includes(draft.status))
+        throw new ConflictException({ code: "DRAFT_NOT_EDITABLE" });
+      if (!draft.layoutApprovalId)
+        throw new ConflictException({ code: "LAYOUT_APPROVAL_REQUIRED" });
+      const isPickup = input.mode === "PICKUP";
+      if (
+        (isPickup && (input.locationCode !== "PICKUP" || input.address)) ||
+        (!isPickup &&
+          (input.locationCode === "PICKUP" ||
+            !input.address ||
+            input.address.trim().length < 5))
+      )
+        throw new ConflictException({ code: "INVALID_FULFILLMENT_SELECTION" });
+      const tariff = await tx.tariffVersion.findFirst({
+        where: { status: "ACTIVE" },
+        orderBy: { version: "desc" },
+        include: { fulfillmentRules: true },
+      });
+      const rule = tariff?.fulfillmentRules.find(
+        (candidate) =>
+          candidate.enabled &&
+          candidate.mode === input.mode &&
+          candidate.locationCode === input.locationCode,
+      );
+      if (!rule)
+        throw new ConflictException({ code: "FULFILLMENT_UNAVAILABLE" });
+      const encrypted = isPickup
+        ? {
+            addressCiphertext: null,
+            addressIv: null,
+            addressAuthTag: null,
+          }
+        : this.fulfillmentCrypto.encryptAddress(input.address!.trim());
+      await tx.priceQuote.updateMany({
+        where: { draftId: id, status: "ACTIVE" },
+        data: { status: "STALE" },
+      });
+      await tx.orderDraftFulfillmentPreference.upsert({
+        where: { draftId: id },
+        create: {
+          draftId: id,
+          mode: input.mode,
+          locationCode: input.locationCode,
+          ...encrypted,
+          invalidatedAt: null,
+        },
+        update: {
+          mode: input.mode,
+          locationCode: input.locationCode,
+          ...encrypted,
+          version: { increment: 1 },
+          invalidatedAt: null,
+        },
+      });
+      const changed = await tx.orderDraft.updateMany({
+        where: { id, userId, version: input.version },
+        data: {
+          fulfillmentRequired: true,
+          status: "READY_FOR_QUOTE",
+          version: { increment: 1 },
+        },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException({ code: "DRAFT_VERSION_CONFLICT" });
+      await tx.auditEvent.create({
+        data: {
+          actorId: userId,
+          eventType: "FULFILLMENT_PREFERENCE_SET",
+          targetType: "order-draft",
+          metadata: { operation: input.mode, status: "ACTIVE" },
+        },
+      });
+    });
+  }
+
+  async clearFulfillmentPreference(
+    userId: string,
+    id: string,
+    key: string | undefined,
+    input: DraftVersionDto,
+  ) {
+    const prepared = this.idempotency.prepare(
+      `draft:fulfillment-clear:${userId}:${id}`.slice(0, 80),
+      key,
+      input,
+    );
+    return this.mutateDraft(userId, id, prepared, async (tx) => {
+      await tx.priceQuote.updateMany({
+        where: { draftId: id, status: "ACTIVE" },
+        data: { status: "STALE" },
+      });
+      await tx.orderDraftFulfillmentPreference.updateMany({
+        where: { draftId: id, invalidatedAt: null },
+        data: {
+          mode: "PICKUP",
+          locationCode: "PICKUP",
+          addressCiphertext: null,
+          addressIv: null,
+          addressAuthTag: null,
+          invalidatedAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+      const changed = await tx.orderDraft.updateMany({
+        where: { id, userId, version: input.version },
+        data: { status: "READY_FOR_QUOTE", version: { increment: 1 } },
+      });
+      if (changed.count !== 1)
+        throw new ConflictException({ code: "DRAFT_VERSION_CONFLICT" });
+      await tx.auditEvent.create({
+        data: {
+          actorId: userId,
+          eventType: "FULFILLMENT_PREFERENCE_CLEARED",
+          targetType: "order-draft",
+          metadata: { status: "CLEARED" },
+        },
+      });
+    });
+  }
+
   async quote(
     userId: string,
     id: string,
@@ -700,6 +882,7 @@ export class OrderingService {
               catalogVersion: true,
               layout: { include: { upload: true, printReadyVersions: true } },
               quotes: true,
+              fulfillmentPreference: true,
             },
           });
           if (!draft) throw new NotFoundException();
@@ -721,13 +904,31 @@ export class OrderingService {
           const tariff = await tx.tariffVersion.findFirst({
             where: { status: "ACTIVE" },
             orderBy: { version: "desc" },
-            include: { rules: true },
+            include: { rules: true, fulfillmentRules: true },
           });
           if (!tariff)
             throw new ConflictException({ code: "NO_ACTIVE_TARIFF" });
           const rule = tariff.rules.find(
             (item) => item.serviceCode === draft.serviceCode,
           );
+          const fulfillmentPreference = draft.fulfillmentPreference
+            ?.invalidatedAt
+            ? undefined
+            : draft.fulfillmentPreference;
+          const fulfillmentRule = fulfillmentPreference
+            ? tariff.fulfillmentRules.find(
+                (candidate) =>
+                  candidate.enabled &&
+                  candidate.mode === fulfillmentPreference.mode &&
+                  candidate.locationCode === fulfillmentPreference.locationCode,
+              )
+            : undefined;
+          if (draft.fulfillmentRequired && !fulfillmentPreference)
+            throw new ConflictException({
+              code: "FULFILLMENT_SELECTION_REQUIRED",
+            });
+          if (fulfillmentPreference && !fulfillmentRule)
+            throw new ConflictException({ code: "FULFILLMENT_UNAVAILABLE" });
           const priced = calculateCustomerPrice({
             basePriceMinor: rule?.basePriceMinor ?? tariff.basePriceMinor,
             perPagePriceMinor:
@@ -739,6 +940,7 @@ export class OrderingService {
               )?.pageCount ?? 0,
             quantity: draft.quantity,
             configuration: draft.configuration as Record<string, unknown>,
+            fulfillmentFeeMinor: fulfillmentRule?.feeMinor,
           });
           await tx.priceQuote.updateMany({
             where: { draftId: id, status: "ACTIVE" },
@@ -760,12 +962,24 @@ export class OrderingService {
                 serviceCode: draft.serviceCode,
                 configuration: draft.configuration,
                 fileKind: layout.upload.fileKind,
+                pageCount:
+                  layout.printReadyVersions.find(
+                    (item) => item.id === layout.latestPrintReadyId,
+                  )?.pageCount ?? 0,
+                fulfillment: fulfillmentPreference
+                  ? {
+                      mode: fulfillmentPreference.mode,
+                      locationCode: fulfillmentPreference.locationCode,
+                    }
+                  : undefined,
               },
               lineItems: priced.lineItems,
               quantity: draft.quantity,
               subtotalMinor: priced.subtotalMinor,
               discountMinor: priced.discountMinor,
               totalMinor: priced.totalMinor,
+              fulfillmentPreferenceVersion: fulfillmentPreference?.version,
+              fulfillmentTariffRuleId: fulfillmentRule?.id,
               expiresAt: new Date(Date.now() + 15 * 60_000),
             },
           });
@@ -1022,6 +1236,8 @@ export class OrderingService {
       PARTNER_ASSIGNED: "partner_assigned",
       ORDER_IN_PRODUCTION: "production",
       ORDER_READY: "ready",
+      PICKUP_REQUESTED: "ready",
+      DELIVERY_REQUESTED: "delivery",
       ORDER_IN_DELIVERY: "delivery",
       ORDER_COMPLETED: "completed",
       DELIVERY_FAILED: "delivery_failed",
@@ -1074,6 +1290,10 @@ export class OrderingService {
       "order.delivery_requested.body": [
         "Оформляем передачу заказа курьеру.",
         "Buyurtmani kuryerga topshirish rasmiylashtirilmoqda.",
+      ],
+      "order.pickup_requested.body": [
+        "Заказ ожидает получения в студии.",
+        "Buyurtma studiyada olib ketishni kutmoqda.",
       ],
       "order.delivery.body": [
         "Заказ находится в доставке.",

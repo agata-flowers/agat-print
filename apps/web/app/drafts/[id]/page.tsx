@@ -30,6 +30,18 @@ type Draft = {
     fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE" | "STRICT_PREFERENCE";
     studio: null | { slug: string; name: string };
   };
+  fulfillmentRequired: boolean;
+  fulfillmentPreference: null | {
+    mode: "PICKUP" | "DELIVERY";
+    locationCode: string;
+    version: number;
+  };
+};
+
+type FulfillmentOption = {
+  mode: "PICKUP" | "DELIVERY";
+  locationCode: string;
+  feeMinor: string;
 };
 
 type Studio = {
@@ -52,6 +64,13 @@ export default function DraftPage() {
   const [studios, setStudios] = useState<Studio[]>([]);
   const [selectedStudio, setSelectedStudio] = useState("");
   const [strict, setStrict] = useState(false);
+  const [fulfillmentOptions, setFulfillmentOptions] = useState<
+    FulfillmentOption[]
+  >([]);
+  const [fulfillmentMode, setFulfillmentMode] = useState<"PICKUP" | "DELIVERY">(
+    "PICKUP",
+  );
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const load = useCallback(async () => {
     try {
       const response = await apiRequest(`/order-drafts/${id}`);
@@ -59,6 +78,17 @@ export default function DraftPage() {
       setDraft(next);
       setSelectedStudio(next.studioPreference.studio?.slug ?? "");
       setStrict(next.studioPreference.fallbackPolicy === "STRICT_PREFERENCE");
+      if (next.fulfillmentPreference)
+        setFulfillmentMode(next.fulfillmentPreference.mode);
+      if (next.layout?.approved && next.fulfillmentRequired) {
+        const optionsResponse = await apiRequest(
+          `/order-drafts/${id}/fulfillment-options`,
+        );
+        setFulfillmentOptions(
+          ((await optionsResponse.json()) as { options: FulfillmentOption[] })
+            .options,
+        );
+      }
       if (!next.upload) {
         const studiosResponse = await fetch(
           `${process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:4000"}/api/v1/studios?serviceCode=${encodeURIComponent(next.service.code)}&locale=${locale}`,
@@ -193,6 +223,39 @@ export default function DraftPage() {
       setBusy(false);
     }
   };
+  const saveFulfillment = async () => {
+    if (!draft) return;
+    const option = fulfillmentOptions.find(
+      (item) => item.mode === fulfillmentMode,
+    );
+    if (!option) return;
+    setBusy(true);
+    try {
+      await apiRequest(`/order-drafts/${id}/fulfillment-preference`, {
+        method: "PUT",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({
+          version: draft.version,
+          mode: fulfillmentMode,
+          locationCode: option.locationCode,
+          ...(fulfillmentMode === "DELIVERY"
+            ? { address: deliveryAddress }
+            : {}),
+        }),
+      });
+      setDeliveryAddress("");
+      await load();
+    } catch (error) {
+      setMessage(
+        customerError(
+          error instanceof ApiError ? error.code : "REQUEST_FAILED",
+          locale,
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   if (!draft)
     return (
       <main className="narrow">
@@ -299,17 +362,89 @@ export default function DraftPage() {
             {text.approve}
           </button>
         )}
-        {draft.layout?.approved && !draft.quote?.active && (
-          <button
-            className="button primary"
-            disabled={busy}
-            onClick={() => act("quote", { version: draft.version })}
-          >
-            {text.quote}
-          </button>
-        )}
+        {draft.layout?.approved &&
+          draft.fulfillmentRequired &&
+          !draft.fulfillmentPreference && (
+            <fieldset className="studio-choice" data-testid="fulfillment-step">
+              <legend>
+                {locale === "uz" ? "Olish usuli" : "Способ получения"}
+              </legend>
+              {fulfillmentOptions.map((option) => (
+                <label key={`${option.mode}-${option.locationCode}`}>
+                  <input
+                    type="radio"
+                    name="fulfillment"
+                    checked={fulfillmentMode === option.mode}
+                    onChange={() => setFulfillmentMode(option.mode)}
+                  />{" "}
+                  {option.mode === "PICKUP"
+                    ? locale === "uz"
+                      ? "Studiyadan olib ketish"
+                      : "Самовывоз из студии"
+                    : locale === "uz"
+                      ? "Yetkazib berish"
+                      : "Доставка"}{" "}
+                  · {option.feeMinor} UZS
+                </label>
+              ))}
+              {fulfillmentMode === "DELIVERY" && (
+                <label>
+                  {locale === "uz" ? "Yetkazish manzili" : "Адрес доставки"}
+                  <input
+                    value={deliveryAddress}
+                    onChange={(event) => setDeliveryAddress(event.target.value)}
+                    autoComplete="street-address"
+                    minLength={5}
+                    maxLength={500}
+                  />
+                </label>
+              )}
+              <button
+                className="button primary"
+                disabled={
+                  busy ||
+                  fulfillmentOptions.length === 0 ||
+                  (fulfillmentMode === "DELIVERY" &&
+                    deliveryAddress.trim().length < 5)
+                }
+                onClick={saveFulfillment}
+              >
+                {locale === "uz" ? "Davom etish" : "Продолжить"}
+              </button>
+            </fieldset>
+          )}
+        {draft.layout?.approved &&
+          (!draft.fulfillmentRequired || draft.fulfillmentPreference) &&
+          !draft.quote?.active && (
+            <button
+              className="button primary"
+              disabled={busy}
+              onClick={() => act("quote", { version: draft.version })}
+            >
+              {text.quote}
+            </button>
+          )}
         {draft.quote?.active && (
           <div className="quote">
+            {draft.fulfillmentPreference && (
+              <span>
+                {draft.fulfillmentPreference.mode === "PICKUP"
+                  ? locale === "uz"
+                    ? "Studiyadan olib ketish"
+                    : "Самовывоз из студии"
+                  : locale === "uz"
+                    ? "Yetkazib berish"
+                    : "Доставка"}
+                :{" "}
+                {fulfillmentOptions.find(
+                  (option) =>
+                    option.mode === draft.fulfillmentPreference?.mode &&
+                    option.locationCode ===
+                      draft.fulfillmentPreference?.locationCode,
+                )?.feeMinor ?? "0"}{" "}
+                UZS
+              </span>
+            )}
             <span>{text.total}</span>
             <strong>
               {draft.quote.totalMinor} {draft.quote.currency}

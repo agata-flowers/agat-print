@@ -17,6 +17,10 @@ describe("environment validation", () => {
       }).otpProvider,
     ).toBe("mock");
   });
+  it("uses the provider-independent delivery dispatcher by default", () => {
+    expect(loadEnvironment(base).deliveryProvider).toBe("internal");
+    expect(loadEnvironment(base).stage13FulfillmentEnabled).toBe(false);
+  });
   it("rejects mock OTP in production", () => {
     expect(() =>
       loadEnvironment({

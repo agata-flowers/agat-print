@@ -23,6 +23,7 @@ import { RolesGuard } from "../common/roles.guard";
 import {
   CreateOrderDraftDto,
   DraftVersionDto,
+  FulfillmentPreferenceDto,
   LinkDraftResourceDto,
   PublishCatalogDto,
   StartDraftUploadDto,
@@ -159,6 +160,28 @@ export class CustomerOrderingController {
     @Body() input: DraftVersionDto,
   ) {
     return this.ordering.quote(user.id, id, key, input);
+  }
+  @Get("order-drafts/:id/fulfillment-options") fulfillmentOptions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+  ) {
+    return this.ordering.fulfillmentOptions(user.id, id);
+  }
+  @Put("order-drafts/:id/fulfillment-preference") fulfillmentPreference(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: FulfillmentPreferenceDto,
+  ) {
+    return this.ordering.setFulfillmentPreference(user.id, id, key, input);
+  }
+  @Delete("order-drafts/:id/fulfillment-preference") clearFulfillmentPreference(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: DraftVersionDto,
+  ) {
+    return this.ordering.clearFulfillmentPreference(user.id, id, key, input);
   }
   @Post("order-drafts/:id/checkout") checkout(
     @CurrentUser() user: AuthenticatedUser,

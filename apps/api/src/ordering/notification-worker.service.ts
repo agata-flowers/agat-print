@@ -18,6 +18,7 @@ const supportedEvents = [
   "PARTNER_ASSIGNED",
   "ORDER_IN_PRODUCTION",
   "ORDER_READY",
+  "PICKUP_REQUESTED",
   "DELIVERY_REQUESTED",
   "ORDER_IN_DELIVERY",
   "ORDER_COMPLETED",
@@ -41,6 +42,10 @@ const eventKeys: Record<string, { title: string; body: string }> = {
     body: "order.production.body",
   },
   ORDER_READY: { title: "order.ready.title", body: "order.ready.body" },
+  PICKUP_REQUESTED: {
+    title: "order.updated.title",
+    body: "order.pickup_requested.body",
+  },
   DELIVERY_REQUESTED: {
     title: "order.updated.title",
     body: "order.delivery_requested.body",

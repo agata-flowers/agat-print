@@ -24,7 +24,8 @@ import type {
   RequestFulfillmentDto,
 } from "./dto";
 import { FulfillmentCrypto } from "./fulfillment.crypto";
-import { MockDeliveryProvider } from "./mock-delivery.provider";
+import type { DeliveryProvider } from "@agat/providers";
+import { DELIVERY_PROVIDER } from "../providers/provider-tokens";
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -53,8 +54,8 @@ export class FulfillmentService {
     private readonly idempotency: IdempotencyService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(FulfillmentCrypto) private readonly crypto: FulfillmentCrypto,
-    @Inject(MockDeliveryProvider)
-    private readonly deliveryProvider: MockDeliveryProvider,
+    @Inject(DELIVERY_PROVIDER)
+    private readonly deliveryProvider: DeliveryProvider,
     @Inject(PrivateObjectStorageService)
     private readonly storage: PrivateObjectStorageService,
     @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
@@ -66,11 +67,19 @@ export class FulfillmentService {
     key: string | undefined,
     input: RequestFulfillmentDto,
   ) {
+    const selection =
+      await this.prisma.orderFulfillmentSelectionSnapshot.findUnique({
+        where: { orderId },
+      });
     if (
-      (input.mode === "DELIVERY" && !input.deliveryAddress) ||
-      (input.mode === "PICKUP" && input.deliveryAddress)
+      !selection &&
+      ((input.mode === "DELIVERY" && !input.deliveryAddress) ||
+        (input.mode === "PICKUP" && input.deliveryAddress))
     )
       throw new ConflictException({ code: "FULFILLMENT_INPUT_INVALID" });
+    if (selection && input.mode !== selection.mode)
+      throw new ConflictException({ code: "FULFILLMENT_SELECTION_IMMUTABLE" });
+    const effectiveMode = selection?.mode ?? input.mode;
     const currentCycle = await this.prisma.productionCycle.findFirst({
       where: { orderId, order: { userId } },
       orderBy: { sequence: "desc" },
@@ -79,7 +88,9 @@ export class FulfillmentService {
     const prepared = this.idempotency.prepare(
       `order-fulfillment:${currentCycle.id}`,
       key,
-      input,
+      selection
+        ? { mode: effectiveMode, selectionSnapshotId: selection.id }
+        : input,
     );
     const existing = await this.prisma.orderFulfillment.findFirst({
       where: { productionCycleId: currentCycle.id },
@@ -104,10 +115,17 @@ export class FulfillmentService {
       completionNonce = this.crypto.nonce();
       completionPin = this.crypto.pin("completion", completionNonce);
     }
-    const handoffNonce = input.mode === "DELIVERY" ? this.crypto.nonce() : null;
-    const address = input.deliveryAddress
-      ? this.crypto.encryptAddress(input.deliveryAddress)
-      : null;
+    const handoffNonce =
+      effectiveMode === "DELIVERY" ? this.crypto.nonce() : null;
+    const address = selection
+      ? {
+          addressCiphertext: selection.addressCiphertext,
+          addressIv: selection.addressIv,
+          addressAuthTag: selection.addressAuthTag,
+        }
+      : input.deliveryAddress
+        ? this.crypto.encryptAddress(input.deliveryAddress)
+        : null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const value = await this.prisma.$transaction(
@@ -138,7 +156,7 @@ export class FulfillmentService {
               data: {
                 orderId,
                 productionCycleId: order.productionCycles[0].id,
-                mode: input.mode,
+                mode: effectiveMode,
                 requestKeyDigest: prepared.keyDigest,
                 requestHash: prepared.requestHash,
                 completionNonce,
@@ -159,6 +177,7 @@ export class FulfillmentService {
                     )
                   : null,
                 ...(address ?? {}),
+                selectionSnapshotId: selection?.id,
               },
             });
             const changed = await tx.order.updateMany({
@@ -176,7 +195,7 @@ export class FulfillmentService {
                 "order",
                 orderId,
                 order.version + 1,
-                input.mode === "DELIVERY"
+                effectiveMode === "DELIVERY"
                   ? "DELIVERY_REQUESTED"
                   : "PICKUP_REQUESTED",
               ),
@@ -216,6 +235,22 @@ export class FulfillmentService {
       }
     }
     throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+  }
+
+  async activateCommittedFulfillment(
+    userId: string,
+    orderId: string,
+    key: string | undefined,
+  ) {
+    const selection =
+      await this.prisma.orderFulfillmentSelectionSnapshot.findFirst({
+        where: { orderId, order: { userId } },
+      });
+    if (!selection)
+      throw new ConflictException({ code: "FULFILLMENT_SELECTION_REQUIRED" });
+    return this.requestFulfillment(userId, orderId, key, {
+      mode: selection.mode,
+    });
   }
 
   async applyCourier(userId: string, input: CourierApplicationDto) {
@@ -1130,6 +1165,9 @@ export class FulfillmentService {
         fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
         deliveryTasks: { orderBy: { assignedAt: "desc" }, take: 1 },
         printJobs: { orderBy: { createdAt: "desc" }, take: 1 },
+        fulfillmentSelection: {
+          select: { mode: true, locationCode: true },
+        },
       },
       orderBy: { updatedAt: "desc" },
       take: 100,
@@ -1138,6 +1176,8 @@ export class FulfillmentService {
       orderId: order.id,
       orderStatus: order.status,
       mode: order.fulfillments[0]?.mode,
+      committedMode: order.fulfillmentSelection?.mode ?? null,
+      locationCode: order.fulfillmentSelection?.locationCode ?? null,
       fulfillmentStatus: order.fulfillments[0]?.status,
       deliveryStatus: order.deliveryTasks[0]?.status ?? null,
       printJobStatus: order.printJobs[0]?.status ?? null,

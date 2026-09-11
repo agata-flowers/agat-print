@@ -930,21 +930,39 @@ model LayoutApproval {
 }
 
 model TariffVersion {
-  id                String          @id @default(uuid()) @db.Uuid
-  version           Int             @unique
-  status            TariffStatus    @default(ACTIVE)
-  currency          String          @default("UZS") @db.Char(3)
+  id                String                  @id @default(uuid()) @db.Uuid
+  version           Int                     @unique
+  status            TariffStatus            @default(ACTIVE)
+  currency          String                  @default("UZS") @db.Char(3)
   basePriceMinor    BigInt
   perPagePriceMinor BigInt
-  createdById       String          @db.Uuid
-  createdAt         DateTime        @default(now())
+  createdById       String                  @db.Uuid
+  createdAt         DateTime                @default(now())
   retiredAt         DateTime?
-  createdBy         User            @relation("TariffAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy         User                    @relation("TariffAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   priceSnapshots    PriceSnapshot[]
   rules             TariffRule[]
+  fulfillmentRules  FulfillmentTariffRule[]
   quotes            PriceQuote[]
 
   @@index([status, version])
+}
+
+/// Immutable pickup/delivery fee within the same authoritative tariff version.
+model FulfillmentTariffRule {
+  id              String                              @id @default(uuid()) @db.Uuid
+  tariffVersionId String                              @db.Uuid
+  mode            FulfillmentMode
+  locationCode    String                              @db.VarChar(40)
+  feeMinor        BigInt
+  enabled         Boolean                             @default(true)
+  createdAt       DateTime                            @default(now())
+  tariffVersion   TariffVersion                       @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+  quotes          PriceQuote[]
+  selections      OrderFulfillmentSelectionSnapshot[]
+
+  @@unique([tariffVersionId, mode, locationCode])
+  @@index([tariffVersionId, enabled])
 }
 
 /// Immutable service-specific rule inside one tariff version.
@@ -962,36 +980,57 @@ model TariffRule {
 }
 
 model OrderDraft {
-  id               String                      @id @default(uuid()) @db.Uuid
-  userId           String                      @db.Uuid
-  catalogVersionId String                      @db.Uuid
-  catalogItemId    String                      @db.Uuid
-  serviceCode      String                      @db.VarChar(40)
-  locale           String                      @default("ru") @db.VarChar(8)
-  configuration    Json
-  quantity         Int                         @default(1)
-  status           OrderDraftStatus            @default(CONFIGURING)
-  version          Int                         @default(0)
-  uploadId         String?                     @unique @db.Uuid
-  layoutId         String?                     @unique @db.Uuid
-  layoutApprovalId String?                     @unique @db.Uuid
-  expiresAt        DateTime
-  cancelledAt      DateTime?
-  checkedOutAt     DateTime?
-  createdAt        DateTime                    @default(now())
-  updatedAt        DateTime                    @updatedAt
-  user             User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  catalogVersion   PlatformCatalogVersion      @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
-  catalogItem      PlatformCatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
-  upload           UploadSession?              @relation(fields: [uploadId], references: [id], onDelete: Restrict)
-  layout           LayoutRequest?              @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  layoutApproval   LayoutApproval?             @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
-  quotes           PriceQuote[]
-  order            Order?
-  studioPreference OrderDraftStudioPreference?
+  id                    String                           @id @default(uuid()) @db.Uuid
+  userId                String                           @db.Uuid
+  catalogVersionId      String                           @db.Uuid
+  catalogItemId         String                           @db.Uuid
+  serviceCode           String                           @db.VarChar(40)
+  locale                String                           @default("ru") @db.VarChar(8)
+  configuration         Json
+  quantity              Int                              @default(1)
+  status                OrderDraftStatus                 @default(CONFIGURING)
+  version               Int                              @default(0)
+  uploadId              String?                          @unique @db.Uuid
+  layoutId              String?                          @unique @db.Uuid
+  layoutApprovalId      String?                          @unique @db.Uuid
+  expiresAt             DateTime
+  cancelledAt           DateTime?
+  checkedOutAt          DateTime?
+  fulfillmentRequired   Boolean                          @default(false)
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  user                  User                             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  catalogVersion        PlatformCatalogVersion           @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  catalogItem           PlatformCatalogItem              @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  upload                UploadSession?                   @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  layout                LayoutRequest?                   @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval        LayoutApproval?                  @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  quotes                PriceQuote[]
+  order                 Order?
+  studioPreference      OrderDraftStudioPreference?
+  fulfillmentPreference OrderDraftFulfillmentPreference?
 
   @@index([userId, status, updatedAt])
   @@index([status, expiresAt])
+}
+
+/// Owner-scoped, CAS-protected pre-quote fulfillment choice. Address is encrypted.
+model OrderDraftFulfillmentPreference {
+  id                String          @id @default(uuid()) @db.Uuid
+  draftId           String          @unique @db.Uuid
+  mode              FulfillmentMode
+  locationCode      String          @db.VarChar(40)
+  addressCiphertext String?         @db.Text
+  addressIv         String?         @db.VarChar(24)
+  addressAuthTag    String?         @db.VarChar(32)
+  addressKeyVersion Int             @default(1)
+  version           Int             @default(0)
+  invalidatedAt     DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  draft             OrderDraft      @relation(fields: [draftId], references: [id], onDelete: Restrict)
+
+  @@index([mode, locationCode])
 }
 
 /// Mutable CAS-protected preference owned by a resumable draft.
@@ -1022,75 +1061,101 @@ model OrderDraftStudioPreference {
 }
 
 model PriceQuote {
-  id               String                 @id @default(uuid()) @db.Uuid
-  draftId          String                 @db.Uuid
-  sequence         Int
-  draftVersion     Int
-  catalogVersionId String                 @db.Uuid
-  catalogItemId    String                 @db.Uuid
-  tariffVersionId  String                 @db.Uuid
-  tariffVersion    Int
-  layoutVersion    Int
-  layoutApprovalId String                 @db.Uuid
-  sourceParameters Json
-  lineItems        Json
-  quantity         Int
-  subtotalMinor    BigInt
-  discountMinor    BigInt                 @default(0)
-  totalMinor       BigInt
-  currency         String                 @default("UZS") @db.Char(3)
-  status           PriceQuoteStatus       @default(ACTIVE)
-  expiresAt        DateTime
-  createdAt        DateTime               @default(now())
-  consumedAt       DateTime?
-  draft            OrderDraft             @relation(fields: [draftId], references: [id], onDelete: Restrict)
-  catalogVersion   PlatformCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
-  catalogItem      PlatformCatalogItem    @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
-  tariff           TariffVersion          @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
-  order            Order?
+  id                           String                 @id @default(uuid()) @db.Uuid
+  draftId                      String                 @db.Uuid
+  sequence                     Int
+  draftVersion                 Int
+  catalogVersionId             String                 @db.Uuid
+  catalogItemId                String                 @db.Uuid
+  tariffVersionId              String                 @db.Uuid
+  tariffVersion                Int
+  layoutVersion                Int
+  layoutApprovalId             String                 @db.Uuid
+  sourceParameters             Json
+  lineItems                    Json
+  quantity                     Int
+  subtotalMinor                BigInt
+  discountMinor                BigInt                 @default(0)
+  totalMinor                   BigInt
+  currency                     String                 @default("UZS") @db.Char(3)
+  status                       PriceQuoteStatus       @default(ACTIVE)
+  expiresAt                    DateTime
+  createdAt                    DateTime               @default(now())
+  consumedAt                   DateTime?
+  fulfillmentPreferenceVersion Int?
+  fulfillmentTariffRuleId      String?                @db.Uuid
+  draft                        OrderDraft             @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  catalogVersion               PlatformCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
+  catalogItem                  PlatformCatalogItem    @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  tariff                       TariffVersion          @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+  fulfillmentTariffRule        FulfillmentTariffRule? @relation(fields: [fulfillmentTariffRuleId], references: [id], onDelete: Restrict)
+  order                        Order?
 
   @@unique([draftId, sequence])
   @@index([draftId, status, expiresAt])
 }
 
 model Order {
-  id                  String                        @id @default(uuid()) @db.Uuid
-  userId              String                        @db.Uuid
-  layoutId            String                        @db.Uuid
-  layoutApprovalId    String                        @unique @db.Uuid
-  printReadyVersionId String                        @db.Uuid
-  status              OrderStatus                   @default(AWAITING_PAYMENT)
-  version             Int                           @default(0)
-  createdAt           DateTime                      @default(now())
-  updatedAt           DateTime                      @updatedAt
-  disputeEligibleAt   DateTime?
-  orderDraftId        String?                       @unique @db.Uuid
-  priceQuoteId        String?                       @unique @db.Uuid
-  user                User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  layout              LayoutRequest                 @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  layoutApproval      LayoutApproval                @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
-  printReadyVersion   PrintReadyVersion             @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
-  priceSnapshot       PriceSnapshot?
-  payment             Payment?
-  matching            OrderMatching?
-  partnerOffers       PartnerOffer[]
-  assignments         PartnerAssignment[]
-  fulfillments        OrderFulfillment[]
-  printJobs           PrintJob[]
-  deliveryTasks       DeliveryTask[]
-  productionCycles    ProductionCycle[]
-  disputes            DisputeCase[]
-  retentionSchedules  RetentionSchedule[]
-  legalHolds          LegalHold[]
-  fiscalOperations    FiscalOperation[]
-  partnerLedger       PartnerLedgerEntry[]
-  orderDraft          OrderDraft?                   @relation(fields: [orderDraftId], references: [id], onDelete: Restrict)
-  priceQuote          PriceQuote?                   @relation(fields: [priceQuoteId], references: [id], onDelete: Restrict)
-  customerEvents      CustomerOrderEvent[]
-  studioSelection     OrderStudioSelectionSnapshot?
+  id                   String                             @id @default(uuid()) @db.Uuid
+  userId               String                             @db.Uuid
+  layoutId             String                             @db.Uuid
+  layoutApprovalId     String                             @unique @db.Uuid
+  printReadyVersionId  String                             @db.Uuid
+  status               OrderStatus                        @default(AWAITING_PAYMENT)
+  version              Int                                @default(0)
+  createdAt            DateTime                           @default(now())
+  updatedAt            DateTime                           @updatedAt
+  disputeEligibleAt    DateTime?
+  orderDraftId         String?                            @unique @db.Uuid
+  priceQuoteId         String?                            @unique @db.Uuid
+  user                 User                               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  layout               LayoutRequest                      @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval       LayoutApproval                     @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  printReadyVersion    PrintReadyVersion                  @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  priceSnapshot        PriceSnapshot?
+  payment              Payment?
+  matching             OrderMatching?
+  partnerOffers        PartnerOffer[]
+  assignments          PartnerAssignment[]
+  fulfillments         OrderFulfillment[]
+  printJobs            PrintJob[]
+  deliveryTasks        DeliveryTask[]
+  productionCycles     ProductionCycle[]
+  disputes             DisputeCase[]
+  retentionSchedules   RetentionSchedule[]
+  legalHolds           LegalHold[]
+  fiscalOperations     FiscalOperation[]
+  partnerLedger        PartnerLedgerEntry[]
+  orderDraft           OrderDraft?                        @relation(fields: [orderDraftId], references: [id], onDelete: Restrict)
+  priceQuote           PriceQuote?                        @relation(fields: [priceQuoteId], references: [id], onDelete: Restrict)
+  customerEvents       CustomerOrderEvent[]
+  studioSelection      OrderStudioSelectionSnapshot?
+  fulfillmentSelection OrderFulfillmentSelectionSnapshot?
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
+}
+
+/// Immutable checkout-time fulfillment and pricing lineage. Address remains encrypted.
+model OrderFulfillmentSelectionSnapshot {
+  id                      String                @id @default(uuid()) @db.Uuid
+  orderId                 String                @unique @db.Uuid
+  mode                    FulfillmentMode
+  locationCode            String                @db.VarChar(40)
+  addressCiphertext       String?               @db.Text
+  addressIv               String?               @db.VarChar(24)
+  addressAuthTag          String?               @db.VarChar(32)
+  addressKeyVersion       Int                   @default(1)
+  sourcePreferenceVersion Int
+  fulfillmentTariffRuleId String                @db.Uuid
+  feeMinor                BigInt
+  currency                String                @default("UZS") @db.Char(3)
+  createdAt               DateTime              @default(now())
+  order                   Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  fulfillmentTariffRule   FulfillmentTariffRule @relation(fields: [fulfillmentTariffRuleId], references: [id], onDelete: Restrict)
+  fulfillments            OrderFulfillment[]
+
+  @@index([mode, locationCode])
 }
 
 /// Immutable checkout-time customer selection and Stage 10 lineage.
@@ -1184,34 +1249,37 @@ model CourierProfile {
 
 /// One fulfillment aggregate per order. PIN material is derived from a secret and opaque nonce.
 model OrderFulfillment {
-  id                  String            @id @default(uuid()) @db.Uuid
-  orderId             String            @db.Uuid
-  productionCycleId   String            @unique @db.Uuid
+  id                  String                             @id @default(uuid()) @db.Uuid
+  orderId             String                             @db.Uuid
+  productionCycleId   String                             @unique @db.Uuid
   mode                FulfillmentMode
-  status              FulfillmentStatus @default(AWAITING_HANDOFF)
-  requestKeyDigest    String            @db.Char(64)
-  requestHash         String            @db.Char(64)
-  completionNonce     String            @db.Char(32)
-  completionPinDigest String            @db.Char(64)
-  completionAttempts  Int               @default(0)
+  status              FulfillmentStatus                  @default(AWAITING_HANDOFF)
+  requestKeyDigest    String                             @db.Char(64)
+  requestHash         String                             @db.Char(64)
+  completionNonce     String                             @db.Char(32)
+  completionPinDigest String                             @db.Char(64)
+  completionAttempts  Int                                @default(0)
   completionExpiresAt DateTime
   completionUsedAt    DateTime?
-  handoffNonce        String?           @db.Char(32)
-  handoffPinDigest    String?           @db.Char(64)
-  handoffAttempts     Int               @default(0)
+  handoffNonce        String?                            @db.Char(32)
+  handoffPinDigest    String?                            @db.Char(64)
+  handoffAttempts     Int                                @default(0)
   handoffUsedAt       DateTime?
-  addressCiphertext   String?           @db.Text
-  addressIv           String?           @db.VarChar(24)
-  addressAuthTag      String?           @db.VarChar(32)
-  version             Int               @default(0)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  order               Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  productionCycle     ProductionCycle   @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
+  addressCiphertext   String?                            @db.Text
+  addressIv           String?                            @db.VarChar(24)
+  addressAuthTag      String?                            @db.VarChar(32)
+  selectionSnapshotId String?                            @db.Uuid
+  version             Int                                @default(0)
+  createdAt           DateTime                           @default(now())
+  updatedAt           DateTime                           @updatedAt
+  order               Order                              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productionCycle     ProductionCycle                    @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
+  selectionSnapshot   OrderFulfillmentSelectionSnapshot? @relation(fields: [selectionSnapshotId], references: [id], onDelete: Restrict)
   delivery            DeliveryTask?
 
   @@unique([productionCycleId, requestKeyDigest])
   @@index([status, completionExpiresAt])
+  @@index([selectionSnapshotId])
 }
 
 model DeliveryTask {

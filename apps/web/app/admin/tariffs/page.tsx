@@ -9,6 +9,12 @@ type Tariff = {
   basePriceMinor: string;
   perPagePriceMinor: string;
   currency: string;
+  fulfillmentRules?: Array<{
+    mode: string;
+    locationCode: string;
+    feeMinor: string;
+    enabled: boolean;
+  }>;
 };
 
 type Audit = {
@@ -35,11 +41,26 @@ export default function TariffsPage() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const pickup = data.get("pickup");
+    const delivery = data.get("delivery");
+    if (typeof pickup !== "string" || typeof delivery !== "string") return;
     await apiRequest("/admin/tariffs", {
       method: "POST",
       body: JSON.stringify({
         basePriceMinor: data.get("base"),
         perPagePriceMinor: data.get("page"),
+        fulfillmentRules: [
+          {
+            mode: "PICKUP",
+            locationCode: "PICKUP",
+            feeMinor: pickup,
+          },
+          {
+            mode: "DELIVERY",
+            locationCode: "TASHKENT",
+            feeMinor: delivery,
+          },
+        ],
       }),
     });
     setMessage("Новая версия тарифа активирована.");
@@ -58,6 +79,14 @@ export default function TariffsPage() {
           Цена страницы, UZS
           <input name="page" inputMode="numeric" required />
         </label>
+        <label>
+          Самовывоз, UZS
+          <input name="pickup" inputMode="numeric" defaultValue="0" required />
+        </label>
+        <label>
+          Доставка по зоне Ташкент, UZS
+          <input name="delivery" inputMode="numeric" required />
+        </label>
         <button className="button primary" type="submit">
           Активировать версию
         </button>
@@ -67,6 +96,13 @@ export default function TariffsPage() {
           <p key={tariff.version}>
             v{tariff.version} · {tariff.status} · {tariff.basePriceMinor} +{" "}
             {tariff.perPagePriceMinor}/стр. {tariff.currency}
+            {tariff.fulfillmentRules?.map((rule) => (
+              <span key={`${rule.mode}-${rule.locationCode}`}>
+                {" "}
+                · {rule.mode} {rule.locationCode}: {rule.feeMinor}{" "}
+                {rule.enabled ? "" : "(выключено)"}
+              </span>
+            ))}
           </p>
         ))}
       </section>

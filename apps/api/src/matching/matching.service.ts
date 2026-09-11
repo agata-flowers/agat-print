@@ -60,7 +60,12 @@ const offerInclude = {
 } satisfies Prisma.PartnerOfferInclude;
 
 const decisionOfferInclude = {
-  order: { include: { studioSelection: { include: { listing: true } } } },
+  order: {
+    include: {
+      studioSelection: { include: { listing: true } },
+      fulfillmentSelection: true,
+    },
+  },
   payoutSnapshot: true,
   branch: { include: { partner: true, availabilityExceptions: true } },
   capabilityVersion: true,
@@ -166,6 +171,7 @@ export class MatchingService {
                 matching: true,
                 layout: { include: { upload: true } },
                 studioSelection: true,
+                fulfillmentSelection: true,
               },
             });
             if (!order || !order.priceSnapshot) throw new NotFoundException();
@@ -343,6 +349,7 @@ export class MatchingService {
                 priceSnapshot: true,
                 layout: { include: { upload: true } },
                 studioSelection: true,
+                fulfillmentSelection: true,
               },
             },
           },
@@ -405,6 +412,7 @@ export class MatchingService {
           include: {
             fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
             deliveryTasks: { orderBy: { assignedAt: "desc" }, take: 1 },
+            fulfillmentSelection: { select: { mode: true } },
           },
         },
         branch: { select: { name: true } },
@@ -417,7 +425,10 @@ export class MatchingService {
       status: assignment.order.status,
       branchName: assignment.branch.name,
       acceptedAt: assignment.acceptedAt,
-      fulfillmentMode: assignment.order.fulfillments[0]?.mode ?? null,
+      fulfillmentMode:
+        assignment.order.fulfillmentSelection?.mode ??
+        assignment.order.fulfillments[0]?.mode ??
+        null,
       deliveryId: assignment.order.deliveryTasks[0]?.id ?? null,
     };
   }
@@ -691,7 +702,10 @@ export class MatchingService {
     if (
       !activePartnerStatuses.includes(offer.branch.partner.status) ||
       !offer.branch.active ||
-      !offer.branch.acceptingOrders
+      !offer.branch.acceptingOrders ||
+      (offer.order.fulfillmentSelection?.mode === "DELIVERY" &&
+        offer.branch.locationCode !==
+          offer.order.fulfillmentSelection.locationCode)
     )
       return this.invalidateOffer(tx, offer, "OFFER_NO_LONGER_ELIGIBLE");
     if (offer.capacityReservation) {
@@ -832,6 +846,7 @@ export class MatchingService {
         priceSnapshot: true,
         layout: { include: { upload: true } },
         studioSelection: true,
+        fulfillmentSelection: true,
       },
     });
     const next = await this.createNextOffer(tx, fullOrder, 0);
@@ -868,6 +883,7 @@ export class MatchingService {
         priceSnapshot: true,
         layout: { include: { upload: true } },
         studioSelection: true,
+        fulfillmentSelection: true,
       },
     });
     await this.createNextOffer(tx, fullOrder, 0);
@@ -881,6 +897,7 @@ export class MatchingService {
         priceSnapshot: true;
         layout: { include: { upload: true } };
         studioSelection: true;
+        fulfillmentSelection: true;
       };
     }>,
     matchingVersion: number,
@@ -1047,7 +1064,10 @@ export class MatchingService {
           serviceEnabled,
           withinHours,
           availability,
-          withinServiceArea: distance <= branch.serviceRadiusMeters,
+          withinServiceArea:
+            distance <= branch.serviceRadiusMeters &&
+            (order.fulfillmentSelection?.mode !== "DELIVERY" ||
+              branch.locationCode === order.fulfillmentSelection.locationCode),
           workload,
           capacity: capacityLimit,
         });

@@ -27,4 +27,23 @@ describe("server-authoritative customer pricing", () => {
       }),
     ).toThrowError("INVALID_TARIFF_RULE");
   });
+
+  it("includes the frozen zonal fulfillment fee in the authoritative total", () => {
+    const result = calculateCustomerPrice({
+      basePriceMinor: 1_000n,
+      perPagePriceMinor: 250n,
+      optionPrices: {},
+      pageCount: 2,
+      quantity: 1,
+      configuration: {},
+      fulfillmentFeeMinor: 12_000n,
+    });
+    expect(result.totalMinor).toBe(13_500n);
+    expect(result.lineItems).toContainEqual({
+      code: "FULFILLMENT",
+      quantity: 1,
+      unitPriceMinor: "12000",
+      totalMinor: "12000",
+    });
+  });
 });

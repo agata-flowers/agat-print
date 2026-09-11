@@ -27,6 +27,15 @@ export class CreateTariffDto {
     perPagePriceMinor: string;
     optionPrices: Record<string, string>;
   }>;
+
+  @IsOptional()
+  @IsArray()
+  fulfillmentRules?: Array<{
+    mode: "PICKUP" | "DELIVERY";
+    locationCode: string;
+    feeMinor: string;
+    enabled?: boolean;
+  }>;
 }
 
 export class CreateOrderDto {

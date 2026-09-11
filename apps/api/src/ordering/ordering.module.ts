@@ -9,9 +9,10 @@ import { OrderingService } from "./ordering.service";
 import { NotificationWorkerService } from "./notification-worker.service";
 import { UploadsModule } from "../uploads/uploads.module";
 import { LayoutsModule } from "../layouts/layouts.module";
+import { FulfillmentModule } from "../fulfillment/fulfillment.module";
 
 @Module({
-  imports: [CommerceModule, UploadsModule, LayoutsModule],
+  imports: [CommerceModule, UploadsModule, LayoutsModule, FulfillmentModule],
   controllers: [
     CatalogController,
     CustomerOrderingController,

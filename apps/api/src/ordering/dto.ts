@@ -101,6 +101,20 @@ export class DraftVersionDto {
   version!: number;
 }
 
+export class FulfillmentPreferenceDto extends DraftVersionDto {
+  @IsIn(["PICKUP", "DELIVERY"])
+  mode!: "PICKUP" | "DELIVERY";
+
+  @IsString()
+  @Matches(/^[A-Z0-9_]{2,40}$/)
+  locationCode!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  address?: string;
+}
+
 export class StartDraftUploadDto extends DraftVersionDto {
   @IsIn(["pdf", "docx", "jpg", "jpeg", "png"])
   extension!: "pdf" | "docx" | "jpg" | "jpeg" | "png";

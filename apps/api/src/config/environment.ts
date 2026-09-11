@@ -60,6 +60,7 @@ export interface AppEnvironment {
   printerAgentLeaseSeconds: number;
   aftercareDispatchEnabled: boolean;
   orderingDispatchEnabled: boolean;
+  stage13FulfillmentEnabled: boolean;
 }
 
 const integer = (value: string | undefined, fallback: number): number => {
@@ -118,7 +119,7 @@ export function loadEnvironment(
   );
   if (partnerPayoutBasisPoints > 10_000)
     throw new Error("PARTNER_PAYOUT_BASIS_POINTS must not exceed 10000");
-  const deliveryProvider = source.DELIVERY_PROVIDER ?? "mock";
+  const deliveryProvider = source.DELIVERY_PROVIDER ?? "internal";
   const pickupPinSecret =
     source.PICKUP_PIN_SECRET ?? "development-only-pickup-pin-secret";
   const deliveryDataKey =
@@ -136,6 +137,8 @@ export function loadEnvironment(
   if (nodeEnv === "production") {
     if (deliveryProvider === "mock")
       throw new Error("Mock delivery is forbidden in production");
+    if (!["internal", "dispatch"].includes(deliveryProvider))
+      throw new Error("Unsupported delivery provider in production");
     for (const [name, value] of [
       ["PICKUP_PIN_SECRET", pickupPinSecret],
       ["DELIVERY_DATA_KEY", deliveryDataKey],
@@ -200,6 +203,9 @@ export function loadEnvironment(
       (source.AFTERCARE_DISPATCH_ENABLED ?? "false") === "true",
     orderingDispatchEnabled:
       (source.ORDERING_DISPATCH_ENABLED ?? "false") === "true",
+    stage13FulfillmentEnabled:
+      (source.STAGE13_FULFILLMENT_ENABLED ??
+        (nodeEnv === "production" ? "true" : "false")) === "true",
     webOrigin,
     port: integer(source.API_PORT, 4000),
     jwtSecret,

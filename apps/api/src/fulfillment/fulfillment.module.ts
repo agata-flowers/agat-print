@@ -14,7 +14,10 @@ import { FulfillmentCrypto } from "./fulfillment.crypto";
 import { FulfillmentQueueService } from "./fulfillment-queue.service";
 import { FulfillmentService } from "./fulfillment.service";
 import { MockDeliveryProvider } from "./mock-delivery.provider";
+import { InternalDeliveryProvider } from "./internal-delivery.provider";
 import { PrinterAgentGuard } from "./printer-agent.guard";
+import { DELIVERY_PROVIDER } from "../providers/provider-tokens";
+import { loadEnvironment } from "../config/environment";
 
 @Module({
   imports: [AuditModule, CommerceModule, UploadsModule],
@@ -31,8 +34,22 @@ import { PrinterAgentGuard } from "./printer-agent.guard";
     FulfillmentCrypto,
     FulfillmentQueueService,
     MockDeliveryProvider,
+    InternalDeliveryProvider,
+    {
+      provide: DELIVERY_PROVIDER,
+      inject: [MockDeliveryProvider, InternalDeliveryProvider],
+      useFactory: (
+        mock: MockDeliveryProvider,
+        internal: InternalDeliveryProvider,
+      ) => (loadEnvironment().deliveryProvider === "mock" ? mock : internal),
+    },
     PrinterAgentGuard,
   ],
-  exports: [FulfillmentService, FulfillmentQueueService],
+  exports: [
+    FulfillmentService,
+    FulfillmentQueueService,
+    FulfillmentCrypto,
+    DELIVERY_PROVIDER,
+  ],
 })
 export class FulfillmentModule {}

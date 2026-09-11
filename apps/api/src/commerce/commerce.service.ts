@@ -51,6 +51,12 @@ const tariffView = (tariff: {
   basePriceMinor: bigint;
   perPagePriceMinor: bigint;
   createdAt: Date;
+  fulfillmentRules?: Array<{
+    mode: string;
+    locationCode: string;
+    feeMinor: bigint;
+    enabled: boolean;
+  }>;
 }) => ({
   id: tariff.id,
   version: tariff.version,
@@ -59,6 +65,12 @@ const tariffView = (tariff: {
   basePriceMinor: tariff.basePriceMinor.toString(),
   perPagePriceMinor: tariff.perPagePriceMinor.toString(),
   createdAt: tariff.createdAt,
+  fulfillmentRules: tariff.fulfillmentRules?.map((rule) => ({
+    mode: rule.mode,
+    locationCode: rule.locationCode,
+    feeMinor: rule.feeMinor.toString(),
+    enabled: rule.enabled,
+  })),
 });
 
 const orderInclude = {
@@ -76,6 +88,14 @@ const orderInclude = {
   studioSelection: {
     include: {
       listing: { select: { publicSlug: true, titleRu: true, titleUz: true } },
+    },
+  },
+  fulfillmentSelection: {
+    select: {
+      mode: true,
+      locationCode: true,
+      feeMinor: true,
+      currency: true,
     },
   },
 } satisfies Prisma.OrderInclude;
@@ -103,6 +123,14 @@ const orderView = (order: OrderWithFinance) => ({
               titleUz: order.studioSelection.listing.titleUz,
             }
           : null,
+      }
+    : null,
+  fulfillmentSelection: order.fulfillmentSelection
+    ? {
+        mode: order.fulfillmentSelection.mode,
+        locationCode: order.fulfillmentSelection.locationCode,
+        feeMinor: order.fulfillmentSelection.feeMinor.toString(),
+        currency: order.fulfillmentSelection.currency,
       }
     : null,
   price: order.priceSnapshot
@@ -183,6 +211,29 @@ export class CommerceService {
     });
     if (new Set(rules.map((rule) => rule.serviceCode)).size !== rules.length)
       throw new ConflictException({ code: "DUPLICATE_TARIFF_RULE" });
+    const fulfillmentRules = (input.fulfillmentRules ?? []).map((rule) => {
+      if (
+        !rule ||
+        typeof rule !== "object" ||
+        !["PICKUP", "DELIVERY"].includes(rule.mode) ||
+        !/^[A-Z0-9_]{2,40}$/.test(rule.locationCode) ||
+        (rule.mode === "PICKUP") !== (rule.locationCode === "PICKUP") ||
+        !/^\d{1,15}$/.test(rule.feeMinor)
+      )
+        throw new ConflictException({ code: "INVALID_FULFILLMENT_RULE" });
+      return {
+        mode: rule.mode,
+        locationCode: rule.locationCode,
+        feeMinor: BigInt(rule.feeMinor),
+        enabled: rule.enabled ?? true,
+      };
+    });
+    if (
+      new Set(
+        fulfillmentRules.map((rule) => `${rule.mode}:${rule.locationCode}`),
+      ).size !== fulfillmentRules.length
+    )
+      throw new ConflictException({ code: "DUPLICATE_FULFILLMENT_RULE" });
     const tariff = await this.prisma.$transaction(
       async (tx) => {
         const current = await tx.tariffVersion.findFirst({
@@ -200,7 +251,9 @@ export class CommerceService {
             perPagePriceMinor: perPage,
             createdById: actorId,
             rules: { create: rules },
+            fulfillmentRules: { create: fulfillmentRules },
           },
+          include: { fulfillmentRules: true },
         });
         await tx.outboxEvent.create({
           data: outbox(
@@ -223,7 +276,10 @@ export class CommerceService {
 
   async tariffs() {
     return (
-      await this.prisma.tariffVersion.findMany({ orderBy: { version: "desc" } })
+      await this.prisma.tariffVersion.findMany({
+        orderBy: { version: "desc" },
+        include: { fulfillmentRules: true },
+      })
     ).map(tariffView);
   }
 
@@ -231,6 +287,7 @@ export class CommerceService {
     const tariff = await this.prisma.tariffVersion.findFirst({
       where: { status: "ACTIVE" },
       orderBy: { version: "desc" },
+      include: { fulfillmentRules: true },
     });
     if (!tariff) throw new NotFoundException({ code: "NO_ACTIVE_TARIFF" });
     return tariffView(tariff);
@@ -305,6 +362,9 @@ export class CommerceService {
           let studioSelection:
             | Prisma.OrderStudioSelectionSnapshotCreateWithoutOrderInput
             | undefined;
+          let fulfillmentSelection:
+            | Prisma.OrderFulfillmentSelectionSnapshotCreateWithoutOrderInput
+            | undefined;
           if (input.orderDraftId || input.priceQuoteId) {
             if (!input.orderDraftId || !input.priceQuoteId)
               throw new ConflictException({ code: "QUOTE_LINEAGE_REQUIRED" });
@@ -348,8 +408,10 @@ export class CommerceService {
                         },
                       },
                     },
+                    fulfillmentPreference: true,
                   },
                 },
+                fulfillmentTariffRule: true,
               },
             });
             if (!quote || quote.draft.userId !== userId)
@@ -379,6 +441,30 @@ export class CommerceService {
                 },
               },
             });
+            const fulfillmentPreference = quote.draft.fulfillmentPreference
+              ?.invalidatedAt
+              ? undefined
+              : quote.draft.fulfillmentPreference;
+            const fulfillmentRule = quote.fulfillmentTariffRule;
+            if (
+              quote.draft.fulfillmentRequired &&
+              (!fulfillmentPreference || !fulfillmentRule)
+            )
+              throw new ConflictException({
+                code: "FULFILLMENT_SELECTION_REQUIRED",
+              });
+            if (
+              fulfillmentPreference &&
+              (!fulfillmentRule ||
+                quote.fulfillmentPreferenceVersion !==
+                  fulfillmentPreference.version ||
+                fulfillmentRule.tariffVersionId !== tariff.id ||
+                fulfillmentRule.mode !== fulfillmentPreference.mode ||
+                fulfillmentRule.locationCode !==
+                  fulfillmentPreference.locationCode ||
+                !fulfillmentRule.enabled)
+            )
+              throw new ConflictException({ code: "QUOTE_STALE" });
             const recalculated = calculateCustomerPrice({
               basePriceMinor: rule?.basePriceMinor ?? tariff.basePriceMinor,
               perPagePriceMinor:
@@ -390,6 +476,7 @@ export class CommerceService {
                 string,
                 unknown
               >,
+              fulfillmentFeeMinor: fulfillmentRule?.feeMinor,
             });
             if (
               recalculated.totalMinor !== quote.totalMinor ||
@@ -406,6 +493,22 @@ export class CommerceService {
               totalMinor: quote.totalMinor,
               sourceParameters: quote.sourceParameters,
             };
+            if (fulfillmentPreference && fulfillmentRule) {
+              fulfillmentSelection = {
+                mode: fulfillmentPreference.mode,
+                locationCode: fulfillmentPreference.locationCode,
+                addressCiphertext: fulfillmentPreference.addressCiphertext,
+                addressIv: fulfillmentPreference.addressIv,
+                addressAuthTag: fulfillmentPreference.addressAuthTag,
+                addressKeyVersion: fulfillmentPreference.addressKeyVersion,
+                sourcePreferenceVersion: fulfillmentPreference.version,
+                feeMinor: fulfillmentRule.feeMinor,
+                currency: tariff.currency,
+                fulfillmentTariffRule: {
+                  connect: { id: fulfillmentRule.id },
+                },
+              };
+            }
             const preference = quote.draft.studioPreference;
             if (preference?.mode === "PREFERRED_STUDIO") {
               const listing = preference.listing;
@@ -495,12 +598,28 @@ export class CommerceService {
               studioSelection: studioSelection
                 ? { create: studioSelection }
                 : undefined,
+              fulfillmentSelection: fulfillmentSelection
+                ? { create: fulfillmentSelection }
+                : undefined,
             },
             include: orderInclude,
           });
           await tx.outboxEvent.create({
             data: outbox("order", created.id, created.version, "ORDER_CREATED"),
           });
+          if (fulfillmentSelection)
+            await tx.auditEvent.create({
+              data: {
+                actorId: userId,
+                eventType: "FULFILLMENT_SELECTION_SNAPSHOTTED",
+                targetType: "order",
+                metadata: {
+                  operation: fulfillmentSelection.mode,
+                  status: "FROZEN",
+                  locationClass: fulfillmentSelection.locationCode,
+                },
+              },
+            });
           if (quoted && input.orderDraftId) {
             await tx.priceQuote.update({
               where: { id: quoted.id },
