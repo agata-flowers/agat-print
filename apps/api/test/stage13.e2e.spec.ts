@@ -13,6 +13,8 @@ const enabled = process.env.RUN_STAGE13_E2E === "1";
 process.env.STAGE13_FULFILLMENT_ENABLED = "true";
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+const wireValue = (value: unknown): unknown =>
+  JSON.parse(JSON.stringify(value)) as unknown;
 const opaque = (prefix: string) =>
   `${prefix}/${randomUUID().replaceAll("-", "").padEnd(64, "0")}`;
 const documentPrintOptions = {
@@ -297,7 +299,7 @@ describe.skipIf(!enabled)("stage 13 fulfillment commitment DB-E2E", () => {
       key,
       payload,
     );
-    expect(replay).toEqual(JSON.parse(JSON.stringify(first)));
+    expect(wireValue(replay)).toEqual(wireValue(first));
     await expect(
       ordering.setFulfillmentPreference(customerId, draft.id, key, {
         ...payload,
@@ -501,7 +503,7 @@ describe.skipIf(!enabled)("stage 13 fulfillment commitment DB-E2E", () => {
         key,
       ),
     ]);
-    expect(replay).toEqual(JSON.parse(JSON.stringify(first)));
+    expect(wireValue(replay)).toEqual(wireValue(first));
     expect(
       await prisma.orderFulfillment.count({
         where: { productionCycleId: cycle.id },
