@@ -297,7 +297,7 @@ describe.skipIf(!enabled)("stage 13 fulfillment commitment DB-E2E", () => {
       key,
       payload,
     );
-    expect(JSON.stringify(replay)).toBe(JSON.stringify(first));
+    expect(replay).toEqual(JSON.parse(JSON.stringify(first)));
     await expect(
       ordering.setFulfillmentPreference(customerId, draft.id, key, {
         ...payload,
@@ -501,7 +501,7 @@ describe.skipIf(!enabled)("stage 13 fulfillment commitment DB-E2E", () => {
         key,
       ),
     ]);
-    expect(JSON.stringify(replay)).toBe(JSON.stringify(first));
+    expect(replay).toEqual(JSON.parse(JSON.stringify(first)));
     expect(
       await prisma.orderFulfillment.count({
         where: { productionCycleId: cycle.id },
