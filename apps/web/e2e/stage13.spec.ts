@@ -54,11 +54,36 @@ async function reachApprovedLayout(
   await expect(page.locator("iframe.preview-frame")).toBeVisible({
     timeout: 120_000,
   });
+  const approvalResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/approve"),
+  );
   await page
     .getByRole("button", {
       name: locale === "ru" ? "Подтвердить макет" : "Maketni tasdiqlash",
     })
     .click();
+  const approvalResponse = await approvalResponsePromise;
+  const approvalBody = (await approvalResponse.json()) as {
+    code?: string;
+    step?: string;
+    fulfillmentRequired?: boolean;
+    layout?: { approved?: boolean };
+  };
+  expect({
+    status: approvalResponse.status(),
+    code: approvalBody.code ?? null,
+    step: approvalBody.step ?? null,
+    fulfillmentRequired: approvalBody.fulfillmentRequired ?? null,
+    layoutApproved: approvalBody.layout?.approved ?? null,
+  }).toEqual({
+    status: 201,
+    code: null,
+    step: "fulfillment",
+    fulfillmentRequired: true,
+    layoutApproved: true,
+  });
   await expect(page.getByTestId("fulfillment-step")).toBeVisible();
 }
 
