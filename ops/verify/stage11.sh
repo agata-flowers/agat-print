@@ -27,8 +27,8 @@ write_report running
 trap 'failure_line=$LINENO' ERR
 cleanup() {
   local result="$?"
-  [[ -n "$web_pid" ]] && kill "$web_pid" >/dev/null 2>&1 || true
-  [[ -n "$api_pid" ]] && kill "$api_pid" >/dev/null 2>&1 || true
+  [[ -n "$web_pid" ]] && { kill "$web_pid" >/dev/null 2>&1 || true; wait "$web_pid" 2>/dev/null || true; }
+  [[ -n "$api_pid" ]] && { kill "$api_pid" >/dev/null 2>&1 || true; wait "$api_pid" 2>/dev/null || true; }
   if [[ "$result" -ne 0 ]]; then
     write_report failure
     echo "Stage 11 verification failed during phase: $phase" >&2
@@ -114,8 +114,13 @@ export CLAMAV_HOST=localhost CLAMAV_PORT=3310 PROCESSING_DISPATCH_ENABLED=true O
 export MATCHING_DISPATCH_ENABLED=false FULFILLMENT_DISPATCH_ENABLED=false AFTERCARE_DISPATCH_ENABLED=false FINANCE_DISPATCH_ENABLED=false
 export PROCESSING_IMAGE=agat-processing:local PROCESSING_RUNNER_SCRIPT="$PWD/ops/processing/run-job.sh"
 export PROCESSING_SECCOMP_PROFILE="$PWD/ops/processing/seccomp.json" PROCESSING_TIMEOUT_SECONDS=120
-pnpm --filter @agat/api start > "$work_dir/api.log" 2>&1 & api_pid=$!
-pnpm --filter @agat/web start > "$work_dir/web.log" 2>&1 & web_pid=$!
+if curl --silent --max-time 1 http://localhost:4000/api/v1/health/ready >/dev/null 2>&1 ||
+  curl --silent --max-time 1 http://localhost:3000 >/dev/null 2>&1; then
+  echo 'Browser runtime ports are already occupied' >&2
+  exit 1
+fi
+node apps/api/dist/main.js > "$work_dir/api.log" 2>&1 & api_pid=$!
+(cd apps/web && exec node node_modules/next/dist/bin/next start) > "$PWD/$work_dir/web.log" 2>&1 & web_pid=$!
 wait_url http://localhost:4000/api/v1/health/ready
 wait_url http://localhost:3000
 
@@ -162,6 +167,8 @@ test "$audit_leaks" = 0
 
 phase=backup
 kill "$web_pid" "$api_pid" >/dev/null 2>&1 || true
+wait "$web_pid" 2>/dev/null || true
+wait "$api_pid" 2>/dev/null || true
 web_pid=""; api_pid=""
 "${compose[@]}" stop processing-worker
 backup_started="$(date +%s)"
