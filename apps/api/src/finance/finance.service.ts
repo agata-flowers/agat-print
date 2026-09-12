@@ -459,8 +459,11 @@ export class FinanceService {
       where: { id: batchId },
     });
     if (!batch) throw new NotFoundException();
-    if (!["CREATED", "RETRY_PENDING"].includes(batch.status))
+    if (!["CREATED", "RETRY_PENDING"].includes(batch.status)) {
+      const committed = await this.awaitIdempotencyReplay(prepared);
+      if (committed) return committed;
       throw new ConflictException({ code: "INVALID_SETTLEMENT_TRANSITION" });
+    }
     let provider: { reference: string };
     try {
       provider = await this.payouts.submitBatch(
@@ -489,51 +492,71 @@ export class FinanceService {
       });
       throw new Error("PAYOUT_SUBMISSION_FAILED");
     }
-    const response = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "SettlementBatch" WHERE id = ${batch.id}::uuid FOR UPDATE`;
-      const insideReplay = await tx.idempotencyRecord.findUnique({
-        where: {
-          scope_keyDigest: {
-            scope: prepared.scope,
-            keyDigest: prepared.keyDigest,
+    let response: Record<string, unknown>;
+    try {
+      response = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "SettlementBatch" WHERE id = ${batch.id}::uuid FOR UPDATE`;
+        const insideReplay = await tx.idempotencyRecord.findUnique({
+          where: {
+            scope_keyDigest: {
+              scope: prepared.scope,
+              keyDigest: prepared.keyDigest,
+            },
           },
-        },
+        });
+        if (insideReplay)
+          return this.idempotency.assertCompatible(
+            insideReplay,
+            prepared,
+          ) as Record<string, unknown>;
+        const current = await tx.settlementBatch.findUniqueOrThrow({
+          where: { id: batch.id },
+        });
+        if (!["CREATED", "RETRY_PENDING"].includes(current.status))
+          throw new ConflictException({
+            code: "INVALID_SETTLEMENT_TRANSITION",
+          });
+        const changed = await tx.settlementBatch.updateMany({
+          where: { id: batch.id, status: current.status },
+          data: {
+            status: "SUBMITTED",
+            providerReference: provider.reference,
+            submittedAt: new Date(),
+            attempts: { increment: 1 },
+          },
+        });
+        if (changed.count !== 1)
+          throw new ConflictException({ code: "SETTLEMENT_CONFLICT" });
+        const value = { id: batch.id, status: "SUBMITTED" };
+        await tx.idempotencyRecord.create({
+          data: this.idempotency.data(prepared, value),
+        });
+        await tx.outboxEvent.create({
+          data: outbox(
+            "settlement",
+            batch.id,
+            current.attempts + 1,
+            "SETTLEMENT_SUBMITTED",
+          ),
+        });
+        return value;
       });
-      if (insideReplay)
-        return this.idempotency.assertCompatible(insideReplay, prepared) as {
-          id: string;
-          status: string;
-        };
-      const current = await tx.settlementBatch.findUniqueOrThrow({
-        where: { id: batch.id },
-      });
-      if (!["CREATED", "RETRY_PENDING"].includes(current.status))
-        throw new ConflictException({ code: "INVALID_SETTLEMENT_TRANSITION" });
-      const changed = await tx.settlementBatch.updateMany({
-        where: { id: batch.id, status: current.status },
-        data: {
-          status: "SUBMITTED",
-          providerReference: provider.reference,
-          submittedAt: new Date(),
-          attempts: { increment: 1 },
-        },
-      });
-      if (changed.count !== 1)
-        throw new ConflictException({ code: "SETTLEMENT_CONFLICT" });
-      const value = { id: batch.id, status: "SUBMITTED" };
-      await tx.idempotencyRecord.create({
-        data: this.idempotency.data(prepared, value),
-      });
-      await tx.outboxEvent.create({
-        data: outbox(
-          "settlement",
-          batch.id,
-          current.attempts + 1,
-          "SETTLEMENT_SUBMITTED",
-        ),
-      });
-      return value;
-    });
+    } catch (error) {
+      const prismaError =
+        error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
+      const serializationFailure =
+        prismaError?.code === "P2034" ||
+        (prismaError?.code === "P2010" &&
+          typeof prismaError.meta === "object" &&
+          prismaError.meta !== null &&
+          "code" in prismaError.meta &&
+          prismaError.meta.code === "40001");
+      if (prismaError?.code === "P2002" || serializationFailure) {
+        const committed = await this.awaitIdempotencyReplay(prepared);
+        if (committed) return committed;
+      }
+      throw error;
+    }
     await this.audit.record(
       "SETTLEMENT_BATCH_SUBMITTED",
       actorId,
@@ -541,6 +564,18 @@ export class FinanceService {
       { status: "SUBMITTED", operation: "PAYOUT" },
     );
     return response;
+  }
+
+  private async awaitIdempotencyReplay(
+    prepared: ReturnType<IdempotencyService["prepare"]>,
+  ): Promise<Record<string, unknown> | undefined> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const committed =
+        await this.idempotency.replay<Record<string, unknown>>(prepared);
+      if (committed) return committed;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return undefined;
   }
 
   async reconcile(
