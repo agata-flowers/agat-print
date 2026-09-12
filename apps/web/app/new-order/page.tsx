@@ -37,11 +37,14 @@ export default function NewOrderPage() {
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState("");
   useEffect(() => {
+    if (!slug) return;
+    let active = true;
     void publicApiRequest(`/catalog?locale=${locale}`)
       .then(async (response) => {
         const items = ((await response.json()) as { services: Service[] })
           .services;
         const selected = items.find((item) => item.slug === slug);
+        if (!active) return;
         setService(selected);
         if (selected)
           setConfiguration(
@@ -53,7 +56,12 @@ export default function NewOrderPage() {
             ),
           );
       })
-      .catch(() => setMessage(customerError("REQUEST_FAILED", locale)));
+      .catch(() => {
+        if (active) setMessage(customerError("REQUEST_FAILED", locale));
+      });
+    return () => {
+      active = false;
+    };
   }, [locale, slug]);
   const valid = useMemo(
     () =>
