@@ -636,9 +636,9 @@ export class FinanceService {
         ["SUCCEEDED", "FAILED"].includes(observed.status) &&
         observed.amountMinor === payment.amountMinor &&
         observed.currency === payment.currency;
-      if (authoritativeTerminal) {
+      if (authoritativeTerminal && attempt) {
         await this.commerce.applyPaymentObservationSystem(
-          attempt!.id,
+          attempt.id,
           observed.status as "SUCCEEDED" | "FAILED",
         );
         expected = observed.status;
