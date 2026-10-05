@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { ServiceWorkerRegistration } from "../components/service-worker-registration";
+import { CustomerNavigation } from "../components/customer-navigation";
 
 export const metadata: Metadata = {
   title: "AGAT PRINT",
@@ -27,12 +28,7 @@ export default function RootLayout({
           <Link className="brand" href="/">
             AGAT <span>PRINT</span>
           </Link>
-          <nav>
-            <Link href="/catalog">Услуги</Link>
-            <Link href="/orders">Заказы</Link>
-            <Link href="/notifications">Уведомления</Link>
-            <Link href="/partner">Партнёрам</Link>
-          </nav>
+          <CustomerNavigation />
         </header>
         {children}
         <footer>Agat Print — we print your ideas</footer>

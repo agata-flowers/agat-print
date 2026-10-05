@@ -26,14 +26,36 @@ type Overview = {
     detailCode?: string;
   }>;
 };
+type PaymentSummary = {
+  id: string;
+  status: string;
+  amountMinor: string;
+  currency: string;
+  failureCode: string | null;
+  attempt: null | {
+    status: string;
+    method: string;
+    failureCode: string | null;
+  };
+};
 
 export default function FinancePage() {
   const [data, setData] = useState<Overview>();
+  const [payments, setPayments] = useState<PaymentSummary[]>([]);
   const [error, setError] = useState(false);
   useEffect(() => {
-    void apiRequest("/admin/finance")
-      .then((response) => response.json() as Promise<Overview>)
-      .then(setData)
+    void Promise.all([
+      apiRequest("/admin/finance").then(
+        (response) => response.json() as Promise<Overview>,
+      ),
+      apiRequest("/admin/finance/payments").then(
+        (response) => response.json() as Promise<PaymentSummary[]>,
+      ),
+    ])
+      .then(([overview, paymentRows]) => {
+        setData(overview);
+        setPayments(paymentRows);
+      })
       .catch(() => setError(true));
   }, []);
   return (
@@ -43,6 +65,16 @@ export default function FinancePage() {
       {error && (
         <p className="error">Доступ запрещён или данные временно недоступны.</p>
       )}
+      <section className="panel">
+        <h2>Платежи</h2>
+        {payments.map((item) => (
+          <p key={item.id}>
+            {item.amountMinor} {item.currency} — {item.status}
+            {item.attempt ? ` / ${item.attempt.status}` : ""}
+            {item.failureCode ? ` (${item.failureCode})` : ""}
+          </p>
+        ))}
+      </section>
       <section className="panel">
         <h2>Фискализация</h2>
         {data?.fiscalOperations.map((item) => (

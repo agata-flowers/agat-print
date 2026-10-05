@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { customerCopy, useCustomerLocale } from "../lib/customer-i18n";
+import { LanguageSwitcher } from "../components/language-switcher";
 
 export default function HomePage() {
   const locale = useCustomerLocale();
@@ -9,10 +10,7 @@ export default function HomePage() {
   return (
     <main>
       <section className="hero">
-        <div className="language" aria-label="Til / Язык">
-          <Link href="/?lang=ru">RU</Link>
-          <Link href="/?lang=uz">UZ</Link>
-        </div>
+        <LanguageSwitcher />
         <p className="eyebrow">Ташкент · Toshkent</p>
         <h1>{text.hero}</h1>
         <p className="lead">{text.lead}</p>

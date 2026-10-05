@@ -7,6 +7,7 @@ const fallbackPdf = Buffer.from(
 const syntheticPdf = process.env.STAGE13_PDF_FIXTURE
   ? readFileSync(process.env.STAGE13_PDF_FIXTURE)
   : fallbackPdf;
+const stage14Payment = process.env.RUN_STAGE14_BROWSER_E2E === "1";
 
 async function reachApprovedLayout(
   page: Page,
@@ -97,6 +98,31 @@ test("RU customer commits pickup before the authoritative quote", async ({
   await expect(page.getByText("Итого")).toBeVisible();
   await page.getByRole("button", { name: "Оформить заказ" }).click();
   await expect(page.getByRole("heading", { name: "Ваш заказ" })).toBeVisible();
+  if (stage14Payment) {
+    await page.getByRole("button", { name: "Оплатить" }).click();
+    await expect(page.getByText("Оплата подтверждена.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByRole("heading", { name: "Оплата получена" }),
+    ).toBeVisible();
+    const orderPath = new URL(page.url()).pathname;
+    await page.getByRole("link", { name: "UZ", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "To‘lov qabul qilindi" }),
+    ).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe(orderPath);
+    await page.getByRole("link", { name: "EN", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Payment received" }),
+    ).toBeVisible();
+    await expect(page.getByText("Your order")).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe(orderPath);
+    await page.getByRole("link", { name: "RU", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Оплата получена" }),
+    ).toBeVisible();
+  }
   await expect(page.locator("body")).not.toContainText(
     /addressCiphertext|fulfillmentTariffRuleId|[0-9a-f]{8}-[0-9a-f-]{27,}/i,
   );
@@ -122,6 +148,16 @@ test("UZ customer commits zonal delivery and recovers it after reload", async ({
   await expect(
     page.getByRole("heading", { name: "Buyurtmangiz" }),
   ).toBeVisible();
+  if (stage14Payment) {
+    await page.reload();
+    await page.getByRole("button", { name: "To‘lash" }).click();
+    await expect(page.getByText("To‘lov tasdiqlandi.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByRole("heading", { name: "To‘lov qabul qilindi" }),
+    ).toBeVisible();
+  }
   await expect(page.locator("body")).not.toContainText(
     /addressCiphertext|fulfillmentTariffRuleId|[0-9a-f]{8}-[0-9a-f-]{27,}/i,
   );

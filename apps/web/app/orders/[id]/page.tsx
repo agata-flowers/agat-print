@@ -7,9 +7,17 @@ import { customerError, useCustomerLocale } from "../../../lib/customer-i18n";
 
 type OrderView = {
   id: string;
+  version: number;
   status: string;
   price: null | { totalMinor: string; currency: string; quantity: number };
-  payment: null | { status: string };
+  payment: null | {
+    status: string;
+    attempt: null | {
+      status: string;
+      method: string;
+      failureCode: string | null;
+    };
+  };
   fulfillment: null | {
     mode: "PICKUP" | "DELIVERY";
     status: string;
@@ -43,6 +51,11 @@ const copy = {
     title: "Ваш заказ",
     total: "Итого",
     payment: "Оплатить",
+    paymentProcessing: "Проверить оплату",
+    paymentSucceeded: "Оплата подтверждена.",
+    paymentUnknown:
+      "Результат уточняется. Новый платёж недоступен до безопасной проверки.",
+    paymentCancelled: "Платёж отменён. Можно попробовать снова.",
     payWaiting: "Ожидаем подтверждение платёжного провайдера.",
     payFailed: "Оплата не завершена. Повторите попытку — заказ сохранён.",
     pickup: "Самовывоз",
@@ -57,11 +70,27 @@ const copy = {
     timeline: "Ход заказа",
     studio: "Выбранная студия",
     automaticStudio: "Студия будет подобрана автоматически",
+    inProgress: "В работе",
+    loading: "Загрузка",
+    fulfillmentHeading: "Получение заказа",
+    startFulfillment: "Начать получение",
+    pickupCommitted: "Самовывоз из студии",
+    deliveryCommitted: "Доставка по Ташкенту",
+    printQuality: "Качество печати",
+    wrongOutput: "Неверный результат",
+    damaged: "Повреждение",
+    missingItems: "Не хватает материалов",
+    deliveryFailure: "Проблема доставки",
   },
   uz: {
     title: "Buyurtmangiz",
     total: "Jami",
     payment: "To‘lash",
+    paymentProcessing: "To‘lovni tekshirish",
+    paymentSucceeded: "To‘lov tasdiqlandi.",
+    paymentUnknown:
+      "Natija tekshirilmoqda. Xavfsiz tekshiruv tugamaguncha yangi to‘lov ochilmaydi.",
+    paymentCancelled: "To‘lov bekor qilindi. Qayta urinishingiz mumkin.",
     payWaiting: "To‘lov provayderi tasdig‘ini kutyapmiz.",
     payFailed:
       "To‘lov yakunlanmadi. Qayta urinib ko‘ring — buyurtma saqlangan.",
@@ -77,6 +106,51 @@ const copy = {
     timeline: "Buyurtma jarayoni",
     studio: "Tanlangan studiya",
     automaticStudio: "Studiya avtomatik tanlanadi",
+    inProgress: "Jarayonda",
+    loading: "Yuklanmoqda",
+    fulfillmentHeading: "Buyurtmani olish",
+    startFulfillment: "Olishni boshlash",
+    pickupCommitted: "Studiyadan olib ketish",
+    deliveryCommitted: "Toshkent bo‘ylab yetkazib berish",
+    printQuality: "Chop etish sifati",
+    wrongOutput: "Noto‘g‘ri natija",
+    damaged: "Shikastlangan",
+    missingItems: "Yetishmaydi",
+    deliveryFailure: "Yetkazish muammosi",
+  },
+  en: {
+    title: "Your order",
+    total: "Total",
+    payment: "Pay",
+    paymentProcessing: "Check payment",
+    paymentSucceeded: "Payment confirmed.",
+    paymentUnknown:
+      "The result is being checked. A new payment is unavailable until verification is complete.",
+    paymentCancelled: "Payment cancelled. You can try again.",
+    payWaiting: "Waiting for payment provider confirmation.",
+    payFailed: "Payment was not completed. Try again — your order is saved.",
+    pickup: "Collection",
+    delivery: "Delivery",
+    address: "Delivery address",
+    savePin: "Keep the PIN until collection. It is shown only once.",
+    issue: "Report a problem",
+    open: "Submit request",
+    cancel: "Cancel request",
+    unavailable: "The order is unavailable or belongs to another user.",
+    timeline: "Order progress",
+    studio: "Selected studio",
+    automaticStudio: "A studio will be selected automatically",
+    inProgress: "In progress",
+    loading: "Loading",
+    fulfillmentHeading: "Receive order",
+    startFulfillment: "Start fulfilment",
+    pickupCommitted: "Collection from the studio",
+    deliveryCommitted: "Delivery within Tashkent",
+    printQuality: "Print quality",
+    wrongOutput: "Incorrect output",
+    damaged: "Damaged",
+    missingItems: "Missing items",
+    deliveryFailure: "Delivery problem",
   },
 } as const;
 const stateLabels = {
@@ -118,6 +192,25 @@ const stateLabels = {
     PARTIALLY_REFUNDED: "Qisman qaytarildi",
     REFUNDED: "Pul qaytarildi",
   },
+  en: {
+    AWAITING_PAYMENT: "Awaiting payment",
+    PAID: "Payment received",
+    MATCHING: "Finding an eligible studio",
+    PARTNER_OFFERED: "Order offered to a studio",
+    PARTNER_ACCEPTED: "Studio accepted the order",
+    IN_PRODUCTION: "Order is being printed",
+    READY: "Ready for collection",
+    AWAITING_PICKUP: "Awaiting collection",
+    COURIER_ASSIGNED: "Courier assigned",
+    IN_DELIVERY: "In delivery",
+    COMPLETED: "Completed",
+    DELIVERY_FAILED: "Delivery failed",
+    DISPUTED: "Request under review",
+    REPRINT: "Reprint scheduled",
+    REFUND_PENDING: "Refund pending confirmation",
+    PARTIALLY_REFUNDED: "Partially refunded",
+    REFUNDED: "Refunded",
+  },
 } as const;
 const timelineLabels = {
   ru: {
@@ -143,6 +236,18 @@ const timelineLabels = {
     delivery_failed: "Yetkazib berilmadi",
     refunded: "Pul qaytarildi",
     updated: "Holat yangilandi",
+  },
+  en: {
+    created: "Order created",
+    paid: "Payment received",
+    partner_assigned: "Studio assigned",
+    production: "Printing started",
+    ready: "Order ready",
+    delivery: "Order handed to delivery",
+    completed: "Order completed",
+    delivery_failed: "Delivery failed",
+    refunded: "Refund completed",
+    updated: "Status updated",
   },
 } as const;
 
@@ -191,25 +296,34 @@ export default function OrderPage() {
       const response = await apiRequest(`/orders/${id}/payment`, {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ simulateOutcome: "SUCCESS" }),
+        body: JSON.stringify({
+          method: "INTERNAL_MVP",
+          scenario: "SUCCESS",
+          expectedOrderVersion: order?.version,
+        }),
       });
-      const started = (await response.json()) as {
-        mockCallback?: unknown;
-        mockSignature?: string;
-      };
-      if (started.mockCallback && started.mockSignature)
-        await apiRequest("/payments/mock/callback", {
-          method: "POST",
-          headers: { "X-Provider-Signature": started.mockSignature },
-          body: JSON.stringify(started.mockCallback),
-        });
-      else
-        await apiRequest(`/orders/${id}/payment/confirm`, {
-          method: "POST",
-          headers: { "Idempotency-Key": crypto.randomUUID() },
-          body: "{}",
-        });
-      setMessage(text.payWaiting);
+      await response.json();
+      await confirmPayment();
+      await load();
+    } catch {
+      setMessage(text.payFailed);
+    }
+  };
+  const confirmPayment = async () => {
+    try {
+      const response = await apiRequest(`/orders/${id}/payment/confirm`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: "{}",
+      });
+      const result = (await response.json()) as { paymentStatus: string };
+      setMessage(
+        result.paymentStatus === "SUCCEEDED"
+          ? text.paymentSucceeded
+          : result.paymentStatus === "UNKNOWN"
+            ? text.paymentUnknown
+            : text.payWaiting,
+      );
       await load();
     } catch {
       setMessage(text.payFailed);
@@ -276,10 +390,8 @@ export default function OrderPage() {
   };
   const state = order?.status
     ? (stateLabels[locale][order.status as keyof typeof stateLabels.ru] ??
-      (locale === "uz" ? "Jarayonda" : "В работе"))
-    : locale === "uz"
-      ? "Yuklanmoqda"
-      : "Загрузка";
+      text.inProgress)
+    : text.loading;
   return (
     <main className="narrow">
       <p className="eyebrow">AGAT PRINT</p>
@@ -310,24 +422,38 @@ export default function OrderPage() {
         {order?.fulfillmentSelection && (
           <p data-testid="fulfillment-selection">
             {order.fulfillmentSelection.mode === "PICKUP"
-              ? locale === "uz"
-                ? "Studiyadan olib ketish"
-                : "Самовывоз из студии"
-              : locale === "uz"
-                ? "Toshkent bo‘ylab yetkazib berish"
-                : "Доставка по Ташкенту"}{" "}
+              ? text.pickupCommitted
+              : text.deliveryCommitted}{" "}
             · {order.fulfillmentSelection.feeMinor}{" "}
             {order.fulfillmentSelection.currency}
           </p>
         )}
-        {order?.status === "AWAITING_PAYMENT" && (
-          <button className="button primary" onClick={pay}>
-            {text.payment}
-          </button>
-        )}
+        {order?.status === "AWAITING_PAYMENT" &&
+          (!order.payment ||
+            ["FAILED", "CANCELLED"].includes(order.payment.status)) && (
+            <button className="button primary" onClick={pay}>
+              {text.payment}
+            </button>
+          )}
+        {order?.status === "AWAITING_PAYMENT" &&
+          order.payment &&
+          ["PENDING", "PROCESSING", "UNKNOWN"].includes(
+            order.payment.status,
+          ) && (
+            <div className="auth-form" data-testid="payment-recovery">
+              <p>
+                {order.payment.status === "UNKNOWN"
+                  ? text.paymentUnknown
+                  : text.payWaiting}
+              </p>
+              <button className="button primary" onClick={confirmPayment}>
+                {text.paymentProcessing}
+              </button>
+            </div>
+          )}
         {order?.status === "READY" && order.fulfillmentSelection && (
           <div className="auth-form">
-            <h2>{locale === "uz" ? "Buyurtmani olish" : "Получение заказа"}</h2>
+            <h2>{text.fulfillmentHeading}</h2>
             <p>
               {order.fulfillmentSelection.mode === "PICKUP"
                 ? text.pickup
@@ -337,13 +463,13 @@ export default function OrderPage() {
               className="button primary"
               onClick={activateCommittedFulfillment}
             >
-              {locale === "uz" ? "Olishni boshlash" : "Начать получение"}
+              {text.startFulfillment}
             </button>
           </div>
         )}
         {order?.status === "READY" && !order.fulfillmentSelection && (
           <div className="auth-form">
-            <h2>{locale === "uz" ? "Buyurtmani olish" : "Получение заказа"}</h2>
+            <h2>{text.fulfillmentHeading}</h2>
             <button
               className="button secondary"
               onClick={() => requestFulfillment("PICKUP")}
@@ -384,7 +510,11 @@ export default function OrderPage() {
                 ] ?? timelineLabels[locale].updated}
                 <small>
                   {new Date(event.at).toLocaleString(
-                    locale === "uz" ? "uz-UZ" : "ru-RU",
+                    locale === "uz"
+                      ? "uz-UZ"
+                      : locale === "en"
+                        ? "en-GB"
+                        : "ru-RU",
                   )}
                 </small>
               </li>
@@ -401,21 +531,11 @@ export default function OrderPage() {
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
               >
-                <option value="PRINT_QUALITY">
-                  {locale === "uz" ? "Chop etish sifati" : "Качество печати"}
-                </option>
-                <option value="WRONG_OUTPUT">
-                  {locale === "uz" ? "Noto‘g‘ri natija" : "Неверный результат"}
-                </option>
-                <option value="DAMAGED">
-                  {locale === "uz" ? "Shikastlangan" : "Повреждение"}
-                </option>
-                <option value="MISSING_ITEMS">
-                  {locale === "uz" ? "Yetishmaydi" : "Не хватает материалов"}
-                </option>
-                <option value="DELIVERY_FAILURE">
-                  {locale === "uz" ? "Yetkazish muammosi" : "Проблема доставки"}
-                </option>
+                <option value="PRINT_QUALITY">{text.printQuality}</option>
+                <option value="WRONG_OUTPUT">{text.wrongOutput}</option>
+                <option value="DAMAGED">{text.damaged}</option>
+                <option value="MISSING_ITEMS">{text.missingItems}</option>
+                <option value="DELIVERY_FAILURE">{text.deliveryFailure}</option>
               </select>
               <button className="button secondary" onClick={openDispute}>
                 {text.open}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type CustomerLocale = "ru" | "uz";
+export type CustomerLocale = "uz" | "ru" | "en";
 
 const copy = {
   ru: {
@@ -9,6 +9,7 @@ const copy = {
     orders: "Мои заказы",
     notifications: "Уведомления",
     studios: "Студии",
+    partners: "Партнёрам",
     hero: "Печать и фотоуслуги — онлайн",
     lead: "Загрузите файл, проверьте макет и узнайте итоговую цену до оплаты. Заказ выполнит подходящая студия AGAT PRINT.",
     choose: "Выберите услугу",
@@ -43,6 +44,7 @@ const copy = {
     orders: "Buyurtmalarim",
     notifications: "Bildirishnomalar",
     studios: "Studiyalar",
+    partners: "Hamkorlar uchun",
     hero: "Bosma va foto xizmatlari — onlayn",
     lead: "Faylni yuklang, maketni tekshiring va to‘lovdan oldin yakuniy narxni biling. Buyurtmani mos AGAT PRINT studiyasi bajaradi.",
     choose: "Xizmatni tanlang",
@@ -71,11 +73,46 @@ const copy = {
     strictPreference: "Faqat tanlangan studiya",
     studioSaved: "Studiya tanlovi saqlandi.",
   },
+  en: {
+    start: "Create order",
+    catalog: "Services",
+    orders: "My orders",
+    notifications: "Notifications",
+    studios: "Studios",
+    partners: "For partners",
+    hero: "Print and photo services — online",
+    lead: "Upload a file, review the layout, and see the final price before payment. An eligible AGAT PRINT studio will fulfil the order.",
+    choose: "Choose a service",
+    configure: "Configure your order",
+    continue: "Continue",
+    quantity: "Quantity",
+    file: "Choose a PDF, DOCX, JPG, or PNG file",
+    upload: "Upload file",
+    processing:
+      "The file is being processed. You can close this page and return later.",
+    prepare: "Prepare layout",
+    review: "Review the layout",
+    approve: "Approve layout",
+    manual: "The layout is waiting for operator review.",
+    quality: "The file did not pass the quality check. Choose another file.",
+    quote: "Calculate price",
+    checkout: "Place order",
+    total: "Total",
+    retry: "Try again",
+    emptyOrders: "You do not have any orders yet.",
+    emptyNotifications: "There are no new notifications.",
+    studioChoice: "Studio choice",
+    autoAssign: "Choose a studio automatically",
+    preferredStudio: "Preferred studio",
+    allowFallback: "Choose another studio if this one is busy",
+    strictPreference: "Only the selected studio",
+    studioSaved: "Studio choice saved.",
+  },
 } as const;
 
 export const customerCopy = (locale: CustomerLocale) => copy[locale];
 export const localeFrom = (value: string | null | undefined): CustomerLocale =>
-  value === "uz" ? "uz" : "ru";
+  value === "uz" || value === "en" ? value : "ru";
 
 export function useCustomerLocale() {
   const [locale, setLocale] = useState<CustomerLocale>("ru");
@@ -114,6 +151,13 @@ export const customerError = (code: string, locale: CustomerLocale) => {
       DRAFT_VERSION_CONFLICT:
         "Заказ изменился на другом устройстве. Страница обновлена.",
       CONCURRENT_CHANGE: "Запрос уже выполняется. Обновите состояние заказа.",
+      PAYMENT_METHOD_UNAVAILABLE: "Этот способ оплаты сейчас недоступен.",
+      PAYMENT_ATTEMPT_ACTIVE: "Предыдущая оплата ещё проверяется.",
+      PAYMENT_RESULT_UNKNOWN:
+        "Результат оплаты уточняется. Не создавайте новый платёж.",
+      PAYMENT_PROVIDER_RETRY_SCHEDULED:
+        "Провайдер временно недоступен. Проверка продолжится автоматически.",
+      STALE_ORDER_VERSION: "Заказ изменился. Обновите страницу перед оплатой.",
       REQUEST_FAILED: "Связь прервалась. Попробуйте ещё раз — заказ сохранён.",
       UPLOAD_FAILED:
         "Не удалось загрузить файл. Заказ сохранён, повторите попытку.",
@@ -143,16 +187,67 @@ export const customerError = (code: string, locale: CustomerLocale) => {
       DRAFT_VERSION_CONFLICT:
         "Buyurtma boshqa qurilmada o‘zgardi. Sahifa yangilandi.",
       CONCURRENT_CHANGE: "So‘rov bajarilmoqda. Buyurtma holatini yangilang.",
+      PAYMENT_METHOD_UNAVAILABLE: "Bu to‘lov usuli hozir mavjud emas.",
+      PAYMENT_ATTEMPT_ACTIVE: "Oldingi to‘lov hali tekshirilmoqda.",
+      PAYMENT_RESULT_UNKNOWN:
+        "To‘lov natijasi tekshirilmoqda. Yangi to‘lov yaratmang.",
+      PAYMENT_PROVIDER_RETRY_SCHEDULED:
+        "Provayder vaqtincha ishlamayapti. Tekshiruv avtomatik davom etadi.",
+      STALE_ORDER_VERSION:
+        "Buyurtma o‘zgardi. To‘lovdan oldin sahifani yangilang.",
       REQUEST_FAILED:
         "Aloqa uzildi. Qayta urinib ko‘ring — buyurtma saqlangan.",
       UPLOAD_FAILED:
         "Fayl yuklanmadi. Buyurtma saqlangan, qayta urinib ko‘ring.",
+    },
+    en: {
+      FILE_SIZE_EXCEEDED: "The file is too large.",
+      SIZE_MISMATCH: "The file size changed during upload.",
+      UNSUPPORTED_FILE_EXTENSION: "This file format is not supported.",
+      FILE_NOT_ALLOWED_FOR_SERVICE: "The file is not valid for this service.",
+      INVALID_SERVICE_OPTIONS: "Check the selected options.",
+      MISSING_SERVICE_OPTION: "Complete the required options.",
+      QUOTE_STALE: "The quote has expired. Calculate it again.",
+      LAYOUT_APPROVAL_NOT_CURRENT:
+        "The layout changed and must be approved again.",
+      PARTNER_UNAVAILABLE:
+        "No studio is currently available. The payment will be refunded safely.",
+      STUDIO_NOT_ELIGIBLE:
+        "This studio is not currently eligible for the order.",
+      STUDIO_PREFERENCE_STALE:
+        "The studio details changed. Choose the studio again.",
+      FULFILLMENT_SELECTION_REQUIRED: "Choose how you will receive the order.",
+      FULFILLMENT_UNAVAILABLE:
+        "This fulfilment option is unavailable. Choose another one.",
+      INVALID_FULFILLMENT_SELECTION:
+        "Check the fulfilment option and delivery address.",
+      FULFILLMENT_SELECTION_IMMUTABLE:
+        "The fulfilment option is already fixed for this order.",
+      DRAFT_VERSION_CONFLICT:
+        "The order changed on another device. The page was refreshed.",
+      CONCURRENT_CHANGE:
+        "The request is already being processed. Refresh the order status.",
+      PAYMENT_METHOD_UNAVAILABLE:
+        "This payment method is currently unavailable.",
+      PAYMENT_ATTEMPT_ACTIVE: "The previous payment is still being checked.",
+      PAYMENT_RESULT_UNKNOWN:
+        "The payment result is being checked. Do not create a new payment.",
+      PAYMENT_PROVIDER_RETRY_SCHEDULED:
+        "The provider is temporarily unavailable. Verification will continue automatically.",
+      STALE_ORDER_VERSION:
+        "The order changed. Refresh the page before payment.",
+      REQUEST_FAILED:
+        "The connection was interrupted. Try again — your order is saved.",
+      UPLOAD_FAILED:
+        "The file could not be uploaded. Your order is saved; try again.",
     },
   };
   return (
     messages[locale][code] ??
     (locale === "uz"
       ? "Amal bajarilmadi. Qayta urinib ko‘ring."
-      : "Не удалось выполнить действие. Попробуйте ещё раз.")
+      : locale === "en"
+        ? "The action could not be completed. Try again."
+        : "Не удалось выполнить действие. Попробуйте ещё раз.")
   );
 };

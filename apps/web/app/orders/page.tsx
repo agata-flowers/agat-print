@@ -31,6 +31,15 @@ const labels = {
     attention: "E’tibor talab qiladi",
     in_progress: "Jarayonda",
   },
+  en: {
+    payment: "Awaiting payment",
+    ready: "Ready for collection",
+    delivery: "In delivery",
+    completed: "Completed",
+    refunded: "Refunded",
+    attention: "Needs attention",
+    in_progress: "In progress",
+  },
 } as const;
 
 export default function OrdersPage() {
@@ -80,7 +89,7 @@ export default function OrdersPage() {
             </span>
             <small>
               {new Date(order.createdAt).toLocaleDateString(
-                locale === "uz" ? "uz-UZ" : "ru-RU",
+                locale === "uz" ? "uz-UZ" : locale === "en" ? "en-GB" : "ru-RU",
               )}
             </small>
           </Link>
