@@ -903,75 +903,88 @@ export class FulfillmentService {
       where: { dedupKey: deliveryDedupKey },
     });
     if (prior?.resultId) return this.printJobDownload(agent.id, prior.resultId);
-    let claimed: string | null;
-    try {
-      claimed = await this.prisma.$transaction(
-        async (tx) => {
-          const insidePrior = await tx.inboxOperation.findUnique({
-            where: { dedupKey: deliveryDedupKey },
-          });
-          if (insidePrior?.resultId) return insidePrior.resultId;
-          const candidates = await tx.printJob.findMany({
-            where: {
-              branchId: agent.branchId,
-              OR: [
-                { status: "PENDING" },
-                { status: "LEASED", leaseUntil: { lt: new Date() } },
-              ],
-              order: {
-                status: {
-                  in: ["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION"],
+    let claimed: string | null = null;
+    for (
+      let transactionAttempt = 0;
+      transactionAttempt < 5;
+      transactionAttempt += 1
+    ) {
+      try {
+        claimed = await this.prisma.$transaction(
+          async (tx) => {
+            const insidePrior = await tx.inboxOperation.findUnique({
+              where: { dedupKey: deliveryDedupKey },
+            });
+            if (insidePrior?.resultId) return insidePrior.resultId;
+            const candidates = await tx.printJob.findMany({
+              where: {
+                branchId: agent.branchId,
+                OR: [
+                  { status: "PENDING" },
+                  { status: "LEASED", leaseUntil: { lt: new Date() } },
+                ],
+                order: {
+                  status: {
+                    in: ["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION"],
+                  },
                 },
               },
-            },
-            orderBy: { createdAt: "asc" },
-            take: 1,
-          });
-          const job = candidates[0];
-          if (!job) return null;
-          const changed = await tx.printJob.updateMany({
-            where: { id: job.id, version: job.version, status: job.status },
-            data: {
-              status: "LEASED",
-              agentId: agent.id,
-              leaseUntil: new Date(
-                Date.now() + this.env.printerAgentLeaseSeconds * 1_000,
-              ),
-              attempts: { increment: 1 },
-              version: { increment: 1 },
-            },
-          });
-          if (changed.count !== 1)
-            throw new ConflictException({ code: "PRINT_JOB_CLAIM_CONFLICT" });
-          await tx.inboxOperation.create({
-            data: {
-              dedupKey: deliveryDedupKey,
-              operation: "CLAIM_PRINT_JOB",
-              resultId: job.id,
-            },
-          });
-          return job.id;
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-    } catch (error) {
-      const prismaError =
-        error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
-      if (
-        prismaError?.code === "P2002" ||
-        prismaError?.code === "P2034" ||
-        prismaError?.code === "P2010"
-      ) {
-        for (let attempt = 0; attempt < 5; attempt += 1) {
+              orderBy: { createdAt: "asc" },
+              take: 1,
+            });
+            const job = candidates[0];
+            if (!job) return null;
+            const changed = await tx.printJob.updateMany({
+              where: { id: job.id, version: job.version, status: job.status },
+              data: {
+                status: "LEASED",
+                agentId: agent.id,
+                leaseUntil: new Date(
+                  Date.now() + this.env.printerAgentLeaseSeconds * 1_000,
+                ),
+                attempts: { increment: 1 },
+                version: { increment: 1 },
+              },
+            });
+            if (changed.count !== 1)
+              throw new ConflictException({ code: "PRINT_JOB_CLAIM_CONFLICT" });
+            await tx.inboxOperation.create({
+              data: {
+                dedupKey: deliveryDedupKey,
+                operation: "CLAIM_PRINT_JOB",
+                resultId: job.id,
+              },
+            });
+            return job.id;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (error) {
+        const prismaError =
+          error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
+        if (
+          prismaError?.code === "P2002" ||
+          prismaError?.code === "P2034" ||
+          prismaError?.code === "P2010"
+        ) {
           const recovered = await this.prisma.inboxOperation.findUnique({
             where: { dedupKey: deliveryDedupKey },
           });
           if (recovered?.resultId)
             return this.printJobDownload(agent.id, recovered.resultId);
-          await new Promise((resolve) => setTimeout(resolve, 20));
+          if (
+            ["P2034", "P2010"].includes(prismaError.code) &&
+            transactionAttempt < 4
+          ) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, 20 * (transactionAttempt + 1)),
+            );
+            continue;
+          }
         }
+        throw error;
       }
-      throw error;
     }
     return claimed ? this.printJobDownload(agent.id, claimed) : null;
   }
