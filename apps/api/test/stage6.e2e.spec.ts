@@ -72,6 +72,7 @@ describe.skipIf(!enabled)("stage 6 partner matching and production e2e", () => {
       prisma.orderMatching.deleteMany(),
       prisma.branchCapabilityVersion.deleteMany(),
       prisma.providerCallback.deleteMany(),
+      prisma.paymentAttempt.deleteMany(),
       prisma.idempotencyRecord.deleteMany(),
       prisma.refundOperation.deleteMany(),
       prisma.payment.deleteMany(),

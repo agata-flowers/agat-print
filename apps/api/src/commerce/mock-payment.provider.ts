@@ -1,7 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type {
+  PaymentMethodKind,
   PaymentProvider,
+  PaymentScenario,
   PaymentWebhookEvent,
   ProviderContext,
 } from "@agat/providers";
@@ -17,9 +19,49 @@ export class MockPaymentProvider implements PaymentProvider {
       amountMinor: bigint;
     }
   >();
+  private readonly attemptCalls = new Map<string, number>();
   private readonly refundParents = new Map<string, string>();
   private readonly refundedAmounts = new Map<string, bigint>();
   constructor(@Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment) {}
+
+  capabilities(): Promise<{ methods: PaymentMethodKind[] }> {
+    return Promise.resolve({ methods: ["INTERNAL_MVP"] });
+  }
+
+  createAttempt(input: {
+    orderReference: string;
+    merchantReference: string;
+    method: PaymentMethodKind;
+    amountMinor: bigint;
+    currency: "UZS";
+    scenario?: PaymentScenario;
+  }): Promise<{
+    reference: string;
+    nextAction: "WAIT";
+    status: "PROCESSING" | "SUCCEEDED" | "FAILED" | "UNKNOWN";
+  }> {
+    if (input.method !== "INTERNAL_MVP")
+      return Promise.reject(new Error("PAYMENT_METHOD_UNAVAILABLE"));
+    const reference = this.reference("pay", input.merchantReference);
+    const calls = (this.attemptCalls.get(reference) ?? 0) + 1;
+    this.attemptCalls.set(reference, calls);
+    if (input.scenario === "RETRY" && calls === 1)
+      return Promise.reject(new Error("PROVIDER_TEMPORARY_FAILURE"));
+    const status =
+      input.scenario === "FAILURE"
+        ? "FAILED"
+        : input.scenario === "TIMEOUT"
+          ? "UNKNOWN"
+          : input.scenario === "SUCCESS" || input.scenario === "DUPLICATE"
+            ? "SUCCEEDED"
+            : "PROCESSING";
+    this.operations.set(reference, {
+      status:
+        status === "PROCESSING" || status === "UNKNOWN" ? "PENDING" : status,
+      amountMinor: input.amountMinor,
+    });
+    return Promise.resolve({ reference, nextAction: "WAIT", status });
+  }
 
   start(
     _orderReference: string,
@@ -50,6 +92,17 @@ export class MockPaymentProvider implements PaymentProvider {
     return Promise.resolve({
       status: status === "REFUNDED" ? "SUCCEEDED" : status,
     });
+  }
+
+  cancel(reference: string): Promise<{
+    status: "CANCELLED" | "NOT_CANCELLABLE" | "UNKNOWN";
+  }> {
+    const operation = this.operations.get(reference);
+    if (!operation) return Promise.resolve({ status: "UNKNOWN" });
+    if (operation.status !== "PENDING")
+      return Promise.resolve({ status: "NOT_CANCELLABLE" });
+    this.operations.delete(reference);
+    return Promise.resolve({ status: "CANCELLED" });
   }
 
   sign(payload: string): string {
@@ -87,10 +140,11 @@ export class MockPaymentProvider implements PaymentProvider {
 
   recordOutcome(
     reference: string,
-    outcome: "PAYMENT_SUCCEEDED" | "PAYMENT_FAILED" | "REFUND_SUCCEEDED",
+    outcome: PaymentWebhookEvent["outcome"],
   ): void {
     const prior = this.operations.get(reference);
     if (!prior) return;
+    if (outcome === "UNKNOWN_EVENT" || outcome === "PAYMENT_UNKNOWN") return;
     this.operations.set(reference, {
       ...prior,
       status:
@@ -98,7 +152,9 @@ export class MockPaymentProvider implements PaymentProvider {
           ? "SUCCEEDED"
           : outcome === "PAYMENT_FAILED"
             ? "FAILED"
-            : "REFUNDED",
+            : outcome === "REFUND_SUCCEEDED"
+              ? "REFUNDED"
+              : "PENDING",
     });
     if (outcome === "REFUND_SUCCEEDED") {
       const parentReference = this.refundParents.get(reference);
@@ -134,9 +190,14 @@ function parsePaymentWebhook(payload: string): PaymentWebhookEvent | null {
       ) ||
       typeof value.paymentReference !== "string" ||
       !/^[A-Za-z0-9._:-]{1,160}$/.test(value.paymentReference) ||
-      !["PAYMENT_SUCCEEDED", "PAYMENT_FAILED", "REFUND_SUCCEEDED"].includes(
-        String(value.outcome),
-      )
+      ![
+        "PAYMENT_SUCCEEDED",
+        "PAYMENT_FAILED",
+        "PAYMENT_CANCELLED",
+        "PAYMENT_UNKNOWN",
+        "REFUND_SUCCEEDED",
+        "UNKNOWN_EVENT",
+      ].includes(String(value.outcome))
     )
       return null;
     return value as unknown as PaymentWebhookEvent;

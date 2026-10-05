@@ -38,6 +38,8 @@ export interface AppEnvironment {
   paymentProviderEndpoint: string;
   paymentProviderApiKey: string;
   paymentWebhookSecret: string;
+  paymentReferenceKey: string;
+  paymentAttemptTimeoutSeconds: number;
   fiscalProvider: string;
   fiscalProviderEndpoint: string;
   fiscalProviderApiKey: string;
@@ -88,11 +90,22 @@ export function loadEnvironment(
   if (nodeEnv === "production" && otpProvider === "mock")
     throw new Error("Mock OTP is forbidden in production");
   const paymentProvider = source.PAYMENT_PROVIDER ?? "mock";
-  if (nodeEnv === "production" && paymentProvider === "mock")
-    throw new Error("Mock payment is forbidden in production");
+  if (
+    nodeEnv === "production" &&
+    ["mock", "internal"].includes(paymentProvider)
+  )
+    throw new Error(
+      "Mock payment and internal payment are forbidden in production",
+    );
   const mockPaymentSecret =
     source.MOCK_PAYMENT_SECRET ?? "development-only-mock-payment-secret";
   const jwtSecret = source.JWT_ACCESS_SECRET ?? "";
+  const paymentReferenceKey =
+    source.PAYMENT_REFERENCE_KEY ?? Buffer.alloc(32, "p").toString("base64");
+  if (Buffer.from(paymentReferenceKey, "base64").length !== 32)
+    throw new Error(
+      "PAYMENT_REFERENCE_KEY must be a base64-encoded 256-bit key",
+    );
   if (jwtSecret.length < 32)
     throw new Error("JWT_ACCESS_SECRET must contain at least 32 characters");
   const webOrigin = source.WEB_ORIGIN ?? "http://localhost:3000";
@@ -105,6 +118,14 @@ export function loadEnvironment(
       throw new Error("MOCK_OTP_CODE is forbidden in production");
     if (source.MOCK_PAYMENT_SECRET)
       throw new Error("MOCK_PAYMENT_SECRET is forbidden in production");
+    if (
+      !source.PAYMENT_REFERENCE_KEY ||
+      forbiddenProductionValue(source.PAYMENT_REFERENCE_KEY) ||
+      new Set(Buffer.from(source.PAYMENT_REFERENCE_KEY, "base64")).size < 10
+    )
+      throw new Error(
+        "PAYMENT_REFERENCE_KEY must come from the production secret store",
+      );
     for (const [name, value] of [
       ["MINIO_ACCESS_KEY", source.MINIO_ACCESS_KEY ?? ""],
       ["MINIO_SECRET_KEY", source.MINIO_SECRET_KEY ?? ""],
@@ -256,6 +277,11 @@ export function loadEnvironment(
     paymentProviderEndpoint: source.PAYMENT_PROVIDER_ENDPOINT ?? "",
     paymentProviderApiKey: source.PAYMENT_PROVIDER_API_KEY ?? "",
     paymentWebhookSecret: source.PAYMENT_WEBHOOK_SECRET ?? "",
+    paymentReferenceKey,
+    paymentAttemptTimeoutSeconds: integer(
+      source.PAYMENT_ATTEMPT_TIMEOUT_SECONDS,
+      300,
+    ),
     fiscalProvider: source.FISCAL_PROVIDER ?? "mock",
     fiscalProviderEndpoint: source.FISCAL_PROVIDER_ENDPOINT ?? "",
     fiscalProviderApiKey: source.FISCAL_PROVIDER_API_KEY ?? "",

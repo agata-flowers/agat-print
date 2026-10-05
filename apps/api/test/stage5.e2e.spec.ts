@@ -10,7 +10,8 @@ import { AppModule } from "../src/app.module";
 import { MockPaymentProvider } from "../src/commerce/mock-payment.provider";
 import { PrismaService } from "../src/prisma/prisma.service";
 
-const enabled = process.env.RUN_STAGE5_E2E === "1";
+const enabled =
+  process.env.RUN_STAGE5_E2E === "1" || process.env.RUN_STAGE14_E2E === "1";
 const origin = "http://localhost:3000";
 
 describe.skipIf(!enabled)("stage 5 pricing, payment and refund e2e", () => {
@@ -67,6 +68,7 @@ describe.skipIf(!enabled)("stage 5 pricing, payment and refund e2e", () => {
   async function clearDatabase() {
     await prisma.$transaction([
       prisma.providerCallback.deleteMany(),
+      prisma.paymentAttempt.deleteMany(),
       prisma.idempotencyRecord.deleteMany(),
       prisma.refundOperation.deleteMany(),
       prisma.payment.deleteMany(),
@@ -455,5 +457,86 @@ describe.skipIf(!enabled)("stage 5 pricing, payment and refund e2e", () => {
     expect(metrics).not.toMatch(
       /order_id|user_id|payment_reference|amount_minor|phone/i,
     );
+  });
+
+  it("persists a durable attempt before authoritative confirmation and recovers it safely", async () => {
+    const order = await createOrder(1);
+    const methods = await customer
+      .get(`/api/v1/orders/${order.id}/payment-methods`)
+      .expect(200)
+      .expect("Cache-Control", "no-store, private");
+    expect(methods.body.methods).toEqual([
+      expect.objectContaining({ code: "INTERNAL_MVP" }),
+    ]);
+
+    const key = randomUUID();
+    const payload = {
+      method: "INTERNAL_MVP",
+      scenario: "SUCCESS",
+      expectedOrderVersion: 0,
+    };
+    const started = await customer
+      .post(`/api/v1/orders/${order.id}/payment`)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", customerCsrf)
+      .set("Idempotency-Key", key)
+      .send(payload)
+      .expect(201);
+    const replay = await customer
+      .post(`/api/v1/orders/${order.id}/payment`)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", customerCsrf)
+      .set("Idempotency-Key", key)
+      .send(payload)
+      .expect(201);
+    expect(replay.body).toEqual(started.body);
+    expect(started.body).toMatchObject({
+      paymentStatus: "PROCESSING",
+      attemptStatus: "PROCESSING",
+      method: "INTERNAL_MVP",
+    });
+    expect(
+      await prisma.paymentAttempt.count({
+        where: { payment: { orderId: order.id } },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.outboxEvent.count({
+        where: {
+          aggregateType: "payment_attempt",
+          eventType: "PAYMENT_ATTEMPT_CREATED",
+        },
+      }),
+    ).toBeGreaterThan(0);
+
+    const recovered = await customer
+      .get(`/api/v1/orders/${order.id}/payment`)
+      .expect(200)
+      .expect("Cache-Control", "no-store, private");
+    expect(JSON.stringify(recovered.body)).not.toMatch(
+      /providerReference|merchantReference|ciphertext/i,
+    );
+    await customer
+      .post(`/api/v1/orders/${order.id}/payment/confirm`)
+      .set("Origin", origin)
+      .set("X-CSRF-Token", customerCsrf)
+      .set("Idempotency-Key", randomUUID())
+      .expect(201);
+    expect(
+      (await customer.get(`/api/v1/orders/${order.id}`).expect(200)).body
+        .status,
+    ).toBe("PAID");
+    const paidEvents = await prisma.outboxEvent.count({
+      where: {
+        aggregateType: "payment",
+        aggregateId: (
+          await prisma.payment.findUniqueOrThrow({
+            where: { orderId: order.id },
+          })
+        ).id,
+        eventType: "PAYMENT_SUCCEEDED",
+      },
+    });
+    expect(paidEvents).toBe(1);
   });
 });

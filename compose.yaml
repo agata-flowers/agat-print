@@ -61,6 +61,8 @@ services:
       MOCK_OTP_CODE: ${MOCK_OTP_CODE:-000000}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       MOCK_PAYMENT_SECRET: ${MOCK_PAYMENT_SECRET:-development-only-mock-payment-secret}
+      PAYMENT_REFERENCE_KEY: ${PAYMENT_REFERENCE_KEY:-cHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHA=}
+      PAYMENT_ATTEMPT_TIMEOUT_SECONDS: ${PAYMENT_ATTEMPT_TIMEOUT_SECONDS:-300}
       DATABASE_URL: postgresql://agat:${POSTGRES_PASSWORD:-development-only}@postgres:5432/agat_print?schema=public
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
@@ -132,6 +134,8 @@ services:
       OTP_PROVIDER: ${OTP_PROVIDER:-mock}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       MOCK_PAYMENT_SECRET: ${MOCK_PAYMENT_SECRET:-development-only-mock-payment-secret}
+      PAYMENT_REFERENCE_KEY: ${PAYMENT_REFERENCE_KEY:-cHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHA=}
+      PAYMENT_ATTEMPT_TIMEOUT_SECONDS: ${PAYMENT_ATTEMPT_TIMEOUT_SECONDS:-300}
       DATABASE_URL: postgresql://agat:${POSTGRES_PASSWORD:-development-only}@postgres:5432/agat_print?schema=public
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000

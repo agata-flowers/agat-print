@@ -126,6 +126,9 @@ describe("environment validation", () => {
         "0123456789abcdef0123456789abcdef",
       ).toString("base64"),
       PRINTER_AGENT_TOKEN_PEPPER: "8J7k6L5m4N3p2Q1r9A7b6C5d4E3f2G1h",
+      PAYMENT_REFERENCE_KEY: Buffer.from(
+        "payment-ref-key-0123456789abcdef",
+      ).toString("base64"),
     };
     expect(() =>
       loadEnvironment({ ...production, DELIVERY_PROVIDER: "mock" }),
@@ -166,6 +169,9 @@ describe("environment validation", () => {
       PAYOUT_PROVIDER_API_KEY: "payout-prod-9A7b6C5d4E3f",
       PAYMENT_WEBHOOK_SECRET: "webhook-prod-9A7b6C5d4E3f",
       FINANCE_DISPATCH_ENABLED: "true",
+      PAYMENT_REFERENCE_KEY: Buffer.from(
+        "payment-ref-key-0123456789abcdef",
+      ).toString("base64"),
     };
     expect(loadEnvironment(production).paymentProvider).toBe("http");
     expect(() =>

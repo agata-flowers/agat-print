@@ -95,6 +95,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
       prisma.orderMatching.deleteMany(),
       prisma.branchCapabilityVersion.deleteMany(),
       prisma.providerCallback.deleteMany(),
+      prisma.paymentAttempt.deleteMany(),
       prisma.idempotencyRecord.deleteMany(),
       prisma.refundOperation.deleteMany(),
       prisma.payment.deleteMany(),

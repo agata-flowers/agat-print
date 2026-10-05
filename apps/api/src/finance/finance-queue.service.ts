@@ -9,6 +9,7 @@ import { Prisma, type OutboxEvent } from "@prisma/client";
 import { Queue, Worker } from "bullmq";
 import type { AppEnvironment } from "../config/environment";
 import { PrismaService } from "../prisma/prisma.service";
+import { CommerceService } from "../commerce/commerce.service";
 import { APP_ENVIRONMENT } from "../uploads/private-object-storage.service";
 import { FinanceService } from "./finance.service";
 
@@ -17,6 +18,9 @@ const eventTypes = [
   "REFUND_CONFIRMED",
   "ORDER_COMPLETED",
   "FISCAL_SUBMIT_REQUESTED",
+  "PAYMENT_ATTEMPT_CREATED",
+  "PAYMENT_CONFIRMATION_REQUESTED",
+  "PAYMENT_RECONCILIATION_REQUIRED",
 ];
 const inboxKey = (dedupKey: string) =>
   createHash("sha256").update(`finance:${dedupKey}`).digest("hex");
@@ -29,6 +33,7 @@ export class FinanceQueueService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(CommerceService) private readonly commerce: CommerceService,
     @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
   ) {}
 
@@ -71,6 +76,33 @@ export class FinanceQueueService implements OnModuleInit, OnModuleDestroy {
     this.timer.unref();
   }
   async dispatchBatch() {
+    const dueAttempts = await this.prisma.paymentAttempt.findMany({
+      where: {
+        status: { in: ["PROCESSING", "UNKNOWN"] },
+        nextReconcileAt: { lte: new Date() },
+      },
+      select: { id: true, version: true },
+      take: 100,
+    });
+    for (const attempt of dueAttempts) {
+      const event = {
+        aggregateType: "payment_attempt",
+        aggregateId: attempt.id,
+        aggregateVersion: attempt.version,
+        eventType: "PAYMENT_RECONCILIATION_REQUIRED",
+        dedupKey: createHash("sha256")
+          .update(
+            `payment_attempt:${attempt.id}:${attempt.version}:PAYMENT_RECONCILIATION_REQUIRED`,
+          )
+          .digest("hex"),
+        payload: { aggregateId: attempt.id, aggregateVersion: attempt.version },
+      };
+      await this.prisma.outboxEvent.upsert({
+        where: { dedupKey: event.dedupKey },
+        create: event,
+        update: {},
+      });
+    }
     const events = await this.prisma.$queryRaw<OutboxEvent[]>(Prisma.sql`
       SELECT e.* FROM "OutboxEvent" e
       WHERE e."eventType" IN (${Prisma.join(eventTypes)})
@@ -127,6 +159,15 @@ export class FinanceQueueService implements OnModuleInit, OnModuleDestroy {
       });
       if (event.eventType === "FISCAL_SUBMIT_REQUESTED")
         await this.finance.dispatchFiscal(event.aggregateId);
+      else if (event.eventType === "PAYMENT_ATTEMPT_CREATED")
+        await this.commerce.dispatchPaymentAttempt(event.aggregateId);
+      else if (
+        [
+          "PAYMENT_CONFIRMATION_REQUESTED",
+          "PAYMENT_RECONCILIATION_REQUIRED",
+        ].includes(event.eventType)
+      )
+        await this.commerce.reconcilePaymentAttemptSystem(event.aggregateId);
       else await this.finance.materializeEvent(event.id);
       await this.prisma.$transaction(async (tx) => {
         const saved = await tx.financialJob.updateMany({

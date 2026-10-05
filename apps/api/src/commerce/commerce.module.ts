@@ -4,6 +4,7 @@ import {
   CommerceAdminController,
   CommerceController,
   MockPaymentCallbackController,
+  PaymentFinanceAdminController,
   PaymentWebhookController,
 } from "./commerce.controller";
 import { CommerceService } from "./commerce.service";
@@ -19,6 +20,7 @@ import { loadEnvironment } from "../config/environment";
     CommerceController,
     CommerceAdminController,
     MockPaymentCallbackController,
+    PaymentFinanceAdminController,
     PaymentWebhookController,
   ],
   providers: [
@@ -30,7 +32,9 @@ import { loadEnvironment } from "../config/environment";
       provide: PAYMENT_PROVIDER,
       inject: [MockPaymentProvider, HttpPaymentProvider],
       useFactory: (mock: MockPaymentProvider, http: HttpPaymentProvider) =>
-        loadEnvironment().paymentProvider === "mock" ? mock : http,
+        ["mock", "internal"].includes(loadEnvironment().paymentProvider)
+          ? mock
+          : http,
     },
   ],
   exports: [CommerceService, IdempotencyService, PAYMENT_PROVIDER],

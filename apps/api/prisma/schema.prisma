@@ -291,11 +291,44 @@ enum AssignmentStatus {
 
 enum PaymentStatus {
   PENDING
+  PROCESSING
   SUCCEEDED
   FAILED
+  UNKNOWN
+  CANCELLED
   REFUND_PENDING
   PARTIALLY_REFUNDED
   REFUNDED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  UNKNOWN
+  CANCELLED
+}
+
+enum PaymentMethodKind {
+  INTERNAL_MVP
+  PROVIDER_REDIRECT
+}
+
+enum PaymentScenario {
+  SUCCESS
+  FAILURE
+  RETRY
+  DUPLICATE
+  TIMEOUT
+}
+
+enum PaymentEventDisposition {
+  APPLIED
+  DUPLICATE
+  OUT_OF_ORDER
+  IGNORED_UNKNOWN
+  RECONCILIATION_REQUIRED
 }
 
 enum RefundKind {
@@ -1505,14 +1538,48 @@ model Payment {
   amountMinor              BigInt
   currency                 String            @db.Char(3)
   status                   PaymentStatus     @default(PENDING)
+  lastFailureCode          String?           @db.VarChar(40)
+  nextReconcileAt          DateTime?
   version                  Int               @default(0)
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
   order                    Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
   refunds                  RefundOperation[]
   fiscalOperations         FiscalOperation[]
+  attempts                 PaymentAttempt[]
 
   @@index([status, updatedAt])
+  @@index([status, nextReconcileAt])
+}
+
+model PaymentAttempt {
+  id                          String               @id @default(uuid()) @db.Uuid
+  paymentId                   String               @db.Uuid
+  sequence                    Int
+  method                      PaymentMethodKind
+  scenario                    PaymentScenario?
+  provider                    String               @db.VarChar(30)
+  amountMinor                 BigInt
+  currency                    String               @db.Char(3)
+  snapshotDigest              String               @db.Char(64)
+  merchantReference           String               @unique @db.VarChar(80)
+  providerReferenceCiphertext String?              @db.Text
+  providerReferenceDigest     String?              @unique @db.Char(64)
+  status                      PaymentAttemptStatus @default(CREATED)
+  version                     Int                  @default(0)
+  failureCode                 String?              @db.VarChar(40)
+  expiresAt                   DateTime?
+  nextReconcileAt             DateTime?
+  createdAt                   DateTime             @default(now())
+  startedAt                   DateTime?
+  completedAt                 DateTime?
+  cancelledAt                 DateTime?
+  payment                     Payment              @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  callbacks                   ProviderCallback[]
+
+  @@unique([paymentId, sequence])
+  @@index([paymentId, createdAt])
+  @@index([status, nextReconcileAt])
 }
 
 model RefundOperation {
@@ -1682,14 +1749,22 @@ model IdempotencyRecord {
 }
 
 model ProviderCallback {
-  id          String   @id @default(uuid()) @db.Uuid
-  provider    String   @db.VarChar(30)
-  eventId     String   @db.Uuid
-  payloadHash String   @db.Char(64)
-  result      Json
-  createdAt   DateTime @default(now())
+  id               String                  @id @default(uuid()) @db.Uuid
+  provider         String                  @db.VarChar(30)
+  eventId          String                  @db.Uuid
+  paymentAttemptId String?                 @db.Uuid
+  payloadHash      String                  @db.Char(64)
+  eventType        String                  @default("LEGACY") @db.VarChar(40)
+  disposition      PaymentEventDisposition @default(APPLIED)
+  resultCode       String                  @default("LEGACY") @db.VarChar(40)
+  result           Json
+  createdAt        DateTime                @default(now())
+  processedAt      DateTime                @default(now())
+  paymentAttempt   PaymentAttempt?         @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
 
   @@unique([provider, eventId])
+  @@index([paymentAttemptId, createdAt])
+  @@index([disposition, createdAt])
 }
 
 /// Durable fiscal intent. Provider references are never returned by public API.

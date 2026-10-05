@@ -60,6 +60,19 @@ export class StartPaymentDto {
   @IsOptional()
   @IsIn(["SUCCESS", "FAILURE"])
   simulateOutcome?: "SUCCESS" | "FAILURE";
+
+  @IsOptional()
+  @IsIn(["INTERNAL_MVP", "PROVIDER_REDIRECT"])
+  method?: "INTERNAL_MVP" | "PROVIDER_REDIRECT";
+
+  @IsOptional()
+  @IsIn(["SUCCESS", "FAILURE", "RETRY", "DUPLICATE", "TIMEOUT"])
+  scenario?: "SUCCESS" | "FAILURE" | "RETRY" | "DUPLICATE" | "TIMEOUT";
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedOrderVersion?: number;
 }
 
 export class PaymentCallbackDto {
@@ -70,8 +83,21 @@ export class PaymentCallbackDto {
   @Matches(/^[A-Za-z0-9._:-]{1,160}$/)
   paymentReference!: string;
 
-  @IsIn(["PAYMENT_SUCCEEDED", "PAYMENT_FAILED", "REFUND_SUCCEEDED"])
-  outcome!: "PAYMENT_SUCCEEDED" | "PAYMENT_FAILED" | "REFUND_SUCCEEDED";
+  @IsIn([
+    "PAYMENT_SUCCEEDED",
+    "PAYMENT_FAILED",
+    "PAYMENT_CANCELLED",
+    "PAYMENT_UNKNOWN",
+    "REFUND_SUCCEEDED",
+    "UNKNOWN_EVENT",
+  ])
+  outcome!:
+    | "PAYMENT_SUCCEEDED"
+    | "PAYMENT_FAILED"
+    | "PAYMENT_CANCELLED"
+    | "PAYMENT_UNKNOWN"
+    | "REFUND_SUCCEEDED"
+    | "UNKNOWN_EVENT";
 }
 
 export class NoExecutorRefundDto {

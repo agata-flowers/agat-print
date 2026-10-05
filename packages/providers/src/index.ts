@@ -5,12 +5,41 @@ export interface ProviderContext {
 export interface PaymentWebhookEvent {
   eventId: string;
   paymentReference: string;
-  outcome: "PAYMENT_SUCCEEDED" | "PAYMENT_FAILED" | "REFUND_SUCCEEDED";
+  outcome:
+    | "PAYMENT_SUCCEEDED"
+    | "PAYMENT_FAILED"
+    | "PAYMENT_CANCELLED"
+    | "PAYMENT_UNKNOWN"
+    | "REFUND_SUCCEEDED"
+    | "UNKNOWN_EVENT";
 }
+export type PaymentMethodKind = "INTERNAL_MVP" | "PROVIDER_REDIRECT";
+export type PaymentScenario =
+  | "SUCCESS"
+  | "FAILURE"
+  | "RETRY"
+  | "DUPLICATE"
+  | "TIMEOUT";
 export interface OtpProvider {
   send(phone: string, code: string, context: ProviderContext): Promise<void>;
 }
 export interface PaymentProvider {
+  capabilities(): Promise<{ methods: PaymentMethodKind[] }>;
+  createAttempt(
+    input: {
+      orderReference: string;
+      merchantReference: string;
+      method: PaymentMethodKind;
+      amountMinor: bigint;
+      currency: "UZS";
+      scenario?: PaymentScenario;
+    },
+    context: ProviderContext,
+  ): Promise<{
+    reference: string;
+    nextAction: "WAIT" | "REDIRECT";
+    status: "PROCESSING" | "SUCCEEDED" | "FAILED" | "UNKNOWN";
+  }>;
   start(
     orderReference: string,
     amountMinor: bigint,
@@ -26,6 +55,10 @@ export interface PaymentProvider {
     paymentReference: string,
     context: ProviderContext,
   ): Promise<{ status: "PENDING" | "SUCCEEDED" | "FAILED" }>;
+  cancel?(
+    paymentReference: string,
+    context: ProviderContext,
+  ): Promise<{ status: "CANCELLED" | "NOT_CANCELLABLE" | "UNKNOWN" }>;
   status(
     reference: string,
     context: ProviderContext,

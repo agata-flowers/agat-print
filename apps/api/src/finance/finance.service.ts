@@ -12,7 +12,10 @@ import type {
   PayoutProvider,
 } from "@agat/providers";
 import { AuditService } from "../audit/audit.service";
+import { CommerceService } from "../commerce/commerce.service";
 import { IdempotencyService } from "../commerce/idempotency.service";
+import { revealProviderReference } from "../commerce/payment-domain";
+import type { AppEnvironment } from "../config/environment";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   FISCAL_PROVIDER,
@@ -20,6 +23,7 @@ import {
   PAYOUT_PROVIDER,
 } from "../providers/provider-tokens";
 import type { CreateSettlementBatchDto, RunReconciliationDto } from "./dto";
+import { APP_ENVIRONMENT } from "../uploads/private-object-storage.service";
 
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -47,6 +51,8 @@ export class FinanceService {
     @Inject(PAYMENT_PROVIDER) private readonly payments: PaymentProvider,
     @Inject(FISCAL_PROVIDER) private readonly fiscal: FiscalProvider,
     @Inject(PAYOUT_PROVIDER) private readonly payouts: PayoutProvider,
+    @Inject(CommerceService) private readonly commerce: CommerceService,
+    @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
   ) {}
 
   async materializeEvent(eventId: string) {
@@ -224,20 +230,24 @@ export class FinanceService {
     });
     const operation = await this.prisma.fiscalOperation.findUniqueOrThrow({
       where: { id: operationId },
-      include: { payment: true },
+      include: {
+        payment: {
+          include: { attempts: { orderBy: { sequence: "desc" }, take: 1 } },
+        },
+      },
     });
     if (!claimed.count) {
       if (operation.status === "CONFIRMED") return { duplicate: true };
       throw new Error("FISCAL_OPERATION_NOT_READY");
     }
     try {
-      if (!operation.payment.providerPaymentReference)
-        throw new Error("PAYMENT_REFERENCE_MISSING");
+      const paymentReference = this.paymentReference(operation.payment);
+      if (!paymentReference) throw new Error("PAYMENT_REFERENCE_MISSING");
       const result = await this.fiscal.submit(
         {
           type: operation.type,
           orderReference: operation.orderId,
-          paymentReference: operation.payment.providerPaymentReference,
+          paymentReference,
           amountMinor: operation.amountMinor,
           currency: "UZS",
         },
@@ -591,27 +601,48 @@ export class FinanceService {
     let matched = 0;
     let mismatched = 0;
     const payments = await this.prisma.payment.findMany({
-      where: { providerPaymentReference: { not: null } },
+      where: {
+        OR: [
+          { providerPaymentReference: { not: null } },
+          {
+            attempts: { some: { providerReferenceCiphertext: { not: null } } },
+          },
+        ],
+      },
+      include: { attempts: { orderBy: { sequence: "desc" }, take: 1 } },
       take: 500,
     });
     for (const payment of payments) {
-      const observed = await this.payments.status(
-        payment.providerPaymentReference!,
-        {
-          idempotencyKey: digest(
-            `reconcile:payment:${payment.id}:${runKeyDigest}`,
-          ),
-          correlationId: payment.id,
-        },
-      );
-      const expected =
+      const reference = this.paymentReference(payment);
+      if (!reference) continue;
+      const observed = await this.payments.status(reference, {
+        idempotencyKey: digest(
+          `reconcile:payment:${payment.id}:${runKeyDigest}`,
+        ),
+        correlationId: payment.id,
+      });
+      let expected =
         payment.status === "REFUNDED"
           ? "REFUNDED"
           : payment.status === "FAILED"
             ? "FAILED"
-            : payment.status === "PENDING"
+            : ["PENDING", "PROCESSING", "UNKNOWN"].includes(payment.status)
               ? "PENDING"
               : "SUCCEEDED";
+      const attempt = payment.attempts[0];
+      const authoritativeTerminal =
+        attempt &&
+        ["PROCESSING", "UNKNOWN"].includes(attempt.status) &&
+        ["SUCCEEDED", "FAILED"].includes(observed.status) &&
+        observed.amountMinor === payment.amountMinor &&
+        observed.currency === payment.currency;
+      if (authoritativeTerminal) {
+        await this.commerce.applyPaymentObservationSystem(
+          attempt!.id,
+          observed.status as "SUCCEEDED" | "FAILED",
+        );
+        expected = observed.status;
+      }
       const ok =
         observed.status === expected &&
         observed.amountMinor === payment.amountMinor &&
@@ -753,6 +784,21 @@ export class FinanceService {
       },
       update: {},
     });
+  }
+
+  private paymentReference(payment: {
+    providerPaymentReference: string | null;
+    attempts?: Array<{ providerReferenceCiphertext: string | null }>;
+  }): string | null {
+    const protectedReference = payment.attempts?.find(
+      (attempt) => attempt.providerReferenceCiphertext,
+    )?.providerReferenceCiphertext;
+    return protectedReference
+      ? revealProviderReference(
+          protectedReference,
+          this.env.paymentReferenceKey,
+        )
+      : payment.providerPaymentReference;
   }
 
   async retryFiscal(

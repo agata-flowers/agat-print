@@ -66,6 +66,22 @@ export class CommerceController {
     return this.commerce.startPayment(user.id, id, key, input);
   }
 
+  @Get("orders/:id/payment-methods")
+  paymentMethods(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.commerce.paymentMethods(user.id, id);
+  }
+
+  @Get("orders/:id/payment")
+  paymentStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ) {
+    return this.commerce.paymentProjection(user.id, id);
+  }
+
   @Post("orders/:id/payment/confirm")
   confirmPayment(
     @CurrentUser() user: AuthenticatedUser,
@@ -73,6 +89,49 @@ export class CommerceController {
     @Headers("idempotency-key") key: string | undefined,
   ) {
     return this.commerce.confirmPayment(user.id, id, key);
+  }
+
+  @Post("orders/:id/payment/cancel")
+  cancelPayment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Headers("idempotency-key") key: string | undefined,
+  ) {
+    return this.commerce.cancelPayment(user.id, id, key);
+  }
+}
+
+@Controller("admin/finance/payments")
+@UseGuards(AccessGuard, RolesGuard)
+@Roles("FINANCE_ADMIN")
+export class PaymentFinanceAdminController {
+  constructor(
+    @Inject(CommerceService) private readonly commerce: CommerceService,
+  ) {}
+
+  @Get()
+  payments() {
+    return this.commerce.adminPayments();
+  }
+
+  @Get(":id")
+  payment(@Param("id", new ParseUUIDPipe()) id: string) {
+    return this.commerce.adminPayment(id);
+  }
+
+  @Post(":paymentId/attempts/:attemptId/reconcile")
+  reconcile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("paymentId", new ParseUUIDPipe()) paymentId: string,
+    @Param("attemptId", new ParseUUIDPipe()) attemptId: string,
+    @Headers("idempotency-key") key: string | undefined,
+  ) {
+    return this.commerce.reconcilePaymentAttempt(
+      user.id,
+      paymentId,
+      attemptId,
+      key,
+    );
   }
 }
 
