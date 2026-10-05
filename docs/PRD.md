@@ -1,5 +1,13 @@
 # AGAT PRINT MVP PRD
 
+## Mandatory customer languages
+
+Every customer-facing journey supports exactly Uzbek (`uz`), Russian (`ru`)
+and English (`en`). Domain state, prices, payments and fulfillment are
+language-independent. Switching locale must never mutate an aggregate or
+expose internal enums, identifiers or backend errors. New customer copy in all
+future stages must ship with all three translations.
+
 ## Product value
 
 AGAT PRINT lets a customer prepare a print job remotely, know the price before payment, and route it to a capable nearby studio. The pilot serves Tashkent in Russian and Uzbek and is optimized for weak mobile connections.
@@ -167,3 +175,12 @@ uses that zone as a hard eligibility input and `READY` activates the existing
 PIN/courier fulfillment lifecycle. Pickup and internal deterministic Tashkent
 delivery require no new external provider. Legacy drafts/orders remain
 compatible. The complete contract is [`STAGE13_PROPOSAL.md`](STAGE13_PROPOSAL.md).
+
+## Stage 14 approved boundary — authoritative MVP payment
+
+Customers can select a deployment-supported method, create a durable payment
+attempt, recover after refresh or disconnect, and proceed to the existing
+matching/production flow only after authoritative confirmation. RU pickup and
+UZ delivery work with the deterministic internal adapter in development and
+CI. Production remains blocked until a contracted acquiring adapter and real
+secrets are configured; there is no fallback to the internal adapter.

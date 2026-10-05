@@ -1,6 +1,11 @@
 # Stage 14 Proposal — Payments, Order Confirmation & MVP Purchase Flow
 
-Status: proposed; implementation requires separate approval.
+Status: approved and implemented as the Stage 14 acceptance contract.
+
+Implementation clarification: the permanent customer locale set is exactly
+Uzbek (`uz`), Russian (`ru`) and English (`en`). All Stage 14 payment and
+recovery copy is complete in those locales, while locale switching remains a
+presentation-only operation over the same authoritative order/payment state.
 
 ## 1. Current repository and baseline verification
 
@@ -652,6 +657,9 @@ Stage 14 is complete only when one final `main` SHA proves all of the following:
 13. `quality=success`, `infrastructure=success`, final verification artifact is
     validated, working tree is clean and `main == origin/main` with `0/0`
     divergence.
+14. RU pickup, UZ delivery/recovery and EN payment recovery pass, and switching
+    `uz → ru → en → ru` preserves the same order and authoritative payment
+    status without exposing internal codes.
 
 ## 22. Explicit out of scope
 
@@ -729,5 +737,6 @@ production credentials. Existing production startup remains fail-closed.
 
 ---
 
-This document is a proposal and acceptance contract only. **Stage 14
-implementation has NOT started.**
+This document is the approved Stage 14 contract. Implementation extends the
+existing Stage 5/9 payment aggregate; it does not introduce a parallel payment
+or order state machine.

@@ -177,3 +177,13 @@ Privacy/cache/audit assertions, Compose health, encrypted backup and isolated
 restore remain mandatory. The report records DB/browser results, regression,
 RPO/RTO, final SHA and evidence SHA-256 and is uploaded even on failure without
 masking the failed job.
+
+## Stage 14 gate
+
+`bash ops/verify/stage14.sh` runs only after Stage 1–13. It deploys the new
+migration twice, executes the Stage 14 DB-E2E suite, then runs RU pickup and UZ
+delivery purchase flows with Playwright on their first attempt. It checks
+production fail-closed configuration, ownership/RBAC, callback replay,
+attempt/outbox ordering, privacy and metrics, and verifies payment lineage
+after encrypted backup and isolated restore. The report and SHA-256 sidecar are
+written on success or failure and uploaded with `if: always()`.

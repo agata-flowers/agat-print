@@ -1,5 +1,9 @@
 # Architecture
 
+Customer presentation has one bounded locale type: `uz | ru | en`. Locale is
+carried only in navigation/presentation; it is never part of domain commands,
+idempotency payloads, pricing snapshots or provider operations.
+
 ## Context
 
 The platform is a modular NestJS monolith with a Next.js PWA. PostgreSQL is the
@@ -433,3 +437,26 @@ Pickup stores no address and has no provider dependency. Delivery uses the
 bounded internal `TASHKENT` zone and the provider-neutral delivery port. The
 matcher treats that frozen zone as a hard eligibility guard at offer creation
 and acceptance. Legacy null-lineage orders keep the Stage 7 late-choice path.
+
+## Stage 14 durable payment attempts
+
+Stage 14 extends the existing `Payment` aggregate with append-only
+`PaymentAttempt` history. Checkout snapshots from Stages 11–13 remain the
+authoritative price, studio and fulfillment lineage. The transaction commits a
+CREATED attempt and outbox event before provider I/O. Webhooks and
+reconciliation converge on the same monotonic transition function; only an
+authoritative provider observation can move the order to `PAID`.
+
+One partial unique index permits only one unresolved attempt per payment.
+Provider references are AES-256-GCM protected and only a SHA-256 lookup digest
+is indexed. Exact callback bytes are authenticated at the provider boundary;
+raw bodies and unrestricted provider responses are never persisted.
+
+```mermaid
+erDiagram
+  Order ||--o| Payment : owns
+  Payment ||--o{ PaymentAttempt : records
+  PaymentAttempt ||--o{ ProviderCallback : receives
+  Payment ||--o{ RefundOperation : refunds
+  Payment ||--o{ FinancialReconciliation : reconciles
+```

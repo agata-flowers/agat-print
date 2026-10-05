@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.12.0
+  version: 0.14.0
 servers:
   - url: /api/v1
 paths:
@@ -226,8 +226,15 @@ paths:
         "200": { description: Owned order }
         "404": { description: Not owned or not found }
   /orders/{orderId}/payment:
+    get:
+      summary: Recover the owned authoritative payment and latest attempt projection
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrderId" }]
+      responses:
+        "200": { description: Safe payment recovery projection }
+        "404": { description: Order not owned or not found }
     post:
-      summary: Start one idempotent mock payment in development/test
+      summary: Durably create and submit one idempotent payment attempt
       parameters:
         - $ref: "#/components/parameters/OrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -237,9 +244,18 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/StartPayment" }
       responses:
-        "201": { description: Pending payment and synthetic callback }
+        "201": { description: Durable attempt accepted; success is not implied }
         "404": { description: Order not owned or not found }
         "409": { description: Invalid state or key conflict }
+  /orders/{orderId}/payment-methods:
+    get:
+      summary: List bounded payment methods available for an owned payable order
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrderId" }]
+      responses:
+        "200": { description: RU/UZ safe method labels and bounded codes }
+        "404": { description: Order not owned or not found }
+        "409": { description: Order is not payable }
   /payments/mock/callback:
     post:
       summary: Accept a signed mock-provider callback without CSRF
@@ -269,6 +285,17 @@ paths:
           { description: Confirmation requested; webhook remains authoritative }
         "404": { description: Order not owned }
         "409": { description: Payment not confirmable or key conflict }
+  /orders/{orderId}/payment/cancel:
+    post:
+      summary: Cancel an owned attempt only when the provider says it is cancellable
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Authoritative cancellation applied or replayed }
+        "404": { description: Order not owned }
+        "409": { description: Unknown or charged attempt cannot be cancelled }
   /payments/webhook:
     post:
       summary: Accept a signed webhook from the selected production payment provider
@@ -287,6 +314,44 @@ paths:
         "201": { description: Transition accepted or exact duplicate replayed }
         "403": { description: Invalid provider signature }
         "409": { description: Changed replay payload or invalid ordering }
+  /admin/finance/payments:
+    get:
+      summary: List bounded payment and latest-attempt projections
+      security: [{ AccessCookie: [] }]
+      responses:
+        "200": { description: Finance-safe operational projection }
+        "403": { description: FINANCE_ADMIN required }
+  /admin/finance/payments/{paymentId}:
+    get:
+      summary: Read safe payment, attempt and refund lineage
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - in: path
+          name: paymentId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Redacted immutable lineage }
+        "403": { description: FINANCE_ADMIN required }
+        "404": { description: Payment not found }
+  /admin/finance/payments/{paymentId}/attempts/{attemptId}/reconcile:
+    post:
+      summary: Idempotently reconcile one attempt with its configured provider
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - in: path
+          name: paymentId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: attemptId
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Reconciliation observation applied or replayed }
+        "403": { description: FINANCE_ADMIN required }
+        "404": { description: Payment or attempt lineage not found }
   /admin/internal/orders/{orderId}/no-executor:
     post:
       summary: Synthetically request one full refund (ADMIN only; stage 6 hook)
@@ -1465,6 +1530,14 @@ components:
       type: object
       additionalProperties: false
       properties:
+        method:
+          type: string
+          enum: [INTERNAL_MVP, PROVIDER_REDIRECT]
+        scenario:
+          type: string
+          enum: [SUCCESS, FAILURE, RETRY, DUPLICATE, TIMEOUT]
+          description: Internal development/test adapter only; rejected by production configuration.
+        expectedOrderVersion: { type: integer, minimum: 0 }
         simulateOutcome:
           type: string
           enum: [SUCCESS, FAILURE]
@@ -1478,7 +1551,15 @@ components:
         paymentReference: { type: string, pattern: "^[A-Za-z0-9._:-]{1,160}$" }
         outcome:
           type: string
-          enum: [PAYMENT_SUCCEEDED, PAYMENT_FAILED, REFUND_SUCCEEDED]
+          enum:
+            [
+              PAYMENT_SUCCEEDED,
+              PAYMENT_FAILED,
+              PAYMENT_CANCELLED,
+              PAYMENT_UNKNOWN,
+              REFUND_SUCCEEDED,
+              UNKNOWN_EVENT,
+            ]
     NoExecutorRefund:
       type: object
       additionalProperties: false

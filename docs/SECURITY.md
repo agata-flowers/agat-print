@@ -224,3 +224,17 @@ included in customer/courier delivery views.
   preference never bypasses capability, lifecycle, availability or capacity.
 - Legacy null-lineage orders retain the existing Stage 7 endpoint; a Stage 13
   selection is immutable and conflicting late mode selection fails closed.
+
+## Stage 14 payment-attempt controls
+
+- Production rejects the internal/mock payment adapter and missing HTTPS
+  provider credentials, webhook secret or provider-reference encryption key.
+- No PAN, CVV, card credential, raw webhook body or provider secret enters the
+  API model, logs, audit or metrics.
+- Customer payment projections are owner-scoped and exclude merchant/provider
+  references. Operational reconciliation requires `FINANCE_ADMIN`.
+- `UNKNOWN` blocks a second charge until reconciliation. Signed replay,
+  changed-payload replay and contradictory terminal events fail closed or
+  create a bounded reconciliation state.
+- Payment APIs are `no-store, private` and remain network-only in the service
+  worker policy.

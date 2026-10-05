@@ -266,3 +266,16 @@ fulfillment tariff lineage. Restore must validate one selection per order,
 matching quote/snapshot totals, pickup null-address constraints, authenticated
 delivery ciphertext, active-cycle fulfillment linkage, tombstones and legal
 holds before API enablement. Database rollback is forward-fix only.
+
+## Stage 14 payment recovery
+
+Deploy the additive migration before enabling attempt creation. Configure
+`PAYMENT_REFERENCE_KEY` as a 32-byte base64 secret in the deployment secret
+store. Production additionally requires the existing HTTPS payment adapter,
+API key and webhook secret; startup fails closed otherwise.
+
+When an attempt is `UNKNOWN`, do not create another charge or repair rows with
+SQL. Use the finance reconciliation command/API. The durable outbox and
+`FinancialJob` lease make worker restart and redelivery safe. Backups include
+payment, attempt, callback and reconciliation lineage; restore validation must
+confirm one unresolved attempt at most and exactly one successful transition.

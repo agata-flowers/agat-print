@@ -1,6 +1,6 @@
 # AGAT PRINT agent instructions
 
-- Current authorized scope is stages 1–13. Stage 11 is Customer Ordering &
+- Current authorized scope is stages 1–14. Stage 11 is Customer Ordering &
   Service Catalog MVP: a mobile-first RU/UZ customer journey over the existing
   upload, processing, layout, commerce, matching, fulfillment and finance
   aggregates, plus an extensible platform catalog, server-authoritative quote,
@@ -9,6 +9,9 @@
   (Actions 33978772270).
 - Stage 12 is Customer Studio Marketplace & Controlled Partner Preference. Stage 13 is
   Checkout Fulfillment Commitment & Delivery Pricing.
+  Stage 14 is Payments, Order Confirmation & MVP Purchase Flow.
+  Customer-facing functionality supports exactly `uz`, `ru`, and `en`; every
+  new customer string must ship in all three languages without changing domain state.
   Do not start or design Stage 14, multi-partner carts, inventory-backed stationery sales,
   route optimization or unrelated product features without approval.
 - Keep the domain core in the NestJS modular monolith. External capabilities use provider interfaces.
