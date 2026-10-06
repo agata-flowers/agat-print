@@ -92,6 +92,9 @@ set -e
 [[ "$db_status" -eq 0 ]] || exit "$db_status"
 db_e2e=passed
 
+phase=stage14-browser-fixture
+"${compose[@]}" run --rm api node apps/api/scripts/stage14-browser-fixture.mjs
+
 phase=synthetic-browser-input
 docker run --rm -i --user 0:0 --entrypoint python3 -v "$PWD/$work_dir:/fixtures" agat-processing:local - <<'PY'
 from PIL import Image
