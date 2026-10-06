@@ -260,6 +260,10 @@ jobs:
           if [ "$status" -ne 0 ]; then
             diagnostic="$(node -e 'const fs=require("node:fs"); const p="outputs/stage14-verification-report.json"; if(!fs.existsSync(p)){process.stdout.write("phase=report-missing; failureLine=unknown"); process.exit(0)} const r=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(`phase=${r.phase}; failureLine=${r.failureLine ?? "unknown"}`)')"
             echo "::error title=Stage 14 verification diagnostic::$diagnostic"
+            if [ -f outputs/stage14-browser-e2e-diagnostic.log ]; then
+              browser_diagnostic="$(tail -40 outputs/stage14-browser-e2e-diagnostic.log | tr '\n' ' ' | sed -E 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
+              echo "::error title=Stage 14 browser E2E failure::$browser_diagnostic"
+            fi
           fi
           exit "$status"
       - uses: actions/upload-artifact@v4
@@ -269,4 +273,5 @@ jobs:
           path: |
             outputs/stage14-verification-report.json
             outputs/stage14-verification-report.sha256
+            outputs/stage14-browser-e2e-diagnostic.log
           if-no-files-found: error

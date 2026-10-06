@@ -32,7 +32,20 @@ cleanup() {
     write_report failure
     echo "Stage 14 verification failed during phase: $phase" >&2
     test -f "$work_dir/db-e2e.log" && tail -120 "$work_dir/db-e2e.log" >&2 || true
-    test -f "$work_dir/browser-e2e.log" && tail -120 "$work_dir/browser-e2e.log" >&2 || true
+    if [[ -f "$work_dir/browser-e2e.log" ]]; then
+      # Preserve a bounded, redacted diagnostic alongside the always-uploaded
+      # report. This keeps first-attempt Playwright failures actionable after
+      # the isolated runtime is removed without publishing synthetic identity,
+      # address, object-key, or signed-URL values.
+      tail -200 "$work_dir/browser-e2e.log" |
+        sed -E \
+          -e 's/\+998[0-9]{9}/[redacted-phone]/g' \
+          -e 's/Synthetic district, building [0-9]+/[redacted-address]/g' \
+          -e 's/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/[redacted-id]/gi' \
+          -e 's#https?://[^[:space:]]*X-Amz-Signature[^[:space:]]*#[redacted-signed-url]#gi' \
+          > "$report_dir/stage14-browser-e2e-diagnostic.log"
+      tail -120 "$report_dir/stage14-browser-e2e-diagnostic.log" >&2
+    fi
     "${compose[@]}" ps >&2 || true
   fi
   docker volume ls -q --filter name=agat-processing- | xargs -r docker volume rm -f >/dev/null 2>&1 || true
