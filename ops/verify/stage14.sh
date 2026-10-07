@@ -145,9 +145,28 @@ if grep -Eqi 'providerReference|merchantReference|providerPaymentReference|addre
 audit_leaks="$("${compose[@]}" exec -T postgres psql -U agat -d agat_print -Atqc 'SELECT count(*) FROM "AuditEvent" WHERE metadata::text ~* $$(provider.?reference|merchant.?reference|event.?id|address|phone|object.?key|signed.?url)$$')"
 test "$audit_leaks" = 0
 
+phase=payment-approval-lineage
+approved_payments="$("${compose[@]}" exec -T postgres psql -U agat -d agat_print -Atqc '
+  SELECT count(*)
+  FROM "Payment" p
+  JOIN "Order" o ON o.id = p."orderId"
+  WHERE p.status = $$SUCCEEDED$$
+    AND o.status <> $$AWAITING_PAYMENT$$
+    AND EXISTS (
+      SELECT 1 FROM "PaymentAttempt" a
+      WHERE a."paymentId" = p.id AND a.status = $$SUCCEEDED$$
+    )
+    AND EXISTS (
+      SELECT 1 FROM "OutboxEvent" e
+      WHERE e."aggregateType" = $$payment$$
+        AND e."aggregateId" = p.id
+        AND e."eventType" = $$PAYMENT_SUCCEEDED$$
+    )')"
+test "$approved_payments" -gt 0
+
 phase=production-fail-closed
 set +e
-production_output="$("${compose[@]}" run --rm -e NODE_ENV=production -e OTP_PROVIDER=http -e PAYMENT_PROVIDER=internal api node -e 'require("./dist/config/environment").loadEnvironment(process.env)' 2>&1)"
+production_output="$("${compose[@]}" run --no-deps --rm api node -e 'require("./dist/config/environment").loadEnvironment({NODE_ENV:"production",OTP_PROVIDER:"http",PAYMENT_PROVIDER:"internal"})' 2>&1)"
 production_status=$?
 set -e
 test "$production_status" -ne 0
