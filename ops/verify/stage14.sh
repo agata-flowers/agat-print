@@ -166,7 +166,7 @@ test "$approved_payments" -gt 0
 
 phase=production-fail-closed
 set +e
-production_output="$("${compose[@]}" run --no-deps --rm api node -e 'require("./dist/config/environment").loadEnvironment({NODE_ENV:"production",OTP_PROVIDER:"http",PAYMENT_PROVIDER:"internal"})' 2>&1)"
+production_output="$("${compose[@]}" run --no-deps --rm api node -e 'require("./apps/api/dist/config/environment").loadEnvironment({NODE_ENV:"production",OTP_PROVIDER:"http",PAYMENT_PROVIDER:"internal"})' 2>&1)"
 production_status=$?
 set -e
 test "$production_status" -ne 0
