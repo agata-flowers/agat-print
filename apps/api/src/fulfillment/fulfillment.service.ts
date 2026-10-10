@@ -850,7 +850,9 @@ export class FulfillmentService {
       if (prior) return { duplicate: true };
       const assignment = await tx.partnerAssignment.findFirst({
         where: { orderId },
-        include: { order: true },
+        include: {
+          order: { include: { items: { orderBy: { sequence: "asc" } } } },
+        },
         orderBy: { acceptedAt: "desc" },
       });
       if (!assignment || assignment.order.status !== "PARTNER_ACCEPTED")
@@ -866,24 +868,61 @@ export class FulfillmentService {
         },
         update: {},
       });
-      const job = await tx.printJob.upsert({
-        where: { productionCycleId: cycle.id },
-        create: {
-          orderId,
-          productionCycleId: cycle.id,
-          assignmentId: assignment.id,
-          branchId: assignment.branchId,
-        },
-        update: {},
-      });
+      const jobs = [];
+      if (assignment.order.items.length === 0) {
+        const legacy = await tx.printJob.findFirst({
+          where: { productionCycleId: cycle.id, productionCycleItemId: null },
+        });
+        jobs.push(
+          legacy ??
+            (await tx.printJob.create({
+              data: {
+                orderId,
+                productionCycleId: cycle.id,
+                assignmentId: assignment.id,
+                branchId: assignment.branchId,
+              },
+            })),
+        );
+      }
+      for (const item of assignment.order.items) {
+        const cycleItem = await tx.productionCycleItem.upsert({
+          where: {
+            productionCycleId_orderItemId: {
+              productionCycleId: cycle.id,
+              orderItemId: item.id,
+            },
+          },
+          create: {
+            productionCycleId: cycle.id,
+            orderItemId: item.id,
+            sequence: item.sequence,
+            printReadyVersionId: item.printReadyVersionId,
+          },
+          update: {},
+        });
+        jobs.push(
+          await tx.printJob.upsert({
+            where: { productionCycleItemId: cycleItem.id },
+            create: {
+              orderId,
+              productionCycleId: cycle.id,
+              productionCycleItemId: cycleItem.id,
+              assignmentId: assignment.id,
+              branchId: assignment.branchId,
+            },
+            update: {},
+          }),
+        );
+      }
       await tx.inboxOperation.create({
         data: {
           dedupKey: deliveryDedupKey,
           operation: "CREATE_PRINT_JOB",
-          resultId: job.id,
+          resultId: jobs[0]!.id,
         },
       });
-      return { duplicate: false, jobId: job.id };
+      return { duplicate: false, jobId: jobs[0]!.id, itemCount: jobs.length };
     });
   }
 
@@ -1121,25 +1160,34 @@ export class FulfillmentService {
             });
           }
           if (input.status === "COMPLETED") {
-            orderStatus = "READY";
-            nextOrderVersion = job.order.version + 1;
-            await tx.order.update({
-              where: { id: job.orderId },
-              data: { status: "READY", version: { increment: 1 } },
-            });
-            await tx.partnerAssignment.update({
-              where: { id: job.assignmentId },
-              data: {
-                status: "READY",
-                active: false,
-                readyAt: new Date(),
-                version: { increment: 1 },
+            const remaining = await tx.printJob.count({
+              where: {
+                productionCycleId: job.productionCycleId,
+                id: { not: job.id },
+                status: { not: "COMPLETED" },
               },
             });
-            await tx.productionCycle.update({
-              where: { id: job.productionCycleId },
-              data: { status: "READY", version: { increment: 1 } },
-            });
+            if (remaining === 0) {
+              orderStatus = "READY";
+              nextOrderVersion = job.order.version + 1;
+              await tx.order.update({
+                where: { id: job.orderId },
+                data: { status: "READY", version: { increment: 1 } },
+              });
+              await tx.partnerAssignment.update({
+                where: { id: job.assignmentId },
+                data: {
+                  status: "READY",
+                  active: false,
+                  readyAt: new Date(),
+                  version: { increment: 1 },
+                },
+              });
+              await tx.productionCycle.update({
+                where: { id: job.productionCycleId },
+                data: { status: "READY", version: { increment: 1 } },
+              });
+            }
           }
           const value = { jobId, status: input.status, orderStatus };
           await tx.idempotencyRecord.create({
@@ -1405,6 +1453,7 @@ export class FulfillmentService {
     const job = await this.prisma.printJob.findFirst({
       where: { id: jobId, agentId },
       include: {
+        productionCycleItem: { include: { printReadyVersion: true } },
         order: {
           include: {
             printReadyVersion: true,
@@ -1426,9 +1475,11 @@ export class FulfillmentService {
       throw new ConflictException({ code: "PRINT_JOB_NOT_CLAIMED" });
     return {
       jobId: job.id,
+      itemSequence: job.productionCycleItem?.sequence ?? 1,
       status: job.status,
       documentUrl: await this.storage.signedGetUrl(
-        job.order.printReadyVersion.objectKey,
+        job.productionCycleItem?.printReadyVersion.objectKey ??
+          job.order.printReadyVersion.objectKey,
         this.env.previewSignedUrlTtlSeconds,
       ),
       expiresInSeconds: this.env.previewSignedUrlTtlSeconds,

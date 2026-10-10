@@ -155,6 +155,12 @@ export class ProductionStatusDto {
   status!: "IN_PRODUCTION" | "READY";
 }
 
+export class ItemProductionStatusDto {
+  @IsString()
+  @IsIn(["PRINTING", "COMPLETED"])
+  status!: "PRINTING" | "COMPLETED";
+}
+
 export class StartMatchingDto {
   @IsString()
   @Length(2, 80)

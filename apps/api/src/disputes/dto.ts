@@ -1,10 +1,17 @@
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
   Matches,
   MaxLength,
+  Min,
 } from "class-validator";
+import { Type } from "class-transformer";
 
 export class OpenDisputeDto {
   @IsIn([
@@ -26,6 +33,16 @@ export class OpenDisputeDto {
   @MaxLength(280)
   @Matches(/^[\p{L}\p{N} .,;:!?()-]+$/u)
   structuredComment?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(10, { each: true })
+  itemSequences?: number[];
 }
 
 export class PartnerDisputeResponseDto {

@@ -940,7 +940,7 @@ describe.skipIf(!enabled)("stage 7 printer, pickup and delivery e2e", () => {
           ).expect(201);
           expect(claimed.body.jobId).toBe(
             (
-              await prisma.printJob.findUniqueOrThrow({
+              await prisma.printJob.findFirstOrThrow({
                 where: { productionCycleId: cycles[1]!.id },
               })
             ).id,

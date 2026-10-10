@@ -110,7 +110,7 @@ export class DisputesService {
       async (tx) => {
         const order = await tx.order.findUniqueOrThrow({
           where: { id: orderId },
-          include: { disputes: true },
+          include: { disputes: true, items: { orderBy: { sequence: "asc" } } },
         });
         if (!["COMPLETED", "DELIVERY_FAILED"].includes(order.status))
           throw new ConflictException({ code: "DISPUTE_NOT_ELIGIBLE" });
@@ -121,6 +121,15 @@ export class DisputesService {
           )
         )
           throw new ConflictException({ code: "ACTIVE_DISPUTE_EXISTS" });
+        const requestedSequences = [...(input.itemSequences ?? [])].sort(
+          (a, b) => a - b,
+        );
+        const scopedItems = requestedSequences.map((sequence) => {
+          const item = order.items.find((row) => row.sequence === sequence);
+          if (!item)
+            throw new ConflictException({ code: "INVALID_DISPUTE_ITEM_SCOPE" });
+          return item;
+        });
         const dispute = await tx.disputeCase.create({
           data: {
             orderId,
@@ -130,6 +139,14 @@ export class DisputesService {
             structuredComment: input.structuredComment?.trim() || null,
             openedFromStatus: order.status,
             expiresAt,
+            itemScope:
+              scopedItems.length > 0
+                ? {
+                    create: scopedItems.map((item) => ({
+                      orderItemId: item.id,
+                    })),
+                  }
+                : undefined,
           },
         });
         await this.transition(
@@ -168,7 +185,13 @@ export class DisputesService {
       include: {
         disputes: {
           orderBy: { sequence: "desc" },
-          include: { resolution: true, responses: true },
+          include: {
+            resolution: true,
+            responses: true,
+            itemScope: {
+              include: { orderItem: { select: { sequence: true } } },
+            },
+          },
         },
       },
     });
@@ -181,6 +204,7 @@ export class DisputesService {
         status: x.status,
         structuredComment: x.structuredComment,
         createdAt: x.createdAt,
+        itemSequences: x.itemScope.map((scope) => scope.orderItem.sequence),
         partnerResponse: x.responses[0]?.responseCode ?? null,
         resolution: x.resolution
           ? {
@@ -339,6 +363,9 @@ export class DisputesService {
       where: { id },
       include: {
         resolution: true,
+        itemScope: {
+          include: { orderItem: { select: { sequence: true } } },
+        },
         responses: { select: { responseCode: true, createdAt: true } },
         order: {
           include: {
@@ -365,6 +392,7 @@ export class DisputesService {
       responses: x.responses,
       refundableMinor: (paid - reserved).toString(),
       cycles: x.order.productionCycles,
+      itemSequences: x.itemScope.map((scope) => scope.orderItem.sequence),
       resolution: x.resolution && {
         type: x.resolution.type,
         refundAmountMinor: x.resolution.refundAmountMinor?.toString() ?? null,
@@ -403,8 +431,10 @@ export class DisputesService {
                 },
                 productionCycles: true,
                 printReadyVersion: true,
+                items: { orderBy: { sequence: "asc" } },
               },
             },
+            itemScope: { include: { orderItem: true } },
           },
         });
         if (
@@ -456,16 +486,36 @@ export class DisputesService {
             throw new ConflictException({
               code: "REPRINT_PARTNER_UNAVAILABLE",
             });
-          const objectKey = dispute.order.printReadyVersion.objectKey;
-          const ref = await tx.permanentObjectReference.findUnique({
-            where: { objectKey },
-          });
-          if (
-            !ref ||
-            ref.deletedAt ||
-            (await tx.retentionTombstone.findUnique({ where: { objectKey } }))
-          )
-            throw new ConflictException({ code: "REPRINT_FILE_UNAVAILABLE" });
+          const reprintItems =
+            dispute.itemScope.length > 0
+              ? dispute.itemScope.map((scope) => scope.orderItem)
+              : dispute.order.items;
+          const printReadyVersionIds =
+            reprintItems.length > 0
+              ? reprintItems.map((item) => item.printReadyVersionId)
+              : [dispute.order.printReadyVersionId];
+          for (const printReadyVersionId of printReadyVersionIds) {
+            const ready = await tx.printReadyVersion.findUniqueOrThrow({
+              where: { id: printReadyVersionId },
+              select: { objectKey: true },
+            });
+            const ref = await tx.permanentObjectReference.findUnique({
+              where: { objectKey: ready.objectKey },
+            });
+            if (
+              !ref ||
+              ref.deletedAt ||
+              (await tx.retentionTombstone.findUnique({
+                where: { objectKey: ready.objectKey },
+              }))
+            )
+              throw new ConflictException({
+                code: "REPRINT_FILE_UNAVAILABLE",
+              });
+          }
+          const primaryPrintReadyVersionId =
+            reprintItems[0]?.printReadyVersionId ??
+            dispute.order.printReadyVersionId;
           const cycle = await tx.productionCycle.create({
             data: {
               orderId: dispute.orderId,
@@ -475,19 +525,42 @@ export class DisputesService {
                   ...dispute.order.productionCycles.map((c) => c.sequence),
                 ) + 1,
               kind: "REPRINT",
-              printReadyVersionId: dispute.order.printReadyVersionId,
+              printReadyVersionId: primaryPrintReadyVersionId,
               assignmentId: assignment.id,
               resolutionId: resolution.id,
+              items:
+                reprintItems.length > 0
+                  ? {
+                      create: reprintItems.map((item) => ({
+                        orderItemId: item.id,
+                        sequence: item.sequence,
+                        printReadyVersionId: item.printReadyVersionId,
+                      })),
+                    }
+                  : undefined,
             },
+            include: { items: true },
           });
-          await tx.printJob.create({
-            data: {
-              orderId: dispute.orderId,
-              productionCycleId: cycle.id,
-              assignmentId: assignment.id,
-              branchId: assignment.branchId,
-            },
-          });
+          if (cycle.items.length > 0) {
+            await tx.printJob.createMany({
+              data: cycle.items.map((item) => ({
+                orderId: dispute.orderId,
+                productionCycleId: cycle.id,
+                productionCycleItemId: item.id,
+                assignmentId: assignment.id,
+                branchId: assignment.branchId,
+              })),
+            });
+          } else {
+            await tx.printJob.create({
+              data: {
+                orderId: dispute.orderId,
+                productionCycleId: cycle.id,
+                assignmentId: assignment.id,
+                branchId: assignment.branchId,
+              },
+            });
+          }
           await tx.partnerAssignment.update({
             where: { id: assignment.id, version: assignment.version },
             data: { active: true, status: "ACTIVE", version: { increment: 1 } },

@@ -28,8 +28,15 @@ import {
   PublishCatalogDto,
   StartDraftUploadDto,
   UpdateOrderDraftDto,
+  AddBasketItemDto,
+  BasketFulfillmentPreferenceDto,
+  BasketStudioPreferenceDto,
+  BasketVersionDto,
+  CreateBasketDto,
+  ReorderBasketItemDto,
 } from "./dto";
 import { OrderingService } from "./ordering.service";
+import { BasketService } from "./basket.service";
 import { APP_ENVIRONMENT } from "../uploads/private-object-storage.service";
 import type { AppEnvironment } from "../config/environment";
 
@@ -53,7 +60,9 @@ export class CatalogController {
   ) {}
   @Get()
   catalog(@Query("locale") locale?: string) {
-    return this.ordering.catalog(locale === "uz" ? "uz" : "ru");
+    return this.ordering.catalog(
+      locale === "uz" || locale === "en" ? locale : "ru",
+    );
   }
 }
 
@@ -212,7 +221,10 @@ export class CustomerOrderingController {
     @CurrentUser() user: AuthenticatedUser,
     @Query("locale") locale?: string,
   ) {
-    return this.ordering.notifications(user.id, locale === "uz" ? "uz" : "ru");
+    return this.ordering.notifications(
+      user.id,
+      locale === "uz" || locale === "en" ? locale : "ru",
+    );
   }
   @Post("notifications/:id/read") read(
     @CurrentUser() user: AuthenticatedUser,
@@ -236,5 +248,102 @@ export class AdminCatalogController {
     @Body() input: PublishCatalogDto,
   ) {
     return this.ordering.publishCatalog(user.id, key, input);
+  }
+}
+
+@Controller("baskets")
+@UseGuards(AccessGuard)
+export class CustomerBasketController {
+  constructor(@Inject(BasketService) private readonly baskets: BasketService) {}
+
+  @Post()
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: CreateBasketDto,
+  ) {
+    return this.baskets.create(user.id, key, input);
+  }
+
+  @Get()
+  list(@CurrentUser() user: AuthenticatedUser) {
+    return this.baskets.list(user.id);
+  }
+
+  @Get(":id")
+  get(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.baskets.get(user.id, id);
+  }
+
+  @Post(":id/items")
+  add(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: AddBasketItemDto,
+  ) {
+    return this.baskets.addItem(user.id, id, key, input);
+  }
+
+  @Patch(":id/items/:itemId")
+  reorder(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: ReorderBasketItemDto,
+  ) {
+    return this.baskets.reorderItem(user.id, id, itemId, key, input);
+  }
+
+  @Delete(":id/items/:itemId")
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: BasketVersionDto,
+  ) {
+    return this.baskets.removeItem(user.id, id, itemId, key, input);
+  }
+
+  @Put(":id/studio-preference")
+  studio(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: BasketStudioPreferenceDto,
+  ) {
+    return this.baskets.setStudio(user.id, id, key, input);
+  }
+
+  @Put(":id/fulfillment-preference")
+  fulfillment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: BasketFulfillmentPreferenceDto,
+  ) {
+    return this.baskets.setFulfillment(user.id, id, key, input);
+  }
+
+  @Post(":id/quote")
+  quote(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: BasketVersionDto,
+  ) {
+    return this.baskets.quote(user.id, id, key, input);
+  }
+
+  @Post(":id/checkout")
+  checkout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: BasketVersionDto,
+  ) {
+    return this.baskets.checkout(user.id, id, key, input);
   }
 }

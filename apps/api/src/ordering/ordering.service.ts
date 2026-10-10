@@ -97,7 +97,9 @@ const draftView = (draft: DraftRow) => ({
     title:
       draft.locale === "uz"
         ? draft.catalogItem.titleUz
-        : draft.catalogItem.titleRu,
+        : draft.locale === "en"
+          ? (draft.catalogItem.titleEn ?? draft.catalogItem.titleRu)
+          : draft.catalogItem.titleRu,
   },
   locale: draft.locale,
   configuration: draft.configuration,
@@ -187,7 +189,7 @@ export class OrderingService {
     @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
   ) {}
 
-  async catalog(locale: "ru" | "uz") {
+  async catalog(locale: "ru" | "uz" | "en") {
     const version = await this.prisma.platformCatalogVersion.findFirst({
       where: { status: "ACTIVE" },
       orderBy: { version: "desc" },
@@ -202,8 +204,18 @@ export class OrderingService {
       services: version.items.map((item) => ({
         slug: item.slug,
         code: item.serviceCode,
-        title: locale === "uz" ? item.titleUz : item.titleRu,
-        description: locale === "uz" ? item.descriptionUz : item.descriptionRu,
+        title:
+          locale === "uz"
+            ? item.titleUz
+            : locale === "en"
+              ? item.titleEn
+              : item.titleRu,
+        description:
+          locale === "uz"
+            ? item.descriptionUz
+            : locale === "en"
+              ? item.descriptionEn
+              : item.descriptionRu,
         acceptedFileKinds: item.acceptedFileKinds,
         options: item.optionSchema,
       })),
@@ -272,8 +284,10 @@ export class OrderingService {
                 slug: item.slug,
                 titleRu: item.titleRu,
                 titleUz: item.titleUz,
+                titleEn: item.titleEn,
                 descriptionRu: item.descriptionRu,
                 descriptionUz: item.descriptionUz,
+                descriptionEn: item.descriptionEn,
                 acceptedFileKinds: item.acceptedFileKinds,
                 optionSchema: item.optionSchema as Prisma.InputJsonValue,
                 sortOrder: item.sortOrder ?? 100,
@@ -1102,7 +1116,7 @@ export class OrderingService {
     };
   }
 
-  async notifications(userId: string, locale: "ru" | "uz") {
+  async notifications(userId: string, locale: "ru" | "uz" | "en") {
     const rows = await this.prisma.userNotification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -1246,7 +1260,7 @@ export class OrderingService {
     return map[code] ?? "updated";
   }
 
-  private localized(key: string, locale: "ru" | "uz") {
+  private localized(key: string, locale: "ru" | "uz" | "en") {
     const messages: Record<string, [string, string]> = {
       "order.created.title": ["Заказ создан", "Buyurtma yaratildi"],
       "order.created.body": [
@@ -1312,6 +1326,32 @@ export class OrderingService {
         "Pul qaytarilishi tasdiqlandi.",
       ],
     };
+    if (locale === "en") {
+      const english: Record<string, string> = {
+        "order.updated.title": "Order status updated",
+        "order.updated.body": "Open the order to see the next step.",
+        "order.attention.title": "Order needs attention",
+        "order.ready.title": "Order is ready",
+        "order.completed.title": "Order completed",
+        "order.paid.body":
+          "Payment received. We are finding an eligible studio.",
+        "order.payment_failed.body":
+          "Payment was not completed. You can retry safely.",
+        "order.partner.body": "An eligible studio accepted the order.",
+        "order.production.body": "The studio started printing.",
+        "order.ready.body":
+          "Your order is ready for the selected fulfillment method.",
+        "order.delivery_requested.body": "We are arranging courier handoff.",
+        "order.pickup_requested.body":
+          "Your order is waiting for pickup at the studio.",
+        "order.delivery.body": "Your order is in delivery.",
+        "order.completed.body": "Your order was received successfully.",
+        "order.delivery_failed.body":
+          "Delivery failed. Open the order for next steps.",
+        "order.refunded.body": "The refund was confirmed.",
+      };
+      return english[key] ?? english["order.updated.body"]!;
+    }
     const value = messages[key] ?? messages["order.updated.body"]!;
     return value[locale === "uz" ? 1 : 0];
   }

@@ -6,6 +6,7 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  ParseIntPipe,
   Post,
   UseGuards,
 } from "@nestjs/common";
@@ -20,6 +21,7 @@ import {
   CreateCapacityVersionDto,
   CreateCatalogVersionDto,
   CreateOperationalVersionDto,
+  ItemProductionStatusDto,
   OfferDecisionDto,
   ProductionStatusDto,
 } from "./dto";
@@ -123,6 +125,33 @@ export class PartnerMatchingController {
     @Headers("idempotency-key") key: string | undefined,
   ) {
     return this.matching.printReadyUrl(user.id, id, key);
+  }
+
+  @Post("orders/:id/items/:sequence/print-ready")
+  itemPrintReady(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("sequence", new ParseIntPipe()) sequence: number,
+    @Headers("idempotency-key") key: string | undefined,
+  ) {
+    return this.matching.itemPrintReadyUrl(user.id, id, sequence, key);
+  }
+
+  @Post("orders/:id/items/:sequence/status")
+  itemStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("sequence", new ParseIntPipe()) sequence: number,
+    @Headers("idempotency-key") key: string | undefined,
+    @Body() input: ItemProductionStatusDto,
+  ) {
+    return this.matching.setItemProductionStatus(
+      user.id,
+      id,
+      sequence,
+      key,
+      input,
+    );
   }
 
   @Post("orders/:id/status")

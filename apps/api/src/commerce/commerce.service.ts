@@ -113,6 +113,16 @@ const orderInclude = {
       currency: true,
     },
   },
+  items: {
+    orderBy: { sequence: "asc" as const },
+    select: {
+      sequence: true,
+      serviceCode: true,
+      quantity: true,
+      totalMinor: true,
+      currency: true,
+    },
+  },
 } satisfies Prisma.OrderInclude;
 
 type OrderWithFinance = Prisma.OrderGetPayload<{
@@ -127,6 +137,13 @@ const orderView = (order: OrderWithFinance) => ({
   status: order.status,
   version: order.version,
   createdAt: order.createdAt,
+  items: order.items.map((item) => ({
+    sequence: item.sequence,
+    serviceCode: item.serviceCode,
+    quantity: item.quantity,
+    totalMinor: item.totalMinor.toString(),
+    currency: item.currency,
+  })),
   studioPreference: order.studioSelection
     ? {
         mode: order.studioSelection.mode,
@@ -629,6 +646,46 @@ export class CommerceService {
             },
             include: orderInclude,
           });
+          // Dual-write the normalized Stage 15 item projection for every
+          // legacy single-draft checkout. The accepted Order pointers remain
+          // the compatibility projection for sequence one.
+          if (input.orderDraftId) {
+            const sourceDraft = await tx.orderDraft.findUniqueOrThrow({
+              where: { id: input.orderDraftId },
+              select: {
+                catalogItemId: true,
+                serviceCode: true,
+                configuration: true,
+              },
+            });
+            const fulfillmentFee = BigInt(
+              fulfillmentSelection?.feeMinor?.toString() ?? "0",
+            );
+            const allocatedTotal =
+              (quoted?.totalMinor ?? legacySubtotal) - fulfillmentFee;
+            await tx.orderItem.create({
+              data: {
+                orderId: created.id,
+                sequence: 1,
+                sourceDraftId: input.orderDraftId,
+                catalogItemId: sourceDraft.catalogItemId,
+                serviceCode: sourceDraft.serviceCode,
+                configuration:
+                  sourceDraft.configuration as Prisma.InputJsonValue,
+                configurationHash: digest(
+                  canonicalJson(sourceDraft.configuration),
+                ),
+                quantity: input.quantity,
+                layoutId: layout.id,
+                layoutApprovalId: approval.id,
+                printReadyVersionId: printReady.id,
+                subtotalMinor: allocatedTotal,
+                discountMinor: 0n,
+                totalMinor: allocatedTotal,
+                currency: "UZS",
+              },
+            });
+          }
           await tx.outboxEvent.create({
             data: outbox("order", created.id, created.version, "ORDER_CREATED"),
           });

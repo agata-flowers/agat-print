@@ -18,6 +18,7 @@ import {
 } from "../uploads/private-object-storage.service";
 import type {
   CreateCapabilityVersionDto,
+  ItemProductionStatusDto,
   OfferDecisionDto,
   ProductionStatusDto,
 } from "./dto";
@@ -170,6 +171,12 @@ export class MatchingService {
                 priceSnapshot: true,
                 matching: true,
                 layout: { include: { upload: true } },
+                items: {
+                  include: {
+                    layout: { include: { upload: true } },
+                    printReadyVersion: true,
+                  },
+                },
                 studioSelection: true,
                 fulfillmentSelection: true,
               },
@@ -348,6 +355,12 @@ export class MatchingService {
               include: {
                 priceSnapshot: true,
                 layout: { include: { upload: true } },
+                items: {
+                  include: {
+                    layout: { include: { upload: true } },
+                    printReadyVersion: true,
+                  },
+                },
                 studioSelection: true,
                 fulfillmentSelection: true,
               },
@@ -413,6 +426,19 @@ export class MatchingService {
             fulfillments: { orderBy: { createdAt: "desc" }, take: 1 },
             deliveryTasks: { orderBy: { assignedAt: "desc" }, take: 1 },
             fulfillmentSelection: { select: { mode: true } },
+            items: {
+              orderBy: { sequence: "asc" },
+              select: {
+                sequence: true,
+                serviceCode: true,
+                quantity: true,
+                productionItems: {
+                  orderBy: { createdAt: "desc" },
+                  take: 1,
+                  select: { printJob: { select: { status: true } } },
+                },
+              },
+            },
           },
         },
         branch: { select: { name: true } },
@@ -430,6 +456,12 @@ export class MatchingService {
         assignment.order.fulfillments[0]?.mode ??
         null,
       deliveryId: assignment.order.deliveryTasks[0]?.id ?? null,
+      items: assignment.order.items.map((item) => ({
+        sequence: item.sequence,
+        serviceCode: item.serviceCode,
+        quantity: item.quantity,
+        productionStatus: item.productionItems[0]?.printJob?.status ?? "QUEUED",
+      })),
     };
   }
 
@@ -483,6 +515,221 @@ export class MatchingService {
         status: assignment.order.status,
         operation: "DOWNLOAD",
       },
+    );
+    return value;
+  }
+
+  async itemPrintReadyUrl(
+    ownerId: string,
+    orderId: string,
+    sequence: number,
+    key: string | undefined,
+  ) {
+    const partner = await this.requireApprovedPartner(ownerId);
+    const prepared = this.idempotency.prepare(
+      `download-item:${createHash("sha256").update(`${ownerId}:${orderId}:${sequence}`).digest("hex")}`,
+      key,
+      { sequence },
+    );
+    const replay =
+      await this.idempotency.replay<Record<string, unknown>>(prepared);
+    if (replay) return replay;
+    const assignment = await this.prisma.partnerAssignment.findFirst({
+      where: { orderId, partnerId: partner.id },
+      include: {
+        order: {
+          include: {
+            items: {
+              where: { sequence },
+              include: { printReadyVersion: true },
+            },
+          },
+        },
+      },
+    });
+    const item = assignment?.order.items[0];
+    if (
+      !assignment ||
+      !item ||
+      !["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION", "READY"].includes(
+        assignment.order.status,
+      )
+    )
+      throw new ForbiddenException({ code: "PRINT_READY_FORBIDDEN" });
+    const value = {
+      itemSequence: sequence,
+      url: await this.storage.signedGetUrl(
+        item.printReadyVersion.objectKey,
+        this.env.previewSignedUrlTtlSeconds,
+      ),
+      expiresInSeconds: this.env.previewSignedUrlTtlSeconds,
+    };
+    await this.prisma.idempotencyRecord.create({
+      data: this.idempotency.data(prepared, value as Prisma.InputJsonValue),
+    });
+    await this.audit.record("PRINT_READY_DOWNLOADED", ownerId, "order-item", {
+      status: "AUTHORIZED",
+      operation: "DOWNLOAD",
+      itemClass: "ORDER_ITEM",
+    });
+    return value;
+  }
+
+  async setItemProductionStatus(
+    ownerId: string,
+    orderId: string,
+    sequence: number,
+    key: string | undefined,
+    input: ItemProductionStatusDto,
+  ) {
+    const partner = await this.requireApprovedPartner(ownerId);
+    const prepared = this.idempotency.prepare(
+      `partner-item-status:${sha256(`${partner.id}:${orderId}:${sequence}`)}`,
+      key,
+      input,
+    );
+    const replay =
+      await this.idempotency.replay<Record<string, unknown>>(prepared);
+    if (replay) return replay;
+    const value = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
+        const insideReplay = await tx.idempotencyRecord.findUnique({
+          where: {
+            scope_keyDigest: {
+              scope: prepared.scope,
+              keyDigest: prepared.keyDigest,
+            },
+          },
+        });
+        if (insideReplay)
+          return this.idempotency.assertCompatible(
+            insideReplay,
+            prepared,
+          ) as Record<string, unknown>;
+        const cycle = await tx.productionCycle.findFirst({
+          where: { orderId, assignment: { partnerId: partner.id } },
+          orderBy: { sequence: "desc" },
+          include: {
+            assignment: true,
+            order: true,
+            items: {
+              where: { sequence },
+              include: { printJob: true },
+            },
+          },
+        });
+        const cycleItem = cycle?.items[0];
+        const job = cycleItem?.printJob;
+        if (!cycle || !cycleItem || !job || !cycle.assignment.active)
+          throw new ForbiddenException({ code: "PRODUCTION_ITEM_FORBIDDEN" });
+        if (
+          !["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION"].includes(
+            cycle.order.status,
+          )
+        )
+          throw new ConflictException({
+            code: "INVALID_PRODUCTION_TRANSITION",
+          });
+        const allowedJobStates =
+          input.status === "PRINTING" ? ["PENDING"] : ["PENDING", "PRINTING"];
+        if (!allowedJobStates.includes(job.status))
+          throw new ConflictException({ code: "INVALID_PRINT_JOB_TRANSITION" });
+        await tx.printJob.update({
+          where: { id: job.id, version: job.version },
+          data: {
+            status: input.status,
+            startedAt: job.startedAt ?? new Date(),
+            completedAt: input.status === "COMPLETED" ? new Date() : null,
+            version: { increment: 1 },
+          },
+        });
+        let orderStatus: OrderStatus = cycle.order.status;
+        let orderVersion = cycle.order.version;
+        if (["PARTNER_ACCEPTED", "REPRINT"].includes(cycle.order.status)) {
+          const changed = await tx.order.updateMany({
+            where: {
+              id: orderId,
+              version: cycle.order.version,
+              status: cycle.order.status,
+            },
+            data: { status: "IN_PRODUCTION", version: { increment: 1 } },
+          });
+          if (changed.count !== 1)
+            throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+          orderStatus = "IN_PRODUCTION";
+          orderVersion += 1;
+          await tx.productionCycle.update({
+            where: { id: cycle.id },
+            data: { status: "IN_PRODUCTION", version: { increment: 1 } },
+          });
+          await tx.outboxEvent.create({
+            data: outbox("order", orderId, orderVersion, "ORDER_IN_PRODUCTION"),
+          });
+        }
+        if (input.status === "COMPLETED") {
+          const remaining = await tx.printJob.count({
+            where: {
+              productionCycleId: cycle.id,
+              id: { not: job.id },
+              status: { not: "COMPLETED" },
+            },
+          });
+          if (remaining === 0) {
+            const changed = await tx.order.updateMany({
+              where: {
+                id: orderId,
+                version: orderVersion,
+                status: orderStatus,
+              },
+              data: { status: "READY", version: { increment: 1 } },
+            });
+            if (changed.count !== 1)
+              throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+            orderStatus = "READY";
+            orderVersion += 1;
+            await tx.productionCycle.update({
+              where: { id: cycle.id },
+              data: {
+                status: "READY",
+                completedAt: new Date(),
+                version: { increment: 1 },
+              },
+            });
+            await tx.partnerAssignment.update({
+              where: { id: cycle.assignment.id },
+              data: {
+                status: "READY",
+                active: false,
+                readyAt: new Date(),
+                version: { increment: 1 },
+              },
+            });
+            await tx.outboxEvent.create({
+              data: outbox("order", orderId, orderVersion, "ORDER_READY"),
+            });
+          }
+        }
+        const response = {
+          orderStatus,
+          itemSequence: sequence,
+          itemStatus: input.status,
+        };
+        await tx.idempotencyRecord.create({
+          data: this.idempotency.data(
+            prepared,
+            response as Prisma.InputJsonValue,
+          ),
+        });
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    await this.audit.record(
+      "PRODUCTION_ITEM_STATUS_CHANGED",
+      ownerId,
+      "order-item",
+      { status: input.status, operation: "MANUAL", itemClass: "ORDER_ITEM" },
     );
     return value;
   }
@@ -553,6 +800,22 @@ export class MatchingService {
           throw new ConflictException({
             code: "INVALID_PRODUCTION_TRANSITION",
           });
+        if (input.status === "READY") {
+          const [requiredItems, completedJobs] = await Promise.all([
+            tx.orderItem.count({ where: { orderId } }),
+            tx.printJob.count({
+              where: {
+                orderId,
+                productionCycleId: cycle.id,
+                status: "COMPLETED",
+              },
+            }),
+          ]);
+          if (requiredItems > 1 && completedJobs !== requiredItems)
+            throw new ConflictException({
+              code: "PRODUCTION_ITEMS_INCOMPLETE",
+            });
+        }
         const changed = await tx.order.updateMany({
           where: {
             id: orderId,
@@ -845,6 +1108,12 @@ export class MatchingService {
       include: {
         priceSnapshot: true,
         layout: { include: { upload: true } },
+        items: {
+          include: {
+            layout: { include: { upload: true } },
+            printReadyVersion: true,
+          },
+        },
         studioSelection: true,
         fulfillmentSelection: true,
       },
@@ -882,6 +1151,12 @@ export class MatchingService {
       include: {
         priceSnapshot: true,
         layout: { include: { upload: true } },
+        items: {
+          include: {
+            layout: { include: { upload: true } },
+            printReadyVersion: true,
+          },
+        },
         studioSelection: true,
         fulfillmentSelection: true,
       },
@@ -896,6 +1171,12 @@ export class MatchingService {
       include: {
         priceSnapshot: true;
         layout: { include: { upload: true } };
+        items: {
+          include: {
+            layout: { include: { upload: true } };
+            printReadyVersion: true;
+          };
+        };
         studioSelection: true;
         fulfillmentSelection: true;
       };
@@ -905,30 +1186,67 @@ export class MatchingService {
   ) {
     if (!order.priceSnapshot)
       throw new ConflictException({ code: "PRICE_SNAPSHOT_MISSING" });
-    const settings = safeJson(order.layout.settings);
-    const width = Number(settings.targetWidthMm ?? 0);
-    const height = Number(settings.targetHeightMm ?? 0);
-    const dpi = Number(settings.minDpi ?? 72);
-    const serviceCode =
-      typeof settings.serviceCode === "string"
-        ? settings.serviceCode
-        : "DOCUMENT_PRINT";
-    const paperCode =
-      typeof settings.paperCode === "string" ? settings.paperCode : "STANDARD";
-    const colorMode =
-      typeof settings.colorMode === "string" ? settings.colorMode : "COLOR";
-    const requiredEquipment = Array.isArray(settings.equipmentCodes)
-      ? settings.equipmentCodes.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : [];
-    const quantity = order.priceSnapshot.quantity;
-    const pageCount = Number(
-      safeJson(order.priceSnapshot.sourceParameters).pageCount ?? 0,
+    const primarySettings = safeJson(order.layout.settings);
+    const requirements =
+      order.items.length > 0
+        ? order.items.map((item) => {
+            const settings = safeJson(item.layout.settings);
+            const configuration = safeJson(item.configuration);
+            return {
+              fileKind: item.layout.upload.fileKind,
+              width: Number(settings.targetWidthMm ?? 0),
+              height: Number(settings.targetHeightMm ?? 0),
+              dpi: Number(settings.minDpi ?? 72),
+              serviceCode: item.serviceCode,
+              paperCode:
+                typeof configuration.paperCode === "string"
+                  ? configuration.paperCode
+                  : "STANDARD",
+              colorMode:
+                typeof configuration.colorMode === "string"
+                  ? configuration.colorMode
+                  : "COLOR",
+              requiredEquipment: Array.isArray(settings.equipmentCodes)
+                ? settings.equipmentCodes.filter(
+                    (value): value is string => typeof value === "string",
+                  )
+                : [],
+              quantity: item.quantity,
+              pageCount: item.printReadyVersion.pageCount,
+            };
+          })
+        : [
+            {
+              fileKind: order.layout.upload.fileKind,
+              width: Number(primarySettings.targetWidthMm ?? 0),
+              height: Number(primarySettings.targetHeightMm ?? 0),
+              dpi: Number(primarySettings.minDpi ?? 72),
+              serviceCode:
+                typeof primarySettings.serviceCode === "string"
+                  ? primarySettings.serviceCode
+                  : "DOCUMENT_PRINT",
+              paperCode:
+                typeof primarySettings.paperCode === "string"
+                  ? primarySettings.paperCode
+                  : "STANDARD",
+              colorMode:
+                typeof primarySettings.colorMode === "string"
+                  ? primarySettings.colorMode
+                  : "COLOR",
+              requiredEquipment: [] as string[],
+              quantity: order.priceSnapshot.quantity,
+              pageCount: Number(
+                safeJson(order.priceSnapshot.sourceParameters).pageCount ?? 0,
+              ),
+            },
+          ];
+    const demandUnits = requirements.reduce(
+      (sum, item) => sum + Math.max(1, item.quantity),
+      0,
     );
     const demandLocation = {
-      latitude: Number(settings.latitude ?? 41.311081),
-      longitude: Number(settings.longitude ?? 69.240562),
+      latitude: Number(primarySettings.latitude ?? 41.311081),
+      longitude: Number(primarySettings.longitude ?? 69.240562),
     };
     const excluded = await tx.partnerOffer.findMany({
       where: { orderId: order.id },
@@ -1000,35 +1318,38 @@ export class MatchingService {
         const operational = branch.operationalVersions[0] ?? null;
         const catalog = branch.catalogVersions[0] ?? null;
         const capacity = branch.capacityVersions[0] ?? null;
-        const catalogItem = catalog?.items.find(
-          (item) => item.serviceCode === serviceCode,
-        );
         const compatible = Boolean(
           capability &&
-            capability.supportedFileKinds.includes(
-              order.layout.upload.fileKind,
-            ) &&
-            capability.maxPages >= pageCount &&
-            capability.maxWidthMm >= width &&
-            capability.maxHeightMm >= height &&
-            capability.minDpi <= dpi &&
-            capability.serviceCodes.includes(serviceCode) &&
-            capability.paperCodes.includes(paperCode) &&
-            capability.colorModes.includes(colorMode) &&
-            capability.maxQuantity >= quantity &&
-            requiredEquipment.every((item) =>
-              capability.equipmentCodes.includes(item),
+            requirements.every(
+              (requirement) =>
+                capability.supportedFileKinds.includes(requirement.fileKind) &&
+                capability.maxPages >= requirement.pageCount &&
+                capability.maxWidthMm >= requirement.width &&
+                capability.maxHeightMm >= requirement.height &&
+                capability.minDpi <= requirement.dpi &&
+                capability.serviceCodes.includes(requirement.serviceCode) &&
+                capability.paperCodes.includes(requirement.paperCode) &&
+                capability.colorModes.includes(requirement.colorMode) &&
+                capability.maxQuantity >= requirement.quantity &&
+                requirement.requiredEquipment.every((equipment) =>
+                  capability.equipmentCodes.includes(equipment),
+                ),
             ),
         );
         const serviceEnabled = catalog
-          ? Boolean(
-              catalogItem?.enabled &&
-                catalogItem.maxQuantity >= quantity &&
-                (catalogItem.paperCodes.length === 0 ||
-                  catalogItem.paperCodes.includes(paperCode)) &&
-                (catalogItem.colorModes.length === 0 ||
-                  catalogItem.colorModes.includes(colorMode)),
-            )
+          ? requirements.every((requirement) => {
+              const catalogItem = catalog.items.find(
+                (item) => item.serviceCode === requirement.serviceCode,
+              );
+              return Boolean(
+                catalogItem?.enabled &&
+                  catalogItem.maxQuantity >= requirement.quantity &&
+                  (catalogItem.paperCodes.length === 0 ||
+                    catalogItem.paperCodes.includes(requirement.paperCode)) &&
+                  (catalogItem.colorModes.length === 0 ||
+                    catalogItem.colorModes.includes(requirement.colorMode)),
+              );
+            })
           : true;
         const weeklyHours = Array.isArray(operational?.weeklyHours)
           ? (operational.weeklyHours as unknown as WeeklyWindow[])
@@ -1193,6 +1514,13 @@ export class MatchingService {
               catalogVersion: selected.catalog?.version ?? 0,
               capacityVersion: selected.capacity?.version ?? 0,
               quantity: order.priceSnapshot.quantity,
+              itemCount: requirements.length,
+              demandUnits,
+              items: requirements.map((item) => ({
+                serviceCode: item.serviceCode,
+                quantity: item.quantity,
+                pageCount: item.pageCount,
+              })),
             },
           },
         },
@@ -1201,6 +1529,7 @@ export class MatchingService {
               create: {
                 branchId: selected.branch.id,
                 capacityVersionId: selected.capacity.id,
+                demandUnits,
                 expiresAt: new Date(
                   Date.now() + this.env.partnerOfferTtlSeconds * 1000,
                 ),

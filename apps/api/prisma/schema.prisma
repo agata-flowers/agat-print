@@ -55,6 +55,21 @@ enum PriceQuoteStatus {
   EXPIRED
 }
 
+enum OrderBasketStatus {
+  ACTIVE
+  QUOTED
+  CHECKED_OUT
+  CANCELLED
+  EXPIRED
+}
+
+enum BasketQuoteStatus {
+  ACTIVE
+  CONSUMED
+  STALE
+  EXPIRED
+}
+
 enum NotificationStatus {
   UNREAD
   READ
@@ -472,6 +487,7 @@ model User {
   reconciliations         FinancialReconciliation[]     @relation("ReconciliationActor")
   platformCatalogs        PlatformCatalogVersion[]      @relation("PlatformCatalogPublisher")
   orderDrafts             OrderDraft[]
+  orderBaskets            OrderBasket[]
   notifications           UserNotification[]
   studioListingsAuthored  StudioListingVersion[]        @relation("StudioListingAuthor")
   studioListingsModerated StudioListingVersion[]        @relation("StudioListingModerator")
@@ -568,6 +584,7 @@ model Branch {
   studioListings         StudioListingVersion[]
   draftPreferences       OrderDraftStudioPreference[]
   selectionSnapshots     OrderStudioSelectionSnapshot[]
+  basketPreferences      OrderBasketStudioPreference[]
 }
 
 /// Moderated versioned public projection. Content is immutable after publication.
@@ -747,6 +764,8 @@ model PlatformCatalogItem {
   titleUz           String                 @db.VarChar(120)
   descriptionRu     String                 @db.VarChar(500)
   descriptionUz     String                 @db.VarChar(500)
+  titleEn           String?                @db.VarChar(120)
+  descriptionEn     String?                @db.VarChar(500)
   acceptedFileKinds UploadFileKind[]
   optionSchema      Json
   sortOrder         Int                    @default(100)
@@ -754,6 +773,8 @@ model PlatformCatalogItem {
   catalogVersion    PlatformCatalogVersion @relation(fields: [catalogVersionId], references: [id], onDelete: Restrict)
   drafts            OrderDraft[]
   quotes            PriceQuote[]
+  basketQuoteItems  BasketQuoteItem[]
+  orderItems        OrderItem[]
 
   @@unique([catalogVersionId, serviceCode])
   @@unique([catalogVersionId, slug])
@@ -898,6 +919,7 @@ model LayoutRequest {
   manualReviews      ManualReview[]
   orders             Order[]
   orderDraft         OrderDraft?
+  orderItems         OrderItem[]
 
   @@index([userId, status])
   @@index([status, updatedAt])
@@ -925,38 +947,43 @@ model PreviewVersion {
 }
 
 model PrintReadyVersion {
-  id                       String            @id @default(uuid()) @db.Uuid
-  layoutId                 String            @db.Uuid
+  id                       String                @id @default(uuid()) @db.Uuid
+  layoutId                 String                @db.Uuid
   version                  Int
-  objectKey                String            @unique @db.VarChar(160)
-  checksum                 String            @db.Char(64)
+  objectKey                String                @unique @db.VarChar(160)
+  checksum                 String                @db.Char(64)
   sizeBytes                BigInt
-  sourceFileVersion        String            @db.Uuid
-  settingsHash             String            @db.Char(64)
-  originProcessingResultId String            @db.Uuid
+  sourceFileVersion        String                @db.Uuid
+  settingsHash             String                @db.Char(64)
+  originProcessingResultId String                @db.Uuid
   pageCount                Int
-  createdAt                DateTime          @default(now())
-  layout                   LayoutRequest     @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  originProcessingResult   ProcessingResult  @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
+  createdAt                DateTime              @default(now())
+  layout                   LayoutRequest         @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  originProcessingResult   ProcessingResult      @relation(fields: [originProcessingResultId], references: [id], onDelete: Restrict)
   orders                   Order[]
   productionCycles         ProductionCycle[]
+  basketQuoteItems         BasketQuoteItem[]
+  orderItems               OrderItem[]
+  productionCycleItems     ProductionCycleItem[]
 
   @@unique([layoutId, version])
   @@unique([layoutId, sourceFileVersion, settingsHash])
 }
 
 model LayoutApproval {
-  id               String         @id @default(uuid()) @db.Uuid
-  layoutId         String         @db.Uuid
-  previewVersionId String         @db.Uuid
-  userId           String         @db.Uuid
+  id               String            @id @default(uuid()) @db.Uuid
+  layoutId         String            @db.Uuid
+  previewVersionId String            @db.Uuid
+  userId           String            @db.Uuid
   layoutVersion    Int
-  createdAt        DateTime       @default(now())
-  layout           LayoutRequest  @relation(fields: [layoutId], references: [id], onDelete: Restrict)
-  previewVersion   PreviewVersion @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
-  user             User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt        DateTime          @default(now())
+  layout           LayoutRequest     @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  previewVersion   PreviewVersion    @relation(fields: [previewVersionId], references: [id], onDelete: Restrict)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
   order            Order?
   orderDraft       OrderDraft?
+  basketQuoteItems BasketQuoteItem[]
+  orderItems       OrderItem[]
 
   @@unique([layoutId, previewVersionId])
   @@index([userId, createdAt])
@@ -977,6 +1004,7 @@ model TariffVersion {
   rules             TariffRule[]
   fulfillmentRules  FulfillmentTariffRule[]
   quotes            PriceQuote[]
+  basketQuotes      BasketQuote[]
 
   @@index([status, version])
 }
@@ -993,6 +1021,7 @@ model FulfillmentTariffRule {
   tariffVersion   TariffVersion                       @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
   quotes          PriceQuote[]
   selections      OrderFulfillmentSelectionSnapshot[]
+  basketQuotes    BasketQuote[]
 
   @@unique([tariffVersionId, mode, locationCode])
   @@index([tariffVersionId, enabled])
@@ -1042,9 +1071,84 @@ model OrderDraft {
   order                 Order?
   studioPreference      OrderDraftStudioPreference?
   fulfillmentPreference OrderDraftFulfillmentPreference?
+  basketItems           OrderBasketItem[]
+  orderItems            OrderItem[]
 
   @@index([userId, status, updatedAt])
   @@index([status, expiresAt])
+}
+
+/// Owner-scoped resumable aggregate for one-studio multi-item checkout.
+model OrderBasket {
+  id                    String                            @id @default(uuid()) @db.Uuid
+  userId                String                            @db.Uuid
+  status                OrderBasketStatus                 @default(ACTIVE)
+  locale                String                            @default("ru") @db.VarChar(8)
+  version               Int                               @default(0)
+  expiresAt             DateTime
+  checkedOutAt          DateTime?
+  createdAt             DateTime                          @default(now())
+  updatedAt             DateTime                          @updatedAt
+  user                  User                              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items                 OrderBasketItem[]
+  quotes                BasketQuote[]
+  order                 Order?
+  studioPreference      OrderBasketStudioPreference?
+  fulfillmentPreference OrderBasketFulfillmentPreference?
+
+  @@index([userId, status, updatedAt])
+  @@index([status, expiresAt])
+}
+
+model OrderBasketItem {
+  id         String            @id @default(uuid()) @db.Uuid
+  basketId   String            @db.Uuid
+  draftId    String            @db.Uuid
+  sequence   Int
+  createdAt  DateTime          @default(now())
+  removedAt  DateTime?
+  basket     OrderBasket       @relation(fields: [basketId], references: [id], onDelete: Restrict)
+  draft      OrderDraft        @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  quoteItems BasketQuoteItem[]
+
+  @@index([basketId, sequence])
+  @@index([draftId])
+  @@index([basketId, createdAt])
+  @@index([basketId, removedAt])
+}
+
+model OrderBasketStudioPreference {
+  id             String               @id @default(uuid()) @db.Uuid
+  basketId       String               @unique @db.Uuid
+  mode           StudioPreferenceMode @default(AUTO_ASSIGN)
+  fallbackPolicy StudioFallbackPolicy @default(ALLOW_ELIGIBLE_ALTERNATIVE)
+  branchId       String?              @db.Uuid
+  version        Int                  @default(0)
+  invalidatedAt  DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  basket         OrderBasket          @relation(fields: [basketId], references: [id], onDelete: Restrict)
+  branch         Branch?              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, mode])
+}
+
+model OrderBasketFulfillmentPreference {
+  id                String          @id @default(uuid()) @db.Uuid
+  basketId          String          @unique @db.Uuid
+  mode              FulfillmentMode
+  locationCode      String          @db.VarChar(40)
+  addressCiphertext String?         @db.Text
+  addressIv         String?         @db.VarChar(24)
+  addressAuthTag    String?         @db.VarChar(32)
+  addressKeyVersion Int             @default(1)
+  version           Int             @default(0)
+  invalidatedAt     DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  basket            OrderBasket     @relation(fields: [basketId], references: [id], onDelete: Restrict)
+
+  @@index([mode, locationCode])
 }
 
 /// Owner-scoped, CAS-protected pre-quote fulfillment choice. Address is encrypted.
@@ -1128,6 +1232,71 @@ model PriceQuote {
   @@index([draftId, status, expiresAt])
 }
 
+/// Immutable aggregate quote. Rows are append-only after creation.
+model BasketQuote {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  basketId              String                 @db.Uuid
+  sequence              Int
+  basketVersion         Int
+  tariffVersionId       String                 @db.Uuid
+  tariffVersion         Int
+  fulfillmentFeeMinor   BigInt                 @default(0)
+  subtotalMinor         BigInt
+  discountMinor         BigInt                 @default(0)
+  totalMinor            BigInt
+  currency              String                 @default("UZS") @db.Char(3)
+  membershipHash        String                 @db.Char(64)
+  status                BasketQuoteStatus      @default(ACTIVE)
+  expiresAt             DateTime
+  createdAt             DateTime               @default(now())
+  consumedAt            DateTime?
+  fulfillmentRuleId     String?                @db.Uuid
+  studioMode            StudioPreferenceMode
+  studioFallbackPolicy  StudioFallbackPolicy
+  studioBranchId        String?                @db.Uuid
+  studioListingId       String?                @db.Uuid
+  studioCapabilityId    String?                @db.Uuid
+  studioOperationalId   String?                @db.Uuid
+  studioCatalogId       String?                @db.Uuid
+  studioCapacityId      String?                @db.Uuid
+  basket                OrderBasket            @relation(fields: [basketId], references: [id], onDelete: Restrict)
+  tariff                TariffVersion          @relation(fields: [tariffVersionId], references: [id], onDelete: Restrict)
+  fulfillmentTariffRule FulfillmentTariffRule? @relation(fields: [fulfillmentRuleId], references: [id], onDelete: Restrict)
+  items                 BasketQuoteItem[]
+  order                 Order?
+
+  @@unique([basketId, sequence])
+  @@index([basketId, status, expiresAt])
+}
+
+model BasketQuoteItem {
+  id                  String              @id @default(uuid()) @db.Uuid
+  quoteId             String              @db.Uuid
+  basketItemId        String              @db.Uuid
+  sequence            Int
+  catalogItemId       String              @db.Uuid
+  draftVersion        Int
+  layoutVersion       Int
+  layoutApprovalId    String              @db.Uuid
+  printReadyVersionId String              @db.Uuid
+  configurationHash   String              @db.Char(64)
+  sourceParameters    Json
+  lineItems           Json
+  quantity            Int
+  subtotalMinor       BigInt
+  discountMinor       BigInt              @default(0)
+  totalMinor          BigInt
+  currency            String              @default("UZS") @db.Char(3)
+  quote               BasketQuote         @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  basketItem          OrderBasketItem     @relation(fields: [basketItemId], references: [id], onDelete: Restrict)
+  catalogItem         PlatformCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  layoutApproval      LayoutApproval      @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion   @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([quoteId, sequence])
+  @@unique([quoteId, basketItemId])
+}
+
 model Order {
   id                   String                             @id @default(uuid()) @db.Uuid
   userId               String                             @db.Uuid
@@ -1141,6 +1310,8 @@ model Order {
   disputeEligibleAt    DateTime?
   orderDraftId         String?                            @unique @db.Uuid
   priceQuoteId         String?                            @unique @db.Uuid
+  basketId             String?                            @unique @db.Uuid
+  basketQuoteId        String?                            @unique @db.Uuid
   user                 User                               @relation(fields: [userId], references: [id], onDelete: Restrict)
   layout               LayoutRequest                      @relation(fields: [layoutId], references: [id], onDelete: Restrict)
   layoutApproval       LayoutApproval                     @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
@@ -1161,12 +1332,48 @@ model Order {
   partnerLedger        PartnerLedgerEntry[]
   orderDraft           OrderDraft?                        @relation(fields: [orderDraftId], references: [id], onDelete: Restrict)
   priceQuote           PriceQuote?                        @relation(fields: [priceQuoteId], references: [id], onDelete: Restrict)
+  basket               OrderBasket?                       @relation(fields: [basketId], references: [id], onDelete: Restrict)
+  basketQuote          BasketQuote?                       @relation(fields: [basketQuoteId], references: [id], onDelete: Restrict)
+  items                OrderItem[]
   customerEvents       CustomerOrderEvent[]
   studioSelection      OrderStudioSelectionSnapshot?
   fulfillmentSelection OrderFulfillmentSelectionSnapshot?
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
+}
+
+/// Immutable normalized item lineage. Legacy columns on Order mirror sequence 1.
+model OrderItem {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  orderId             String                  @db.Uuid
+  sequence            Int
+  sourceDraftId       String?                 @db.Uuid
+  catalogItemId       String                  @db.Uuid
+  serviceCode         String                  @db.VarChar(40)
+  configuration       Json
+  configurationHash   String                  @db.Char(64)
+  quantity            Int
+  layoutId            String                  @db.Uuid
+  layoutApprovalId    String                  @db.Uuid
+  printReadyVersionId String                  @db.Uuid
+  subtotalMinor       BigInt
+  discountMinor       BigInt                  @default(0)
+  totalMinor          BigInt
+  currency            String                  @default("UZS") @db.Char(3)
+  createdAt           DateTime                @default(now())
+  order               Order                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sourceDraft         OrderDraft?             @relation(fields: [sourceDraftId], references: [id], onDelete: Restrict)
+  catalogItem         PlatformCatalogItem     @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  layout              LayoutRequest           @relation(fields: [layoutId], references: [id], onDelete: Restrict)
+  layoutApproval      LayoutApproval          @relation(fields: [layoutApprovalId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion       @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  productionItems     ProductionCycleItem[]
+  disputeScopes       DisputeOrderItemScope[]
+
+  @@unique([orderId, sequence])
+  @@unique([orderId, sourceDraftId])
+  @@index([printReadyVersionId])
 }
 
 /// Immutable checkout-time fulfillment and pricing lineage. Address remains encrypted.
@@ -1358,28 +1565,31 @@ model PrinterAgent {
 }
 
 model PrintJob {
-  id                String            @id @default(uuid()) @db.Uuid
-  orderId           String            @db.Uuid
-  productionCycleId String            @unique @db.Uuid
-  assignmentId      String            @db.Uuid
-  branchId          String            @db.Uuid
-  agentId           String?           @db.Uuid
-  status            PrintJobStatus    @default(PENDING)
-  version           Int               @default(0)
-  attempts          Int               @default(0)
-  leaseUntil        DateTime?
-  failureCode       String?           @db.VarChar(40)
-  createdAt         DateTime          @default(now())
-  startedAt         DateTime?
-  completedAt       DateTime?
-  order             Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  productionCycle   ProductionCycle   @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
-  assignment        PartnerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  branch            Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  agent             PrinterAgent?     @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  id                    String               @id @default(uuid()) @db.Uuid
+  orderId               String               @db.Uuid
+  productionCycleId     String               @db.Uuid
+  productionCycleItemId String?              @unique @db.Uuid
+  assignmentId          String               @db.Uuid
+  branchId              String               @db.Uuid
+  agentId               String?              @db.Uuid
+  status                PrintJobStatus       @default(PENDING)
+  version               Int                  @default(0)
+  attempts              Int                  @default(0)
+  leaseUntil            DateTime?
+  failureCode           String?              @db.VarChar(40)
+  createdAt             DateTime             @default(now())
+  startedAt             DateTime?
+  completedAt           DateTime?
+  order                 Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productionCycle       ProductionCycle      @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
+  productionCycleItem   ProductionCycleItem? @relation(fields: [productionCycleItemId], references: [id], onDelete: Restrict)
+  assignment            PartnerAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  branch                Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  agent                 PrinterAgent?        @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   @@index([branchId, status, createdAt])
   @@index([agentId, status])
+  @@index([productionCycleId, status])
 }
 
 model OrderMatching {
@@ -1465,6 +1675,7 @@ model OfferCapacityReservation {
   consumedAt        DateTime?
   releasedAt        DateTime?
   createdAt         DateTime                  @default(now())
+  demandUnits       Int                       @default(1)
   offer             PartnerOffer              @relation(fields: [offerId], references: [id], onDelete: Restrict)
   branch            Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
   capacityVersion   BranchCapacityVersion     @relation(fields: [capacityVersionId], references: [id], onDelete: Restrict)
@@ -1602,29 +1813,40 @@ model RefundOperation {
 }
 
 model DisputeCase {
-  id                String             @id @default(uuid()) @db.Uuid
-  orderId           String             @db.Uuid
+  id                String                  @id @default(uuid()) @db.Uuid
+  orderId           String                  @db.Uuid
   sequence          Int
-  openedById        String             @db.Uuid
+  openedById        String                  @db.Uuid
   category          DisputeCategory
-  structuredComment String?            @db.VarChar(280)
-  status            DisputeStatus      @default(OPEN)
+  structuredComment String?                 @db.VarChar(280)
+  status            DisputeStatus           @default(OPEN)
   openedFromStatus  OrderStatus
   expiresAt         DateTime
-  version           Int                @default(0)
-  createdAt         DateTime           @default(now())
+  version           Int                     @default(0)
+  createdAt         DateTime                @default(now())
   resolvedAt        DateTime?
   cancelledAt       DateTime?
-  order             Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  openedBy          User               @relation("DisputeOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  order             Order                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  openedBy          User                    @relation("DisputeOpener", fields: [openedById], references: [id], onDelete: Restrict)
   responses         DisputeResponse[]
   resolution        DisputeResolution?
   refunds           RefundOperation?
   legalHold         LegalHold?
+  itemScope         DisputeOrderItemScope[]
 
   @@unique([orderId, sequence])
   @@index([orderId, status])
   @@index([status, createdAt])
+}
+
+model DisputeOrderItemScope {
+  disputeId   String      @db.Uuid
+  orderItemId String      @db.Uuid
+  createdAt   DateTime    @default(now())
+  dispute     DisputeCase @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+  orderItem   OrderItem   @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@id([disputeId, orderItemId])
 }
 
 model DisputeResponse {
@@ -1671,11 +1893,28 @@ model ProductionCycle {
   printReadyVersion   PrintReadyVersion     @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
   assignment          PartnerAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   resolution          DisputeResolution?    @relation(fields: [resolutionId], references: [id], onDelete: Restrict)
-  printJob            PrintJob?
+  printJobs           PrintJob[]
+  items               ProductionCycleItem[]
   fulfillment         OrderFulfillment?
 
   @@unique([orderId, sequence])
   @@index([orderId, status])
+}
+
+model ProductionCycleItem {
+  id                  String            @id @default(uuid()) @db.Uuid
+  productionCycleId   String            @db.Uuid
+  orderItemId         String            @db.Uuid
+  sequence            Int
+  printReadyVersionId String            @db.Uuid
+  createdAt           DateTime          @default(now())
+  productionCycle     ProductionCycle   @relation(fields: [productionCycleId], references: [id], onDelete: Restrict)
+  orderItem           OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  printReadyVersion   PrintReadyVersion @relation(fields: [printReadyVersionId], references: [id], onDelete: Restrict)
+  printJob            PrintJob?
+
+  @@unique([productionCycleId, sequence])
+  @@unique([productionCycleId, orderItemId])
 }
 
 model RetentionPolicy {
