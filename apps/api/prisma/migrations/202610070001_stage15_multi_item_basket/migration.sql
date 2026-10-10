@@ -333,6 +333,8 @@ ALTER TABLE "public"."ProductionCycleItem" ADD CONSTRAINT "ProductionCycleItem_o
 ALTER TABLE "public"."ProductionCycleItem" ADD CONSTRAINT "ProductionCycleItem_printReadyVersionId_fkey" FOREIGN KEY ("printReadyVersionId") REFERENCES "public"."PrintReadyVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Stage 15 bounded invariants and presentation locales.
+ALTER TABLE "OrderDraft" DROP CONSTRAINT "OrderDraft_locale_check";
+ALTER TABLE "OrderDraft" ADD CONSTRAINT "OrderDraft_locale_check" CHECK ("locale" IN ('uz','ru','en'));
 ALTER TABLE "OrderBasket" ADD CONSTRAINT "OrderBasket_locale_check" CHECK ("locale" IN ('uz','ru','en'));
 ALTER TABLE "BasketQuote" ADD CONSTRAINT "BasketQuote_money_check" CHECK ("currency" = 'UZS' AND "subtotalMinor" >= 0 AND "discountMinor" >= 0 AND "totalMinor" >= 0 AND "totalMinor" = "subtotalMinor" - "discountMinor");
 ALTER TABLE "BasketQuoteItem" ADD CONSTRAINT "BasketQuoteItem_values_check" CHECK ("sequence" BETWEEN 1 AND 10 AND "quantity" > 0 AND "currency" = 'UZS' AND "subtotalMinor" >= 0 AND "discountMinor" >= 0 AND "totalMinor" = "subtotalMinor" - "discountMinor");
