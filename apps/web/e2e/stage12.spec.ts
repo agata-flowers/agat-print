@@ -57,7 +57,10 @@ test("UZ discovery keeps automatic assignment understandable and private", async
 }) => {
   await page.goto("/studios?lang=uz&serviceCode=DOCUMENT_PRINT");
   await expect(page.getByRole("heading", { name: "Studiyalar" })).toBeVisible();
-  await expect(page.getByText("Studiya 1", { exact: true })).toBeVisible();
+  // Use the independently moderated discovery fixture. Studio 1 is selected
+  // by the preceding checkout flow and is intentionally allowed to acquire
+  // mutable workload state while that order progresses.
+  await expect(page.getByText("Studiya 900", { exact: true })).toBeVisible();
   const body = await page.locator("body").innerText();
   expect(body).not.toMatch(
     /branchId|partnerId|latitude|longitude|capacity|[0-9a-f]{8}-[0-9a-f-]{27,}/i,
