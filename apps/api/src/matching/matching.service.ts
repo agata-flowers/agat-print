@@ -584,7 +584,7 @@ export class MatchingService {
   ) {
     const partner = await this.requireApprovedPartner(ownerId);
     const prepared = this.idempotency.prepare(
-      `partner-item-status:${sha256(`${partner.id}:${orderId}:${sequence}`)}`,
+      `partner-item:${sha256(`${partner.id}:${orderId}:${sequence}`)}`,
       key,
       input,
     );
