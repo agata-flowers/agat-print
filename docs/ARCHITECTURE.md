@@ -107,7 +107,10 @@ erDiagram
   PartnerOffer ||--o| PartnerAssignment : accepts
   PartnerPayoutSnapshot ||--o| PartnerAssignment : binds
   PartnerAssignment ||--o{ ProductionCycle : executes
-  ProductionCycle ||--o| PrintJob : prints
+  ProductionCycle ||--|{ ProductionCycleItem : batches
+  Order ||--|{ OrderItem : contains
+  OrderItem ||--o{ ProductionCycleItem : reproduces
+  ProductionCycleItem ||--o| PrintJob : prints
   PrintReadyVersion ||--o{ ProductionCycle : immutable_source
   Branch ||--o{ PrinterAgent : authorizes
   PrinterAgent ||--o{ PrintJob : leases
@@ -460,3 +463,25 @@ erDiagram
   Payment ||--o{ RefundOperation : refunds
   Payment ||--o{ FinancialReconciliation : reconciles
 ```
+
+## Stage 15 multi-item single-studio basket
+
+`OrderBasket` is an owner-scoped CAS aggregate over one to ten independently
+approved `OrderDraft` records. `BasketQuote` freezes ordered membership and
+per-item catalog, configuration, approval, print-ready and integer-UZS price
+lineage. Checkout creates one existing `Order`, one `PriceSnapshot`, one
+fulfillment selection and normalized immutable `OrderItem` rows in a serializable
+transaction. Legacy order pointers remain the sequence-one compatibility view.
+
+Matching evaluates every `OrderItem` against the same branch capability and
+catalog version; failure of any item makes the candidate ineligible. One offer
+holds one aggregate reservation and one accepted assignment. A production cycle
+contains one immutable `ProductionCycleItem` and one leased `PrintJob` per order
+item. The completion barrier permits `READY` only after every item job completes.
+No order splitting, split payment or second state machine exists.
+
+An optional `DisputeOrderItemScope` freezes the affected item subset. A
+reprint resolution creates a new cycle containing exactly that subset and one
+new job per item; an omitted scope retains the established whole-order
+behavior. Basket membership history is retained, while an advisory transaction
+lock prevents one draft from joining two active baskets concurrently.

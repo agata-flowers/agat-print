@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AGAT PRINT API
-  version: 0.14.0
+  version: 0.15.0
 servers:
   - url: /api/v1
 paths:
@@ -1294,6 +1294,173 @@ paths:
             description: Invalid lifecycle,
             stale version or network ineligible,
           }
+  /baskets:
+    get:
+      summary: List resumable customer baskets
+      security: [{ AccessCookie: [] }]
+      responses: { "200": { description: Owner-scoped baskets } }
+    post:
+      summary: Create a resumable basket
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBasket" }
+      responses:
+        {
+          "201": { description: Basket created },
+          "409": { description: Idempotency conflict },
+        }
+  /baskets/{basketId}:
+    parameters: [{ $ref: "#/components/parameters/BasketId" }]
+    get:
+      summary: Read an owned basket and its safe item projection
+      security: [{ AccessCookie: [] }]
+      responses:
+        {
+          "200": { description: Basket },
+          "404": { description: Not found or not owned },
+        }
+  /baskets/{basketId}/items:
+    parameters: [{ $ref: "#/components/parameters/BasketId" }]
+    post:
+      summary: Add an approved draft to a basket using CAS
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddBasketItem" }
+      responses:
+        {
+          "201": { description: Item added },
+          "409": { description: Stale basket or invalid item },
+        }
+  /baskets/{basketId}/items/{itemId}:
+    parameters:
+      - { $ref: "#/components/parameters/BasketId" }
+      - { $ref: "#/components/parameters/BasketItemId" }
+    patch:
+      summary: Reorder a basket item using CAS
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReorderBasketItem" }
+      responses: { "200": { description: Basket updated } }
+    delete:
+      summary: Remove a basket item and invalidate its active quote
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BasketVersion" }
+      responses: { "200": { description: Basket updated } }
+  /baskets/{basketId}/studio-preference:
+    parameters: [{ $ref: "#/components/parameters/BasketId" }]
+    put:
+      summary: Set one basket-level studio preference
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BasketStudioPreference" }
+      responses: { "200": { description: Preference saved } }
+  /baskets/{basketId}/fulfillment-preference:
+    parameters: [{ $ref: "#/components/parameters/BasketId" }]
+    put:
+      summary: Set one encrypted basket-level pickup or delivery preference
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BasketFulfillmentPreference" }
+      responses: { "200": { description: Preference saved } }
+  /baskets/{basketId}/quote:
+    parameters: [{ $ref: "#/components/parameters/BasketId" }]
+    post:
+      summary: Freeze an immutable authoritative multi-item quote
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BasketVersion" }
+      responses:
+        {
+          "201": { description: Aggregate quote },
+          "409": { description: Stale item lineage },
+        }
+  /baskets/{basketId}/checkout:
+    parameters: [{ $ref: "#/components/parameters/BasketId" }]
+    post:
+      summary: Atomically create one order and immutable item lineage
+      security: [{ AccessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BasketVersion" }
+      responses:
+        {
+          "201": { description: One order awaiting payment },
+          "409": { description: Stale quote or CAS conflict },
+        }
+  /partner/orders/{orderId}/items/{sequence}/print-ready:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+      - in: path
+        name: sequence
+        required: true
+        schema: { type: integer, minimum: 1, maximum: 10 }
+    post:
+      summary: Issue assigned partner short-lived access for one order item
+      security: [{ AccessCookie: [] }]
+      responses:
+        {
+          "201": { description: Short-lived signed URL },
+          "403": { description: Not assigned },
+        }
+  /partner/orders/{orderId}/items/{sequence}/status:
+    post:
+      summary: Advance one assigned manual production item
+      description: The aggregate order reaches READY only after every item job is COMPLETED.
+      security: [{ AccessCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - in: path
+          name: sequence
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 10 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { type: string, enum: [PRINTING, COMPLETED] }
+      responses:
+        "201": { description: Item advanced idempotently }
+        "403": { description: Not assigned }
+        "409": { description: Invalid item or aggregate transition }
 components:
   securitySchemes:
     AccessCookie:
@@ -1301,6 +1468,16 @@ components:
       in: cookie
       name: agat_access
   parameters:
+    BasketId:
+      in: path
+      name: basketId
+      required: true
+      schema: { type: string, format: uuid }
+    BasketItemId:
+      in: path
+      name: itemId
+      required: true
+      schema: { type: string, format: uuid }
     DisputeId:
       in: path
       name: disputeId
@@ -1372,6 +1549,54 @@ components:
       required: true
       schema: { type: string, minLength: 16, maxLength: 200 }
   schemas:
+    BasketVersion:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, minimum: 0 }
+    CreateBasket:
+      type: object
+      additionalProperties: false
+      required: [locale]
+      properties:
+        locale: { type: string, enum: [uz, ru, en] }
+    AddBasketItem:
+      allOf:
+        - { $ref: "#/components/schemas/BasketVersion" }
+        - type: object
+          required: [draftId]
+          properties:
+            draftId: { type: string, format: uuid }
+    ReorderBasketItem:
+      allOf:
+        - { $ref: "#/components/schemas/BasketVersion" }
+        - type: object
+          required: [sequence]
+          properties:
+            sequence: { type: integer, minimum: 1, maximum: 10 }
+    BasketStudioPreference:
+      allOf:
+        - { $ref: "#/components/schemas/BasketVersion" }
+        - type: object
+          required: [mode, fallbackPolicy]
+          properties:
+            mode: { type: string, enum: [AUTO_ASSIGN, PREFERRED_STUDIO] }
+            fallbackPolicy:
+              {
+                type: string,
+                enum: [ALLOW_ELIGIBLE_ALTERNATIVE, STRICT_PREFERENCE],
+              }
+            studioSlug: { type: string, pattern: "^[a-z0-9][a-z0-9-]{2,79}$" }
+    BasketFulfillmentPreference:
+      allOf:
+        - { $ref: "#/components/schemas/BasketVersion" }
+        - type: object
+          required: [mode, locationCode]
+          properties:
+            mode: { type: string, enum: [PICKUP, DELIVERY] }
+            locationCode: { type: string, pattern: "^[A-Z0-9_]{2,40}$" }
+            address: { type: string, maxLength: 500 }
     StudioPreference:
       type: object
       additionalProperties: false
@@ -1404,6 +1629,12 @@ components:
           type: string
           maxLength: 280
           description: Letters, numbers, spaces and bounded punctuation only. No markup, files or control characters. Never copied into telemetry.
+        itemSequences:
+          type: array
+          uniqueItems: true
+          maxItems: 10
+          description: Optional immutable order-item scope; omission means the whole order.
+          items: { type: integer, minimum: 1, maximum: 10 }
     PartnerDisputeResponse:
       type: object
       additionalProperties: false

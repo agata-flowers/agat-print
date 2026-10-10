@@ -1,5 +1,6 @@
 "use client";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest, apiUpload } from "../../../lib/api";
 import {
@@ -361,6 +362,14 @@ export default function DraftPage() {
           >
             {text.approve}
           </button>
+        )}
+        {draft.layout?.approved && !draft.orderPath && (
+          <Link
+            className="button secondary"
+            href={`/basket?add=${encodeURIComponent(draft.id)}&lang=${locale}`}
+          >
+            {text.addToBasket}
+          </Link>
         )}
         {draft.step === "fulfillment" && (
           <fieldset className="studio-choice" data-testid="fulfillment-step">

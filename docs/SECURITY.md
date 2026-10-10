@@ -238,3 +238,16 @@ included in customer/courier delivery views.
   create a bounded reconciliation state.
 - Payment APIs are `no-store, private` and remain network-only in the service
   worker policy.
+
+## Stage 15 basket privacy boundary
+
+Basket reads and mutations are owner-scoped and non-enumerating. Every mutation
+requires `Idempotency-Key`; membership changes use basket-version CAS and
+invalidate active quotes. Delivery address encryption remains basket/order
+level and plaintext is never persisted in browser storage, logs, audit payloads
+or metric labels. Customer item projections contain bounded sequence, localized
+service presentation, quantity and safe readiness only. Partner access requires
+the active assignment and issues a separate short-lived URL for the requested
+item; object keys never leave the storage adapter. Customer presentation is
+complete in `uz`, `ru` and `en`, while locale is excluded from commercial and
+workflow decisions.

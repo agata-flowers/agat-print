@@ -1,7 +1,6 @@
 # Stage 15 Proposal — Multi-item Single-Studio Print Basket
 
-Status: proposal for review. Implementation requires separate explicit
-approval.
+Status: approved implementation and acceptance baseline.
 
 ## Current accepted baseline
 

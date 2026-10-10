@@ -202,3 +202,11 @@ administrator can publish or retire it under `/admin/partner-listings`. Run
 Inventory-backed retail, multi-partner carts, advanced routing, reviews,
 messaging, document editing and any stage after Stage 12 require separate
 approval.
+
+### Stage 15 basket
+
+The customer can combine up to ten approved print/photo drafts in one
+server-backed basket, obtain one authoritative UZS quote and create one order,
+payment, studio assignment and fulfillment. Basket APIs are under
+`/api/v1/baskets`; all mutations require `Idempotency-Key`. Supported customer
+languages are exactly Uzbek (`uz`), Russian (`ru`) and English (`en`).

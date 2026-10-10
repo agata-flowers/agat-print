@@ -184,3 +184,15 @@ matching/production flow only after authoritative confirmation. RU pickup and
 UZ delivery work with the deterministic internal adapter in development and
 CI. Production remains blocked until a contracted acquiring adapter and real
 secrets are configured; there is no fallback to the internal adapter.
+
+## Stage 15 approved boundary — multi-item single-studio basket
+
+A customer may combine one to ten independently approved print/photo drafts,
+receive one server-authoritative integer-UZS quote, pay once and route the
+complete basket to one studio that is eligible for every item. One aggregate
+capacity reservation, assignment and fulfillment remain authoritative, while
+production and optional aftercare retain immutable per-item lineage. The
+mobile-first journey is complete in Uzbek, Russian and English. Order
+splitting, multiple destinations, inventory-backed goods and split payments
+remain outside this stage. The full contract is
+[`STAGE15_PROPOSAL.md`](STAGE15_PROPOSAL.md).

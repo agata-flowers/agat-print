@@ -34,12 +34,20 @@ type OrderView = {
     feeMinor: string;
     currency: string;
   };
+  items: Array<{
+    sequence: number;
+    serviceCode: string;
+    quantity: number;
+    totalMinor: string;
+    currency: string;
+  }>;
 };
 type DisputeView = {
   id: string;
   category: string;
   status: string;
   resolution: null | { type: string };
+  itemSequences: number[];
 };
 type Timeline = {
   current: string;
@@ -81,6 +89,9 @@ const copy = {
     damaged: "Повреждение",
     missingItems: "Не хватает материалов",
     deliveryFailure: "Проблема доставки",
+    issueScope: "Позиции обращения",
+    allItems: "Весь заказ",
+    item: "Позиция",
   },
   uz: {
     title: "Buyurtmangiz",
@@ -117,6 +128,9 @@ const copy = {
     damaged: "Shikastlangan",
     missingItems: "Yetishmaydi",
     deliveryFailure: "Yetkazish muammosi",
+    issueScope: "Murojaat pozitsiyalari",
+    allItems: "Butun buyurtma",
+    item: "Pozitsiya",
   },
   en: {
     title: "Your order",
@@ -151,6 +165,9 @@ const copy = {
     damaged: "Damaged",
     missingItems: "Missing items",
     deliveryFailure: "Delivery problem",
+    issueScope: "Issue items",
+    allItems: "Whole order",
+    item: "Item",
   },
 } as const;
 const stateLabels = {
@@ -262,6 +279,7 @@ export default function OrderPage() {
   const [completionPin, setCompletionPin] = useState("");
   const [disputes, setDisputes] = useState<DisputeView[]>([]);
   const [category, setCategory] = useState("PRINT_QUALITY");
+  const [disputeItems, setDisputeItems] = useState<number[]>([]);
   const load = useCallback(async () => {
     try {
       const [orderResponse, disputeResponse, timelineResponse] =
@@ -369,7 +387,10 @@ export default function OrderPage() {
       await apiRequest(`/orders/${id}/disputes`, {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ category }),
+        body: JSON.stringify({
+          category,
+          itemSequences: disputeItems.length > 0 ? disputeItems : undefined,
+        }),
       });
       await load();
     } catch {
@@ -537,6 +558,39 @@ export default function OrderPage() {
                 <option value="MISSING_ITEMS">{text.missingItems}</option>
                 <option value="DELIVERY_FAILURE">{text.deliveryFailure}</option>
               </select>
+              {(order?.items.length ?? 0) > 1 && (
+                <fieldset>
+                  <legend>{text.issueScope}</legend>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={disputeItems.length === 0}
+                      onChange={() => setDisputeItems([])}
+                    />{" "}
+                    {text.allItems}
+                  </label>
+                  {order?.items.map((item) => (
+                    <label key={item.sequence}>
+                      <input
+                        type="checkbox"
+                        checked={disputeItems.includes(item.sequence)}
+                        onChange={(event) =>
+                          setDisputeItems((current) =>
+                            event.target.checked
+                              ? [...current, item.sequence].sort(
+                                  (a, b) => a - b,
+                                )
+                              : current.filter(
+                                  (sequence) => sequence !== item.sequence,
+                                ),
+                          )
+                        }
+                      />{" "}
+                      {text.item} {item.sequence}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
               <button className="button secondary" onClick={openDispute}>
                 {text.open}
               </button>

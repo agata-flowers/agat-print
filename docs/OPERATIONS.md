@@ -279,3 +279,22 @@ SQL. Use the finance reconciliation command/API. The durable outbox and
 `FinancialJob` lease make worker restart and redelivery safe. Backups include
 payment, attempt, callback and reconciliation lineage; restore validation must
 confirm one unresolved attempt at most and exactly one successful transition.
+
+## Stage 15 basket rollout and recovery
+
+Deploy the additive Stage 15 migration before enabling basket entry points.
+The migration retains legacy order pointers, backfills normalized item and
+production-cycle lineage where a Stage 11 draft exists, and leaves older
+synthetic/legacy orders on the supported single-item fallback. Once a
+multi-item order exists, rollback is forward-fix only: an older binary must not
+be deployed and immutable basket, quote, item or production history must not be
+dropped.
+
+Backup includes baskets, immutable quotes, normalized order items, dispute
+item scopes, production-cycle items and every referenced non-expired MinIO
+object. Isolated restore must reject missing item lineage, duplicate basket
+checkout, inconsistent item allocations, duplicate production jobs or a
+`PriceSnapshot` total that differs from item allocations plus the one
+fulfillment fee. Tombstone and legal-hold replay remains mandatory before the
+API is enabled. The pilot objectives remain RPO at most 24 hours and RTO at
+most 4 hours.

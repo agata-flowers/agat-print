@@ -25,7 +25,13 @@ export function LoginForm() {
           body: JSON.stringify({ phone }),
         });
         setStep("code");
-        setMessage("Код отправлен.");
+        setMessage(
+          locale === "uz"
+            ? "Kod yuborildi."
+            : locale === "en"
+              ? "Code sent."
+              : "Код отправлен.",
+        );
       } else {
         await apiRequest("/auth/otp/verify", {
           method: "POST",
@@ -48,10 +54,14 @@ export function LoginForm() {
         {step === "phone"
           ? locale === "uz"
             ? "Telefon raqami"
-            : "Номер телефона"
+            : locale === "en"
+              ? "Phone number"
+              : "Номер телефона"
           : locale === "uz"
             ? "Bir martalik kod"
-            : "Одноразовый код"}
+            : locale === "en"
+              ? "One-time code"
+              : "Одноразовый код"}
         <input
           inputMode={step === "phone" ? "tel" : "numeric"}
           autoComplete={step === "phone" ? "tel" : "one-time-code"}
@@ -68,10 +78,14 @@ export function LoginForm() {
         {step === "phone"
           ? locale === "uz"
             ? "Kod olish"
-            : "Получить код"
+            : locale === "en"
+              ? "Get code"
+              : "Получить код"
           : locale === "uz"
             ? "Kirish"
-            : "Войти"}
+            : locale === "en"
+              ? "Sign in"
+              : "Войти"}
       </button>
       <p aria-live="polite">{message}</p>
     </form>

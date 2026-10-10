@@ -187,3 +187,14 @@ production fail-closed configuration, ownership/RBAC, callback replay,
 attempt/outbox ordering, privacy and metrics, and verifies payment lineage
 after encrypted backup and isolated restore. The report and SHA-256 sidecar are
 written on success or failure and uploaded with `if: always()`.
+
+## Stage 15 acceptance
+
+The sequential infrastructure job runs Stage 1–14 unchanged before
+`ops/verify/stage15.sh`. Stage 15 verifies clean and repeated migrations,
+PDF+JPEG and DOCX+PNG baskets, authoritative aggregate pricing, one checkout,
+CAS/idempotency conflicts, ownership isolation, all-item matching, per-item
+printer jobs and the aggregate READY barrier. Playwright retries are disabled
+and cover RU pickup, UZ delivery/recovery and EN locale switching. The encrypted
+backup and isolated restore gate validates basket, order-item, payment,
+fulfillment and production lineage and records measured RPO/RTO.

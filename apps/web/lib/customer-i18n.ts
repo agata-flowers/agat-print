@@ -37,6 +37,16 @@ const copy = {
     allowFallback: "Если студия занята, подобрать другую",
     strictPreference: "Только выбранная студия",
     studioSaved: "Выбор студии сохранён.",
+    basket: "Корзина",
+    addToBasket: "Добавить в корзину",
+    addAnother: "Добавить ещё услугу",
+    basketEmpty: "Корзина пока пуста.",
+    removeItem: "Удалить",
+    basketQuote: "Рассчитать общую цену",
+    basketCheckout: "Оформить один заказ",
+    basketPickup: "Самовывоз из студии",
+    basketDelivery: "Доставка",
+    basketAddress: "Адрес доставки",
   },
   uz: {
     start: "Buyurtma yaratish",
@@ -72,6 +82,16 @@ const copy = {
     allowFallback: "Studiya band bo‘lsa, boshqasini tanlash",
     strictPreference: "Faqat tanlangan studiya",
     studioSaved: "Studiya tanlovi saqlandi.",
+    basket: "Savat",
+    addToBasket: "Savatga qo‘shish",
+    addAnother: "Yana xizmat qo‘shish",
+    basketEmpty: "Savat hozircha bo‘sh.",
+    removeItem: "Olib tashlash",
+    basketQuote: "Umumiy narxni hisoblash",
+    basketCheckout: "Bitta buyurtma qilish",
+    basketPickup: "Studiyadan olib ketish",
+    basketDelivery: "Yetkazib berish",
+    basketAddress: "Yetkazib berish manzili",
   },
   en: {
     start: "Create order",
@@ -107,6 +127,16 @@ const copy = {
     allowFallback: "Choose another studio if this one is busy",
     strictPreference: "Only the selected studio",
     studioSaved: "Studio choice saved.",
+    basket: "Basket",
+    addToBasket: "Add to basket",
+    addAnother: "Add another service",
+    basketEmpty: "Your basket is empty.",
+    removeItem: "Remove",
+    basketQuote: "Calculate total",
+    basketCheckout: "Place one order",
+    basketPickup: "Studio pickup",
+    basketDelivery: "Delivery",
+    basketAddress: "Delivery address",
   },
 } as const;
 
@@ -151,6 +181,11 @@ export const customerError = (code: string, locale: CustomerLocale) => {
       DRAFT_VERSION_CONFLICT:
         "Заказ изменился на другом устройстве. Страница обновлена.",
       CONCURRENT_CHANGE: "Запрос уже выполняется. Обновите состояние заказа.",
+      BASKET_VERSION_CONFLICT:
+        "Корзина изменилась на другом устройстве. Обновите страницу.",
+      BASKET_ITEM_LIMIT: "В одной корзине можно добавить не больше 10 позиций.",
+      ITEM_NOT_READY: "Сначала подтвердите актуальный макет этой позиции.",
+      ITEM_ALREADY_IN_BASKET: "Эта позиция уже находится в активной корзине.",
       PAYMENT_METHOD_UNAVAILABLE: "Этот способ оплаты сейчас недоступен.",
       PAYMENT_ATTEMPT_ACTIVE: "Предыдущая оплата ещё проверяется.",
       PAYMENT_RESULT_UNKNOWN:
@@ -187,6 +222,12 @@ export const customerError = (code: string, locale: CustomerLocale) => {
       DRAFT_VERSION_CONFLICT:
         "Buyurtma boshqa qurilmada o‘zgardi. Sahifa yangilandi.",
       CONCURRENT_CHANGE: "So‘rov bajarilmoqda. Buyurtma holatini yangilang.",
+      BASKET_VERSION_CONFLICT:
+        "Savat boshqa qurilmada o‘zgardi. Sahifani yangilang.",
+      BASKET_ITEM_LIMIT:
+        "Bitta savatga ko‘pi bilan 10 ta pozitsiya qo‘shiladi.",
+      ITEM_NOT_READY: "Avval ushbu pozitsiyaning amaldagi maketini tasdiqlang.",
+      ITEM_ALREADY_IN_BASKET: "Bu pozitsiya faol savatda mavjud.",
       PAYMENT_METHOD_UNAVAILABLE: "Bu to‘lov usuli hozir mavjud emas.",
       PAYMENT_ATTEMPT_ACTIVE: "Oldingi to‘lov hali tekshirilmoqda.",
       PAYMENT_RESULT_UNKNOWN:
@@ -227,6 +268,11 @@ export const customerError = (code: string, locale: CustomerLocale) => {
         "The order changed on another device. The page was refreshed.",
       CONCURRENT_CHANGE:
         "The request is already being processed. Refresh the order status.",
+      BASKET_VERSION_CONFLICT:
+        "The basket changed on another device. Refresh the page.",
+      BASKET_ITEM_LIMIT: "A basket can contain at most 10 items.",
+      ITEM_NOT_READY: "Approve the current layout for this item first.",
+      ITEM_ALREADY_IN_BASKET: "This item is already in an active basket.",
       PAYMENT_METHOD_UNAVAILABLE:
         "This payment method is currently unavailable.",
       PAYMENT_ATTEMPT_ACTIVE: "The previous payment is still being checked.",

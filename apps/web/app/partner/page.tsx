@@ -17,6 +17,12 @@ type ActiveOrder = null | {
   branchName: string;
   fulfillmentMode: "PICKUP" | "DELIVERY" | null;
   deliveryId: string | null;
+  items: {
+    sequence: number;
+    serviceCode: string;
+    quantity: number;
+    productionStatus: "QUEUED" | "PENDING" | "PRINTING" | "COMPLETED";
+  }[];
 };
 type Dispute = {
   id: string;
@@ -81,10 +87,27 @@ export default function PartnerPage() {
     });
     await load();
   };
-  const download = async () => {
+  const updateItemStatus = async (
+    sequence: number,
+    status: "PRINTING" | "COMPLETED",
+  ) => {
+    if (!active) return;
+    await apiRequest(
+      `/partner/orders/${active.orderId}/items/${sequence}/status`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ status }),
+      },
+    );
+    await load();
+  };
+  const download = async (sequence?: number) => {
     if (!active) return;
     const response = await apiRequest(
-      `/partner/orders/${active.orderId}/print-ready`,
+      sequence === undefined
+        ? `/partner/orders/${active.orderId}/print-ready`
+        : `/partner/orders/${active.orderId}/items/${sequence}/print-ready`,
       { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() } },
     );
     const body = (await response.json()) as { url: string };
@@ -164,19 +187,69 @@ export default function PartnerPage() {
             {["PARTNER_ACCEPTED", "REPRINT", "IN_PRODUCTION", "READY"].includes(
               active.status,
             ) && (
-              <button className="button secondary" onClick={download}>
-                Скачать для печати
-              </button>
+              <div className="review-list">
+                {(active.items.length > 0
+                  ? active.items
+                  : [
+                      {
+                        sequence: 1,
+                        serviceCode: "PRINT",
+                        quantity: 1,
+                        productionStatus: "PENDING" as const,
+                      },
+                    ]
+                ).map((item) => (
+                  <article key={item.sequence}>
+                    <p>
+                      Позиция {item.sequence}: {item.serviceCode}, количество{" "}
+                      {item.quantity}
+                    </p>
+                    <button
+                      className="button secondary"
+                      onClick={() =>
+                        download(
+                          active.items.length > 0 ? item.sequence : undefined,
+                        )
+                      }
+                    >
+                      Скачать позицию для печати
+                    </button>
+                    {active.items.length > 0 &&
+                      item.productionStatus === "PENDING" && (
+                        <button
+                          className="button primary"
+                          onClick={() =>
+                            updateItemStatus(item.sequence, "PRINTING")
+                          }
+                        >
+                          Начать позицию
+                        </button>
+                      )}
+                    {active.items.length > 0 &&
+                      item.productionStatus !== "COMPLETED" && (
+                        <button
+                          className="button primary"
+                          onClick={() =>
+                            updateItemStatus(item.sequence, "COMPLETED")
+                          }
+                        >
+                          Позиция готова
+                        </button>
+                      )}
+                  </article>
+                ))}
+              </div>
             )}{" "}
-            {["PARTNER_ACCEPTED", "REPRINT"].includes(active.status) && (
-              <button
-                className="button primary"
-                onClick={() => updateStatus("IN_PRODUCTION")}
-              >
-                Начать печать
-              </button>
-            )}
-            {active.status === "IN_PRODUCTION" && (
+            {active.items.length === 0 &&
+              ["PARTNER_ACCEPTED", "REPRINT"].includes(active.status) && (
+                <button
+                  className="button primary"
+                  onClick={() => updateStatus("IN_PRODUCTION")}
+                >
+                  Начать печать
+                </button>
+              )}
+            {active.items.length === 0 && active.status === "IN_PRODUCTION" && (
               <button
                 className="button primary"
                 onClick={() => updateStatus("READY")}
