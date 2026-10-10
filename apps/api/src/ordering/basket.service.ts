@@ -81,7 +81,7 @@ export class BasketService {
       // There is no basket row to lock yet. Serialize creation by the hashed
       // idempotency identity, then re-check inside the transaction so two
       // concurrent requests cannot create two baskets.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${prepared.scope + ":" + prepared.keyDigest}, 0))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${prepared.scope + ":" + prepared.keyDigest}, 0))`;
       const insideReplay = await tx.idempotencyRecord.findUnique({
         where: {
           scope_keyDigest: {
@@ -153,7 +153,7 @@ export class BasketService {
           where: { id: input.draftId, userId, checkedOutAt: null },
         });
         if (!draft) throw new NotFoundException();
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"basket-draft:" + input.draftId}, 0))`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"basket-draft:" + input.draftId}, 0))`;
         const activeMembership = await tx.orderBasketItem.findFirst({
           where: {
             draftId: input.draftId,
