@@ -22,6 +22,7 @@ export default function StudiosPage() {
   const [studios, setStudios] = useState<Studio[]>([]);
   const [message, setMessage] = useState("");
   useEffect(() => {
+    let active = true;
     const routeParams = new URLSearchParams(window.location.search);
     const params = new URLSearchParams();
     for (const key of [
@@ -38,14 +39,20 @@ export default function StudiosPage() {
     params.set("locale", locale);
     publicApiRequest(`/studios?${params.toString()}`)
       .then((response) => response.json())
-      .then((body: { studios: Studio[] }) => setStudios(body.studios))
-      .catch(() =>
+      .then((body: { studios: Studio[] }) => {
+        if (active) setStudios(body.studios);
+      })
+      .catch(() => {
+        if (!active) return;
         setMessage(
           locale === "uz"
             ? "Studiyalarni yuklab bo‘lmadi. Qayta urinib ko‘ring."
             : "Не удалось загрузить студии. Попробуйте ещё раз.",
-        ),
-      );
+        );
+      });
+    return () => {
+      active = false;
+    };
   }, [locale]);
   return (
     <main className="narrow">
