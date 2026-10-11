@@ -23,6 +23,15 @@
 - security audit теперь является обязательным blocking-шагом CI;
 - обязательные browser acceptance-тесты Stage 11–13 имеют `retries=0`.
 
+Полный audit, включая developer toolchain, дополнительно обнаружил 32 findings
+(3 Critical, 12 High, 14 Moderate, 3 Low), опубликованных для исходных версий
+Vitest/Tinypool, Nest CLI, ESLint, TypeScript ESLint, Turbo и их зависимостей.
+После обновлений осталось 0 Critical, 1 High и 3 Moderate. Единственный High —
+`braces` `GHSA-vfj7-8cjw-p6xm`: patched release отсутствует, пакет используется
+только lint-инструментами со статическими repository-controlled patterns.
+Security gate допускает его только по точному GHSA, имени пакета, `dev=true` и
+ограниченному списку dependency-path prefixes; любое отклонение блокирует CI.
+
 ## 2. Полная матрица 43 исходных findings
 
 Обозначения применимости: **runtime** — достижимый production-код; **bounded** —
@@ -75,6 +84,17 @@
 |  42 | Moderate | `stream-json` / `GHSA-hqr4-qq8f-hg3x`          | тот же                                         | 1.9.1           | bounded: notification JSONC parser is not called        | Upstream blocked; same disposition                                                       |
 |  43 | Moderate | `stream-json` / `GHSA-mjw6-4jj6-33hc`          | тот же                                         | 1.9.1           | bounded: notification assembler is not called           | Upstream blocked; same disposition                                                       |
 
+### Дополнительный toolchain remediation
+
+| Компонент                  | Было                    | Стало                 | Результат                                                     |
+| -------------------------- | ----------------------- | --------------------- | ------------------------------------------------------------- |
+| Vitest / Tinypool          | 3.2.4 / vulnerable path | 4.1.11 / patched path | 3 Critical устранены; 59 API, 16 web и 2 agent tests проходят |
+| Nest CLI                   | 11.0.10                 | 11.0.24               | Обновлены Glob, Webpack и Angular Devkit paths                |
+| ESLint / TypeScript ESLint | 9.34.0 / 8.41.0         | 9.39.5 / 8.71.1       | Patched parser/glob dependency tree                           |
+| Turbo                      | 2.5.6                   | 2.11.7                | Moderate/Low advisories устранены                             |
+| Supertest                  | 7.1.4                   | 7.3.1                 | Dev request parser обновлён; `qs` закреплён на 6.16.0         |
+| `braces`                   | 3.0.3                   | 3.0.3                 | No patched release; bounded explicit non-runtime exception    |
+
 ## 3. Изменения и security invariants
 
 - Next.js `16.3.8`, Playwright `1.55.1`, aligned Nest `11.1.18`, Swagger
@@ -100,13 +120,15 @@
 - `feaffa2` — Next.js/Playwright security patches;
 - `3dab32a` — API/Nest/Prisma/upload/transitive security patches;
 - `4b95f3d` — mandatory security gate и security regressions.
+- `a33146b` — dev-toolchain Critical/High remediation и full-tree audit policy.
 
 ## 5. Локальная проверка
 
 На remediation tree успешно выполнены:
 
 - `pnpm install --frozen-lockfile`;
-- `pnpm security:audit` — 0 Critical, 0 High, exit code 0;
+- `pnpm security:audit` — 0 applicable Critical/High, exit code 0; одна
+  ограниченная и явно выводимая dev-only advisory без patched release;
 - `pnpm run ci`: format, lint, typecheck, tests, Prisma validate, production
   build;
 - tests: API 59 passed, web 16 passed, printer-agent 2 passed;
