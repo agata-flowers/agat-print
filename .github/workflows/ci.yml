@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "codex/security-remediation-stage15"]
 
 permissions:
   contents: read
@@ -39,6 +39,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: Block production Critical and High dependency advisories
+        run: pnpm security:audit
       - run: pnpm db:generate
       - run: pnpm db:validate
       - run: pnpm --filter @agat/api exec prisma migrate deploy

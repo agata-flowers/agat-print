@@ -95,6 +95,43 @@ describe("stage 3 upload policy", () => {
     ).rejects.toMatchObject({ safeCode: "PIXEL_LIMIT_EXCEEDED" });
   });
 
+  it("fails safely for oversized or malformed supported image payloads", async () => {
+    const hugePng = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(hugePng);
+    hugePng.writeUInt32BE(13, 8);
+    hugePng.write("IHDR", 12, "ascii");
+    hugePng.writeUInt32BE(65_535, 16);
+    hugePng.writeUInt32BE(65_535, 20);
+    await expect(
+      validateUpload("PNG", "image/png", hugePng, environment),
+    ).rejects.toMatchObject({ safeCode: "PIXEL_LIMIT_EXCEEDED" });
+
+    const truncatedPng = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    await expect(
+      validateUpload("PNG", "image/png", truncatedPng, environment),
+    ).rejects.toMatchObject({ safeCode: "IMAGE_DECODE_FAILED" });
+
+    await expect(
+      validateUpload(
+        "JPEG",
+        "image/jpeg",
+        Buffer.from([0xff, 0xd8, 0xff]),
+        environment,
+      ),
+    ).rejects.toMatchObject({ safeCode: "IMAGE_DECODE_FAILED" });
+
+    await expect(
+      validateUpload(
+        "JPEG",
+        "image/jpeg",
+        Buffer.alloc(environment.uploadMaxFileBytes + 1, 0xff),
+        environment,
+      ),
+    ).rejects.toMatchObject({ safeCode: "FILE_SIZE_EXCEEDED" });
+  });
+
   it("rejects DOCX compression bombs and path traversal", async () => {
     const bomb = await makeDocx([
       { name: "word/media.bin", value: Buffer.alloc(1024 * 1024) },

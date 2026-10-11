@@ -126,7 +126,7 @@ if [[ -f /etc/apt/sources.list.d/google-chrome.list ]]; then
 fi
 pnpm --filter @agat/web exec playwright install --with-deps chromium
 set +e
-STAGE12_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage12.spec.ts 2>&1 | tee "$work_dir/browser-e2e.log"
+STAGE12_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage12.spec.ts --retries=0 2>&1 | tee "$work_dir/browser-e2e.log"
 browser_status="${PIPESTATUS[0]}"
 set -e
 [[ "$browser_status" -eq 0 ]] || exit "$browser_status"
