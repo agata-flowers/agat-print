@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run src test",
     "db:generate": "prisma generate",
     "db:validate": "node scripts/prisma-validate.mjs",
     "db:migrate": "prisma migrate dev",
@@ -38,7 +38,7 @@
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
-    "@nestjs/cli": "11.0.10",
+    "@nestjs/cli": "11.0.24",
     "@nestjs/testing": "11.1.18",
     "@types/cookie-parser": "1.4.9",
     "@types/express": "5.0.3",
@@ -46,9 +46,9 @@
     "@types/yauzl": "^2.10.3",
     "@types/yazl": "^3.3.1",
     "prisma": "6.19.3",
-    "supertest": "7.1.4",
+    "supertest": "7.3.1",
     "tsx": "4.20.5",
-    "vitest": "3.2.4",
+    "vitest": "4.1.11",
     "yazl": "^3.3.1"
   }
 }

@@ -817,9 +817,7 @@ export class CommerceService {
       ["mock", "internal"].includes(this.env.paymentProvider)
     )
       throw new ConflictException({ code: "PAYMENT_METHOD_UNAVAILABLE" });
-    const scenario = (input.scenario ?? input.simulateOutcome) as
-      | PaymentScenario
-      | undefined;
+    const scenario = input.scenario ?? input.simulateOutcome;
     if (method === "INTERNAL_MVP" && !scenario)
       throw new ConflictException({ code: "INTERNAL_SCENARIO_REQUIRED" });
     const prepared = this.idempotency.prepare(
