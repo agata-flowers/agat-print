@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import type { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { loadEnvironment } from "./config/environment";
+import { disableProxyTrust } from "./security/http-server-policy";
 
 async function bootstrap(): Promise<void> {
   const env = loadEnvironment();
@@ -14,6 +15,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
     rawBody: true,
   });
+  disableProxyTrust(app.getHttpAdapter().getInstance());
   app.setGlobalPrefix("api/v1");
   app.enableCors({
     origin: env.webOrigin,

@@ -11,21 +11,22 @@
     "test": "turbo test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "security:audit": "node ops/security/audit-dependencies.mjs",
     "db:generate": "pnpm --filter @agat/api db:generate",
     "db:validate": "pnpm --filter @agat/api db:validate",
     "db:migrate": "pnpm --filter @agat/api db:migrate",
     "admin:bootstrap": "pnpm --filter @agat/api admin:bootstrap",
-    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm db:validate && pnpm build"
+    "ci": "pnpm security:audit && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm db:validate && pnpm build"
   },
   "devDependencies": {
-    "@eslint/js": "9.34.0",
-    "@next/eslint-plugin-next": "16.3.3",
+    "@eslint/js": "9.39.5",
+    "@next/eslint-plugin-next": "16.3.8",
     "@types/node": "24.3.0",
-    "eslint": "9.34.0",
+    "eslint": "9.39.5",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.6.2",
-    "turbo": "2.5.6",
+    "turbo": "2.11.7",
     "typescript": "5.9.2",
-    "typescript-eslint": "8.41.0"
+    "typescript-eslint": "8.71.1"
   }
 }

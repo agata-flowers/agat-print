@@ -368,7 +368,7 @@ export class OrderingService {
             },
             include: draftInclude,
           });
-          const response = draftView(draft as DraftRow);
+          const response = draftView(draft);
           await tx.idempotencyRecord.create({
             data: this.idempotency.data(
               prepared,

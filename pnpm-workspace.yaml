@@ -2,6 +2,25 @@ packages:
   - apps/*
   - packages/*
 
+overrides:
+  "@nestjs/config>lodash": 4.18.1
+  "@nestjs/platform-express>multer": 2.4.0
+  "@nestjs/swagger>js-yaml": 5.4.3
+  "@prisma/config>deepmerge-ts": 8.0.2
+  "@angular-devkit/core>picomatch": 4.0.7
+  "@eslint/eslintrc>js-yaml": 4.3.2
+  "ajv>fast-uri": 3.1.8
+  "cosmiconfig>js-yaml": 4.3.2
+  "body-parser>qs": 6.16.0
+  "express>proxy-addr": 2.0.8
+  "express>qs": 6.16.0
+  "query-string>decode-uri-component": 0.5.0
+  "postcss>source-map-js": 1.2.2
+  "router>path-to-regexp": 8.4.2
+  "superagent>qs": 6.16.0
+  "minimatch@3>brace-expansion": 1.1.21
+  "minimatch@10>brace-expansion": 5.0.12
+
 allowBuilds:
   "@nestjs/core": true
   "@prisma/client": true

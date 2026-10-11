@@ -5,8 +5,7 @@ export default defineConfig({
   timeout: 180_000,
   expect: { timeout: 120_000 },
   fullyParallel: false,
-  retries:
-    process.env.RUN_STAGE14_BROWSER_E2E === "1" ? 0 : process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: [["line"]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
