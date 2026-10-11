@@ -412,7 +412,11 @@ describe.skipIf(!enabled)("stage 15 multi-item basket DB-E2E", () => {
     expect(order.itemCount).toBe(2);
     const stored = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
-      include: { items: true, priceSnapshot: true, fulfillmentSelection: true },
+      include: {
+        items: { orderBy: { sequence: "asc" } },
+        priceSnapshot: true,
+        fulfillmentSelection: true,
+      },
     });
     expect(stored.items.map((item) => item.sequence)).toEqual([1, 2]);
     expect(stored.priceSnapshot?.totalMinor.toString()).toBe(order.totalMinor);
