@@ -161,3 +161,50 @@ CI, а не помечены локально успешными.
 
 Ветка не должна merge-иться в `main` без отдельного разрешения владельца.
 Stage 16 в remediation не входит.
+
+## 7. Интеграция в main и post-merge regression
+
+Интеграция выполнена без переписывания истории:
+
+- security remediation branch SHA `fe29bab099644abe6fd8aa1631680b087884dd95`:
+  [Actions 38134214910](https://github.com/agata-flowers/agat-print/actions/runs/38134214910),
+  `quality=success`, `infrastructure=success`;
+- merge security remediation в `main`: `a8bfd07e37d199b3d5eb00523625f4a1512f7f7d`;
+- post-merge run 38138325471 обнаружил две не скрытые регрессии в
+  последовательной проверке: stale RU marketplace response в Stage 12 и
+  Prisma `P2034` в Stage 8 reprint production transition;
+- fixes `df719d05330b21c8855362b50a26f72219e4bcfc` и
+  `bc875c47cd465315a38d6e7b2cbd6a06e46c4e81` проверены в
+  [PR Actions 38146328058](https://github.com/agata-flowers/agat-print/actions/runs/38146328058):
+  `quality=success`, `infrastructure=success`, Stage 1–15 sequential
+  regression и все verification artifacts — success;
+- PR #2 объединён обычным merge commit
+  `ca66a373dfe99285494e1cf237562a156e2dd694`;
+- окончательная post-merge проверка этого merge SHA:
+  [Actions 38220462102](https://github.com/agata-flowers/agat-print/actions/runs/38220462102),
+  `quality=success`, `infrastructure=success`, Stage 1–15 — success.
+
+### Доказательство исправления Stage 8
+
+- `MatchingService.setProductionStatus` повторяет всю Serializable-транзакцию
+  не более трёх раз с контролируемой экспоненциальной задержкой;
+- распознаются Prisma `P2034` и PostgreSQL serialization/deadlock codes
+  `40001`/`40P01`;
+- после исчерпания попыток наружу возвращается только bounded
+  `CONCURRENT_CHANGE`, без деталей БД;
+- unit regressions проверяют serialization conflict, deadlock, bounded retry,
+  exhaustion и отсутствие retry для посторонних ошибок;
+- DB-E2E проверяет два одновременных idempotent production-запроса и единственные
+  outbox/audit effects;
+- Stage 8 reprint/courier/new-PIN сценарий прошёл в PR и post-merge CI.
+
+### Доказательство исправления Stage 12
+
+- устаревший locale-effect больше не может перезаписать ответ актуальной
+  локали после переключения RU → UZ;
+- Playwright regression детерминированно задерживает первоначальный RU response,
+  сохраняет точную UZ assertion `Studiya 900` и работает с `retries=0`;
+- Stage 12 DB/browser gate прошёл в PR и post-merge CI.
+
+Security audit по-прежнему блокирует применимые production Critical/High.
+Остаточные риски из раздела 6 не изменились. Stage 16 не начинался.
