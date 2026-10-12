@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { localeFrom, type CustomerLocale } from "@agat/i18n";
 
-export type CustomerLocale = "uz" | "ru" | "en";
+export { localeFrom, type CustomerLocale } from "@agat/i18n";
 
 const copy = {
   ru: {
@@ -141,8 +142,6 @@ const copy = {
 } as const;
 
 export const customerCopy = (locale: CustomerLocale) => copy[locale];
-export const localeFrom = (value: string | null | undefined): CustomerLocale =>
-  value === "uz" || value === "en" ? value : "ru";
 
 export function useCustomerLocale() {
   const [locale, setLocale] = useState<CustomerLocale>("ru");

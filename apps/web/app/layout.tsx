@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import "@agat/ui/tokens.css";
 import "./globals.css";
 import { ServiceWorkerRegistration } from "../components/service-worker-registration";
 import { CustomerNavigation } from "../components/customer-navigation";

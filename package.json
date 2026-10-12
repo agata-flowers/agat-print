@@ -10,7 +10,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --check . --end-of-line auto",
     "security:audit": "node ops/security/audit-dependencies.mjs",
     "db:generate": "pnpm --filter @agat/api db:generate",
     "db:validate": "pnpm --filter @agat/api db:validate",
