@@ -55,6 +55,15 @@ test("RU customer selects a moderated studio through the real ordering flow", as
 test("UZ discovery keeps automatic assignment understandable and private", async ({
   page,
 }) => {
+  // The locale hook intentionally hydrates with its server-safe RU default
+  // before reading `lang=uz`. Keep the first response in flight to prove that
+  // it cannot overwrite the authoritative UZ discovery response.
+  await page.route("**/api/v1/studios?*", async (route) => {
+    const locale = new URL(route.request().url()).searchParams.get("locale");
+    if (locale === "ru")
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    await route.continue();
+  });
   await page.goto("/studios?lang=uz&serviceCode=DOCUMENT_PRINT");
   await expect(page.getByRole("heading", { name: "Studiyalar" })).toBeVisible();
   // Use the independently moderated discovery fixture. Studio 1 is selected

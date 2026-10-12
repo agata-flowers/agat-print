@@ -417,13 +417,41 @@ describe.skipIf(!enabled)("stage 6 partner matching and production e2e", () => {
       .set("Idempotency-Key", randomUUID())
       .send({ status: "READY" })
       .expect(409);
-    await second.agent
-      .post(`/api/v1/partner/orders/${order.id}/status`)
-      .set("Origin", origin)
-      .set("X-CSRF-Token", second.csrf)
-      .set("Idempotency-Key", randomUUID())
-      .send({ status: "IN_PRODUCTION" })
-      .expect(201);
+    const productionAuditCount = await prisma.auditEvent.count({
+      where: {
+        actorId: second.userId,
+        targetType: "order",
+        eventType: "PRODUCTION_STATUS_CHANGED",
+      },
+    });
+    const productionKey = randomUUID();
+    const startProduction = () =>
+      second.agent
+        .post(`/api/v1/partner/orders/${order.id}/status`)
+        .set("Origin", origin)
+        .set("X-CSRF-Token", second.csrf)
+        .set("Idempotency-Key", productionKey)
+        .send({ status: "IN_PRODUCTION" })
+        .expect(201);
+    const [firstProduction, replayedProduction] = await Promise.all([
+      startProduction(),
+      startProduction(),
+    ]);
+    expect(replayedProduction.body).toEqual(firstProduction.body);
+    expect(
+      await prisma.outboxEvent.count({
+        where: { aggregateId: order.id, eventType: "ORDER_IN_PRODUCTION" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          actorId: second.userId,
+          targetType: "order",
+          eventType: "PRODUCTION_STATUS_CHANGED",
+        },
+      }),
+    ).toBe(productionAuditCount + 1);
     await second.agent
       .post(`/api/v1/partner/orders/${order.id}/status`)
       .set("Origin", origin)
