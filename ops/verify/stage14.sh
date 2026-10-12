@@ -130,7 +130,7 @@ phase=stage14-browser-e2e
 if [[ -f /etc/apt/sources.list.d/google-chrome.list ]]; then sudo rm -f /etc/apt/sources.list.d/google-chrome.list; fi
 pnpm --filter @agat/web exec playwright install --with-deps chromium
 set +e
-RUN_STAGE14_BROWSER_E2E=1 STAGE13_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage13.spec.ts 2>&1 | tee "$work_dir/browser-e2e.log"
+RUN_STAGE14_BROWSER_E2E=1 STAGE13_PDF_FIXTURE="$PWD/$work_dir/synthetic.pdf" pnpm --filter @agat/web exec playwright test e2e/stage13.spec.ts --retries=0 2>&1 | tee "$work_dir/browser-e2e.log"
 browser_status="${PIPESTATUS[0]}"
 set -e
 [[ "$browser_status" -eq 0 ]] || exit "$browser_status"

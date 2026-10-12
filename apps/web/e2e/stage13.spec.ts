@@ -9,6 +9,68 @@ const syntheticPdf = process.env.STAGE13_PDF_FIXTURE
   : fallbackPdf;
 const stage14Payment = process.env.RUN_STAGE14_BROWSER_E2E === "1";
 
+type PaymentEvidence = {
+  operation: "start" | "confirm";
+  status: number;
+  code: string | null;
+  paymentStatus: string | null;
+};
+
+async function payAndCaptureEvidence(
+  page: Page,
+  buttonName: string,
+): Promise<PaymentEvidence[]> {
+  const evidence: PaymentEvidence[] = [];
+  const capture = async (
+    response: Awaited<ReturnType<Page["waitForResponse"]>>,
+  ) => {
+    const pathname = new URL(response.url()).pathname;
+    if (
+      response.request().method() !== "POST" ||
+      !/\/api\/v1\/orders\/[^/]+\/payment(?:\/confirm)?$/.test(pathname)
+    )
+      return;
+    const body = (await response.json().catch(() => ({}))) as {
+      code?: string;
+      message?: { code?: string };
+      paymentStatus?: string;
+    };
+    evidence.push({
+      operation: pathname.endsWith("/confirm") ? "confirm" : "start",
+      status: response.status(),
+      code: body.code ?? body.message?.code ?? null,
+      paymentStatus: body.paymentStatus ?? null,
+    });
+  };
+  page.on("response", capture);
+  try {
+    await page.getByRole("button", { name: buttonName }).click();
+    await expect
+      .poll(() => evidence.length, {
+        message: `Expected payment start and confirm responses; safe evidence: ${JSON.stringify(evidence)}`,
+        timeout: 30_000,
+      })
+      .toBe(2);
+    expect(evidence).toEqual([
+      {
+        operation: "start",
+        status: 201,
+        code: null,
+        paymentStatus: "PROCESSING",
+      },
+      {
+        operation: "confirm",
+        status: 201,
+        code: null,
+        paymentStatus: "SUCCEEDED",
+      },
+    ]);
+    return evidence;
+  } finally {
+    page.off("response", capture);
+  }
+}
+
 async function reachApprovedLayout(
   page: Page,
   locale: "ru" | "uz",
@@ -99,7 +161,7 @@ test("RU customer commits pickup before the authoritative quote", async ({
   await page.getByRole("button", { name: "Оформить заказ" }).click();
   await expect(page.getByRole("heading", { name: "Ваш заказ" })).toBeVisible();
   if (stage14Payment) {
-    await page.getByRole("button", { name: "Оплатить" }).click();
+    await payAndCaptureEvidence(page, "Оплатить");
     await expect(page.getByText("Оплата подтверждена.")).toBeVisible({
       timeout: 30_000,
     });
@@ -150,7 +212,7 @@ test("UZ customer commits zonal delivery and recovers it after reload", async ({
   ).toBeVisible();
   if (stage14Payment) {
     await page.reload();
-    await page.getByRole("button", { name: "To‘lash" }).click();
+    await payAndCaptureEvidence(page, "To‘lash");
     await expect(page.getByText("To‘lov tasdiqlandi.")).toBeVisible({
       timeout: 30_000,
     });
