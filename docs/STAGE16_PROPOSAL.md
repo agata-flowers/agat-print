@@ -480,8 +480,8 @@ renders. Its stated tests and security conditions must also pass.
 - Preview shows `uz`, `ru` and `en`; locale switching changes presentation only.
 - No internal IDs, raw enums, secrets or personal data exist in fixtures.
 
-**Dependencies:** accepted proposal; no store account or native toolchain.  
-**Estimate:** 4–7 person-days; roughly 3–6 working days.  
+**Dependencies:** accepted proposal; no store account or native toolchain.
+**Estimate:** 4–7 person-days; roughly 3–6 working days.
 **First owner-visible checkpoint:** the owner can open the Web customer preview
 and inspect the proposed Android/Windows layouts in a browser at the end of
 16.1.
@@ -507,8 +507,8 @@ and inspect the proposed Android/Windows layouts in a browser at the end of
 - The APK is labelled **visual preview**: it is not yet evidence of real auth,
   upload, payment or store readiness.
 
-**Dependencies:** 16.1; Android SDK/Java in CI; macOS runner for iOS compile.  
-**Estimate:** 7–11 person-days; roughly 1–2 weeks.  
+**Dependencies:** 16.1; Android SDK/Java in CI; macOS runner for iOS compile.
+**Estimate:** 7–11 person-days; roughly 1–2 weeks.
 **Demonstration checkpoint:** first APK the owner can install. It is an
 interactive visual preview, not yet the working end-to-end pilot APK.
 
@@ -535,8 +535,8 @@ interactive visual preview, not yet the working end-to-end pilot APK.
 - Installer is explicitly marked internal/unsigned until a signing certificate
   exists; it is not proof of printer compatibility.
 
-**Dependencies:** 16.1; Rust/Tauri/WebView2 Windows builder.  
-**Estimate:** 7–12 person-days; roughly 1–2 weeks.  
+**Dependencies:** 16.1; Rust/Tauri/WebView2 Windows builder.
+**Estimate:** 7–12 person-days; roughly 1–2 weeks.
 **Demonstration checkpoint:** first Windows program the owner can install and
 inspect. It has no authority to print or change real order state yet.
 
@@ -564,7 +564,7 @@ inspect. It has no authority to print or change real order state yet.
 - Clean and repeated migrations plus targeted identity/order DB-E2E pass.
 
 **Dependencies:** 16.1–16.2; PostgreSQL; production OTP remains externally
-configured and CI uses the accepted test provider only.  
+configured and CI uses the accepted test provider only.
 **Estimate:** 10–16 person-days; roughly 1.5–3 weeks.
 
 ### Stage 16.5 — Native file/camera bridge, resumable upload and functional APK
@@ -590,8 +590,8 @@ configured and CI uses the accepted test provider only.
   do not leak.
 - Android emulator and physical-device journey pass in `uz/ru/en`.
 
-**Dependencies:** 16.2 and 16.4; Stage 3 services in CI; Android test device.  
-**Estimate:** 12–20 person-days; roughly 2–3.5 weeks.  
+**Dependencies:** 16.2 and 16.4; Stage 3 services in CI; Android test device.
+**Estimate:** 12–20 person-days; roughly 2–3.5 weeks.
 **Demonstration checkpoint:** first **working test APK**. The owner can use a
 synthetic environment to start/resume a real server-side order. This is still
 not a signed Google Play release.
@@ -619,7 +619,7 @@ not a signed Google Play release.
   supplied; no fake production success is claimed.
 
 **Dependencies:** 16.4–16.5; macOS runner. Physical/TestFlight verification
-requires Apple membership, devices and signing.  
+requires Apple membership, devices and signing.
 **Estimate:** 8–14 person-days; roughly 1.5–2.5 weeks, excluding Apple review.
 
 ### Stage 16.7 — Windows operator authority, machine enrollment and virtual print
@@ -645,8 +645,8 @@ requires Apple membership, devices and signing.
   isolated virtual spool directory and reaches the existing aggregate barrier.
 - No assertion or report calls this result compatible with a physical printer.
 
-**Dependencies:** 16.3–16.4; Windows VM and API/Redis/PostgreSQL.  
-**Estimate:** 12–20 person-days; roughly 2–3.5 weeks.  
+**Dependencies:** 16.3–16.4; Windows VM and API/Redis/PostgreSQL.
+**Estimate:** 12–20 person-days; roughly 2–3.5 weeks.
 **Demonstration checkpoint:** first **working Windows pilot application** for
 real API/operator workflow and virtual printing.
 
@@ -680,7 +680,7 @@ duplex, color profile, paper size or physical output.
   document is used in qualification.
 
 **Dependencies:** 16.7; owner-provided physical hardware, current vendor drivers,
-Windows test workstation and an on-site operator.  
+Windows test workstation and an on-site operator.
 **Estimate:** 3–6 person-days for harness/preparation plus 1–3 person-days per
 printer/driver/connection combination; scheduling and driver defects can extend
 calendar time materially.
@@ -714,7 +714,7 @@ printing on a named model requires that model's 16.8 result to be `SUPPORTED`.
 - 16.8 physical results are reported separately and cannot be inferred from the
   green virtual-spool gate.
 
-**Dependencies:** 16.1–16.7; 16.8 evidence when hardware is available.  
+**Dependencies:** 16.1–16.7; 16.8 evidence when hardware is available.
 **Estimate:** 8–14 person-days; roughly 1.5–2.5 weeks, plus root-cause fixes
 found by the final regression.
 
@@ -750,17 +750,16 @@ Preferred hosted route:
 
 Local fallback when no preview host is approved:
 
-1. Install Docker Desktop for Windows once and confirm it is running.
-2. Download the `stage16-web-preview-windows` artifact and its `.sha256` file
+1. Download the `stage16-web-preview-windows` artifact and its `.sha256` file
    from GitHub Actions.
-3. In PowerShell run
+2. In PowerShell run
    `Get-FileHash .\stage16-web-preview-windows.zip -Algorithm SHA256` and compare
    it with the published checksum.
-4. Extract the archive and double-click `Start-AGAT-Web-Preview.cmd`.
-5. Wait for the health indicator, then use the browser page opened at a local
-   address. The script must not require editing `.env` or source files.
-6. Double-click `Stop-AGAT-Web-Preview.cmd` after review. The package removes
-   synthetic containers/temporary data but never deletes unrelated Docker data.
+3. Extract the archive and double-click `Start-AGAT-Web-Preview.cmd`.
+4. The page opens on local-only `127.0.0.1`; the package requires no Docker,
+   source editing, `.env`, account or credentials.
+5. Return to the launcher window and press `Ctrl+C` after review. It creates no
+   containers, services, customer files or persistent application data.
 
 ### 20.2 Install the Android APK from Windows
 

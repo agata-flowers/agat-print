@@ -1,5 +1,24 @@
 # AGAT PRINT
 
+## Stage 16.1 visual preview
+
+The presentation-only preview demonstrates the customer Web journey, a mobile
+browser direction and the future studio workstation using synthetic data. It
+does not call production APIs or create files, payments or orders.
+
+```bash
+pnpm --filter @agat/platform-preview dev
+```
+
+Open `http://127.0.0.1:4173`, switch between `uz`, `ru` and `en`, and select a
+surface from the preview header. CI publishes the self-contained
+`stage16-ui-preview` artifact; Windows owners can extract its ZIP and
+double-click `Start-AGAT-Web-Preview.cmd` without editing source or `.env`.
+
+The approved boundary and checks are documented in
+`docs/STAGE16_1_CONTRACT.md`. Native Android/iOS and Windows applications are
+not part of Stage 16.1.
+
 Foundation for the AGAT PRINT mobile-first printing platform. This repository
 implements stages 1–9: planning, platform foundation, protected upload,
 isolated processing, preflight, immutable layout artifacts, manual review and
