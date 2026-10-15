@@ -13,6 +13,7 @@
     "db:validate": "node scripts/prisma-validate.mjs",
     "db:migrate": "prisma migrate dev",
     "admin:bootstrap": "tsx src/cli/admin-bootstrap.ts",
+    "pilot:seed": "node scripts/pilot-seed.mjs",
     "processing:worker": "tsx src/cli/processing-worker.ts"
   },
   "dependencies": {
