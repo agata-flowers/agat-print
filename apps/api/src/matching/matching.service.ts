@@ -154,75 +154,67 @@ export class MatchingService {
     return this.startOrder(payment.orderId, deliveryDedupKey);
   }
 
-  async startOrder(orderId: string, deliveryDedupKey: string) {
+  async startOrder(
+    orderId: string,
+    deliveryDedupKey: string,
+  ): Promise<{ duplicate: boolean; offerCreated?: boolean }> {
     const existing = await this.prisma.inboxOperation.findUnique({
       where: { dedupKey: deliveryDedupKey },
     });
     if (existing) return { duplicate: true };
 
-    let result: { duplicate: boolean; offerCreated?: boolean } | undefined;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        result = await this.prisma.$transaction(
-          async (tx) => {
-            await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
-            const order = await tx.order.findUnique({
-              where: { id: orderId },
-              include: {
-                priceSnapshot: true,
-                matching: true,
-                layout: { include: { upload: true } },
-                items: {
-                  include: {
-                    layout: { include: { upload: true } },
-                    printReadyVersion: true,
-                  },
+    return withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
+          const order = await tx.order.findUnique({
+            where: { id: orderId },
+            include: {
+              priceSnapshot: true,
+              matching: true,
+              layout: { include: { upload: true } },
+              items: {
+                include: {
+                  layout: { include: { upload: true } },
+                  printReadyVersion: true,
                 },
-                studioSelection: true,
-                fulfillmentSelection: true,
               },
-            });
-            if (!order || !order.priceSnapshot) throw new NotFoundException();
-            if (order.status !== "PAID") {
-              if (order.matching) return { duplicate: true };
-              throw new ConflictException({ code: "ORDER_NOT_PAID" });
-            }
-            const matching = await tx.orderMatching.create({
-              data: { orderId },
-            });
-            const changed = await tx.order.updateMany({
-              where: { id: orderId, version: order.version, status: "PAID" },
-              data: { status: "MATCHING", version: { increment: 1 } },
-            });
-            if (changed.count !== 1)
-              throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
-            const next = await this.createNextOffer(
-              tx,
-              order,
-              matching.version,
-              order.version + 1,
-            );
-            await tx.inboxOperation.create({
-              data: {
-                dedupKey: deliveryDedupKey,
-                operation: "START_MATCHING",
-                resultId: next?.id ?? matching.id,
-              },
-            });
-            return { duplicate: false, offerCreated: Boolean(next) };
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-        );
-        break;
-      } catch (error) {
-        const retryable =
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2034";
-        if (!retryable || attempt === 2) throw error;
-      }
-    }
-    if (!result) throw new ConflictException({ code: "CONCURRENT_MATCHING" });
-    return result;
+              studioSelection: true,
+              fulfillmentSelection: true,
+            },
+          });
+          if (!order || !order.priceSnapshot) throw new NotFoundException();
+          if (order.status !== "PAID") {
+            if (order.matching) return { duplicate: true };
+            throw new ConflictException({ code: "ORDER_NOT_PAID" });
+          }
+          const matching = await tx.orderMatching.create({
+            data: { orderId },
+          });
+          const changed = await tx.order.updateMany({
+            where: { id: orderId, version: order.version, status: "PAID" },
+            data: { status: "MATCHING", version: { increment: 1 } },
+          });
+          if (changed.count !== 1)
+            throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+          const next = await this.createNextOffer(
+            tx,
+            order,
+            matching.version,
+            order.version + 1,
+          );
+          await tx.inboxOperation.create({
+            data: {
+              dedupKey: deliveryDedupKey,
+              operation: "START_MATCHING",
+              resultId: next?.id ?? matching.id,
+            },
+          });
+          return { duplicate: false, offerCreated: Boolean(next) };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
   }
 
   async partnerOffers(ownerId: string) {
