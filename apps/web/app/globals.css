@@ -624,6 +624,160 @@ select:focus-visible {
   margin: 24px 0;
 }
 
+.studio-workspace {
+  padding: clamp(40px, 6vw, 82px) 0;
+}
+
+.studio-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 30px;
+  justify-content: space-between;
+}
+
+.studio-heading h1 {
+  font-size: clamp(44px, 6vw, 76px);
+}
+
+.studio-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 30px 0;
+}
+
+.studio-grid {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
+}
+
+.workspace-card {
+  background: var(--agat-surface);
+  border: 1px solid var(--agat-border);
+  border-radius: var(--agat-radius-md);
+  box-shadow: var(--agat-shadow-sm);
+  padding: clamp(22px, 3vw, 34px);
+}
+
+.workspace-card-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.workspace-card-heading h2 {
+  font-family: var(--agat-font-display);
+  font-size: 28px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.count-badge,
+.status-pill {
+  background: var(--agat-surface-muted);
+  border-radius: 999px;
+  color: var(--agat-brand);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 11px;
+}
+
+.offer-card,
+.production-item,
+.dispute-card {
+  border-top: 1px solid var(--agat-border);
+  padding: 22px 0;
+}
+
+.offer-card:first-of-type,
+.production-item:first-child,
+.dispute-card:first-of-type {
+  border-top: 0;
+}
+
+.offer-card dl {
+  color: var(--agat-muted);
+  display: grid;
+  font-size: 13px;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.offer-card dl div {
+  display: grid;
+  gap: 3px;
+}
+
+.offer-card dd {
+  color: var(--agat-ink);
+  font-weight: 750;
+  margin: 0;
+}
+
+.compact-actions {
+  margin: 16px 0 0;
+}
+
+.compact-actions .button {
+  min-height: 42px;
+  padding: 0 15px;
+}
+
+.active-production > p {
+  color: var(--agat-muted);
+}
+
+.production-items {
+  display: grid;
+  gap: 4px;
+}
+
+.production-item {
+  align-items: center;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, auto);
+}
+
+.production-item h3 {
+  font-family: var(--agat-font-display);
+  font-size: 24px;
+  font-weight: 500;
+  margin: 7px 0;
+}
+
+.production-item p {
+  color: var(--agat-muted);
+  margin: 0;
+}
+
+.handoff-card {
+  margin-top: 24px;
+}
+
+.disputes-card {
+  margin-top: 22px;
+}
+
+.dispute-card {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.empty-state,
+.workspace-message {
+  color: var(--agat-muted);
+}
+
+.workspace-message {
+  min-height: 24px;
+}
+
 @keyframes pulse {
   to {
     background-position: -200% 0;
@@ -684,6 +838,18 @@ select:focus-visible {
     gap: 12px;
   }
   .service-grid {
+    grid-template-columns: 1fr;
+  }
+  .studio-heading {
+    flex-direction: column;
+  }
+  .studio-grid {
+    grid-template-columns: 1fr;
+  }
+  .production-item,
+  .dispute-card {
+    align-items: stretch;
+    display: grid;
     grid-template-columns: 1fr;
   }
 }
