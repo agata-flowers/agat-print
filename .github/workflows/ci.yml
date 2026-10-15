@@ -328,3 +328,30 @@ jobs:
             outputs/stage16-web-preview-windows.zip.sha256
             apps/preview/test-results
           if-no-files-found: error
+      - name: Initialize stage 16.1F diagnostic artifact
+        if: always()
+        run: |
+          printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage16-1f-verification-report.json
+          sha256sum outputs/stage16-1f-verification-report.json > outputs/stage16-1f-verification-report.sha256
+      - name: Run stage 16.1F functional customer and studio Web verification
+        run: |
+          set +e
+          bash ops/verify/stage16-1f.sh
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            diagnostic="$(node -e 'const fs=require("node:fs"); const p="outputs/stage16-1f-verification-report.json"; if(!fs.existsSync(p)){process.stdout.write("phase=report-missing; failureLine=unknown"); process.exit(0)} const r=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(`phase=${r.phase}; failureLine=${r.failureLine ?? "unknown"}`)')"
+            echo "::error title=Stage 16.1F verification diagnostic::$diagnostic"
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage16-functional-web-pilot
+          path: |
+            outputs/stage16-1f-verification-report.json
+            outputs/stage16-1f-verification-report.sha256
+            outputs/stage16-functional-web-windows.zip
+            outputs/stage16-functional-web-windows.zip.sha256
+            apps/web/test-results
+          if-no-files-found: error

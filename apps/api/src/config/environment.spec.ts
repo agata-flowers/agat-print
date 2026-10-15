@@ -21,6 +21,21 @@ describe("environment validation", () => {
     expect(loadEnvironment(base).deliveryProvider).toBe("internal");
     expect(loadEnvironment(base).stage13FulfillmentEnabled).toBe(false);
   });
+  it("uses a separate browser-reachable object-storage signing origin", () => {
+    expect(
+      loadEnvironment({
+        ...base,
+        MINIO_ENDPOINT: "http://minio:9000",
+        MINIO_PUBLIC_ENDPOINT: "https://objects.example.invalid",
+      }).minioPublicEndpoint,
+    ).toBe("https://objects.example.invalid");
+    expect(
+      loadEnvironment({
+        ...base,
+        MINIO_ENDPOINT: "http://minio:9000",
+      }).minioPublicEndpoint,
+    ).toBe("http://minio:9000");
+  });
   it("rejects mock OTP in production", () => {
     expect(() =>
       loadEnvironment({

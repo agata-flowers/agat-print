@@ -19,6 +19,21 @@ The approved boundary and checks are documented in
 `docs/STAGE16_1_CONTRACT.md`. Native Android/iOS and Windows applications are
 not part of Stage 16.1.
 
+## Stage 16.1F functional Web pilot
+
+The real `apps/web` customer and studio interfaces reuse the accepted API,
+processing, commerce, matching and fulfillment aggregates. On Windows with
+Docker Desktop running, double-click `Start-AGAT-Functional-Web.cmd`; the
+launcher validates Compose, builds the isolated runtime, deploys migrations,
+creates only synthetic development fixtures, waits for readiness and opens
+`http://localhost:3000/?lang=ru`. Double-click
+`Stop-AGAT-Functional-Web.cmd` to stop the stack while retaining pilot data.
+
+The three synthetic role numbers and the owner walkthrough are documented in
+`ops/pilot/README_RU.txt`. Mock OTP/payment/fiscal adapters are restricted to
+development/test and production startup remains fail-closed. Stage 16.1F does
+not add native shells, public hosting or a second backend.
+
 Foundation for the AGAT PRINT mobile-first printing platform. This repository
 implements stages 1–9: planning, platform foundation, protected upload,
 isolated processing, preflight, immutable layout artifacts, manual review and

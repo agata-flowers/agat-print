@@ -12,6 +12,51 @@ const pilot = {
 const optionSchema = {
   fields: [
     {
+      code: "WIDTH_MM",
+      labelRu: "Ширина",
+      labelUz: "Kenglik",
+      labelEn: "Width",
+      required: true,
+      values: [
+        {
+          code: "210",
+          labelRu: "210 мм",
+          labelUz: "210 mm",
+          labelEn: "210 mm",
+        },
+      ],
+    },
+    {
+      code: "HEIGHT_MM",
+      labelRu: "Высота",
+      labelUz: "Balandlik",
+      labelEn: "Height",
+      required: true,
+      values: [
+        {
+          code: "297",
+          labelRu: "297 мм",
+          labelUz: "297 mm",
+          labelEn: "297 mm",
+        },
+      ],
+    },
+    {
+      code: "MIN_DPI",
+      labelRu: "Качество",
+      labelUz: "Sifat",
+      labelEn: "Quality",
+      required: true,
+      values: [
+        {
+          code: "300",
+          labelRu: "Стандартное",
+          labelUz: "Standart",
+          labelEn: "Standard",
+        },
+      ],
+    },
+    {
       code: "PAPER",
       labelRu: "Бумага",
       labelUz: "Qog‘oz",
@@ -44,6 +89,27 @@ const optionSchema = {
           labelRu: "Чёрно-белая",
           labelUz: "Oq-qora",
           labelEn: "Monochrome",
+        },
+      ],
+    },
+    {
+      code: "PHOTO_DOCUMENT",
+      labelRu: "Фото на документы",
+      labelUz: "Hujjat uchun foto",
+      labelEn: "ID photo",
+      required: true,
+      values: [
+        {
+          code: "NO",
+          labelRu: "Нет",
+          labelUz: "Yo‘q",
+          labelEn: "No",
+        },
+        {
+          code: "YES",
+          labelRu: "Да",
+          labelUz: "Ha",
+          labelEn: "Yes",
         },
       ],
     },
@@ -100,7 +166,16 @@ async function ensureCatalog(authorId) {
       (item) =>
         item.serviceCode === service.serviceCode &&
         item.titleEn &&
-        item.descriptionEn,
+        item.descriptionEn &&
+        Array.isArray(item.optionSchema?.fields) &&
+        optionSchema.fields.every((requiredField) =>
+          item.optionSchema.fields.some(
+            (field) =>
+              field.code === requiredField.code &&
+              typeof field.labelEn === "string" &&
+              field.labelEn.length > 0,
+          ),
+        ),
     ),
   );
   if (usable) return;

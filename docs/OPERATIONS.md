@@ -298,3 +298,19 @@ checkout, inconsistent item allocations, duplicate production jobs or a
 fulfillment fee. Tombstone and legal-hold replay remains mandatory before the
 API is enabled. The pilot objectives remain RPO at most 24 hours and RTO at
 most 4 hours.
+
+## Stage 16.1F local functional pilot
+
+The Windows owner entry point is `Start-AGAT-Functional-Web.cmd`. It requires
+Docker Desktop with Linux containers and performs Compose validation, image
+builds, service health checks, forward migrations and an idempotent synthetic
+seed before exposing the local Web. It never enables mock providers under
+`NODE_ENV=production`; the seed refuses any environment outside development or
+test and refuses non-mock OTP/payment configuration.
+
+MinIO storage traffic continues to use the private Compose endpoint. Only
+short-lived signed URL calculation uses `MINIO_PUBLIC_ENDPOINT`, which must be
+the browser-reachable object-storage origin. Do not place credentials in this
+value. Production storage remains private and requires TLS and deployment
+secret-store credentials. The local pilot is not a public deployment and does
+not certify a physical printer or external provider.

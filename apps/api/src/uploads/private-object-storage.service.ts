@@ -7,18 +7,21 @@ export const APP_ENVIRONMENT = Symbol("APP_ENVIRONMENT");
 @Injectable()
 export class PrivateObjectStorageService {
   private readonly client: Client;
+  private readonly signingClient: Client;
 
   constructor(@Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment) {
     const endpoint = new URL(env.minioEndpoint);
-    this.client = new Client({
-      endPoint: endpoint.hostname,
-      port: Number(
-        endpoint.port || (endpoint.protocol === "https:" ? 443 : 80),
-      ),
-      useSSL: endpoint.protocol === "https:",
-      accessKey: env.minioAccessKey,
-      secretKey: env.minioSecretKey,
-    });
+    const publicEndpoint = new URL(env.minioPublicEndpoint);
+    const client = (value: URL) =>
+      new Client({
+        endPoint: value.hostname,
+        port: Number(value.port || (value.protocol === "https:" ? 443 : 80)),
+        useSSL: value.protocol === "https:",
+        accessKey: env.minioAccessKey,
+        secretKey: env.minioSecretKey,
+      });
+    this.client = client(endpoint);
+    this.signingClient = client(publicEndpoint);
   }
 
   private async ensureBucket(): Promise<void> {
@@ -82,7 +85,7 @@ export class PrivateObjectStorageService {
 
   async signedGetUrl(key: string, ttlSeconds: number): Promise<string> {
     await this.ensureBucket();
-    return this.client.presignedGetObject(
+    return this.signingClient.presignedGetObject(
       this.env.minioBucket,
       key,
       ttlSeconds,

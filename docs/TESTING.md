@@ -198,3 +198,17 @@ printer jobs and the aggregate READY barrier. Playwright retries are disabled
 and cover RU pickup, UZ delivery/recovery and EN locale switching. The encrypted
 backup and isolated restore gate validates basket, order-item, payment,
 fulfillment and production lineage and records measured RPO/RTO.
+
+## Stage 16.1F functional Web pilot gate
+
+`bash ops/verify/stage16-1f.sh` runs only after the complete Stage 1–15 and
+Stage 16.1 chain. It builds the API, real Web, processing and backup images,
+deploys migrations twice, applies the idempotent synthetic pilot seed twice,
+and runs one no-retry Playwright journey in separate customer and studio
+browser contexts. The journey uses the existing upload, isolated processing,
+layout approval, basket, authoritative quote, mock-development payment,
+matching, private print-ready download, production and pickup completion
+contracts. It also verifies no-store/privacy telemetry and an encrypted backup
+plus isolated restore with order, price and payment lineage. CI uploads the
+machine-readable report, its SHA-256 sidecar and the checksummed Windows pilot
+archive with `if: always()`; a failed assertion still fails infrastructure.

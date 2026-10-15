@@ -14,6 +14,7 @@ export interface AppEnvironment {
   refreshTtlSeconds: number;
   redisUrl: string;
   minioEndpoint: string;
+  minioPublicEndpoint: string;
   minioAccessKey: string;
   minioSecretKey: string;
   minioBucket: string;
@@ -241,6 +242,10 @@ export function loadEnvironment(
     refreshTtlSeconds: integer(source.REFRESH_TTL_SECONDS, 2_592_000),
     redisUrl: source.REDIS_URL ?? "redis://localhost:6379",
     minioEndpoint: source.MINIO_ENDPOINT ?? "http://localhost:9000",
+    minioPublicEndpoint:
+      source.MINIO_PUBLIC_ENDPOINT ??
+      source.MINIO_ENDPOINT ??
+      "http://localhost:9000",
     minioAccessKey: source.MINIO_ACCESS_KEY ?? "development-only",
     minioSecretKey: source.MINIO_SECRET_KEY ?? "development-only-change-me",
     minioBucket: source.MINIO_BUCKET ?? "agat-private",
