@@ -486,6 +486,27 @@ renders. Its stated tests and security conditions must also pass.
 and inspect the proposed Android/Windows layouts in a browser at the end of
 16.1.
 
+### Stage 16.1F — Functional Web Pilot
+
+**Goal:** connect the Stage 16.1 presentation foundation to the existing
+`apps/web` customer and studio journeys so the owner can run a real synthetic
+order end to end before native application work begins.
+
+The pilot reuses the Stage 1–15 API, processing, pricing, payment, matching and
+fulfilment aggregates. It adds no parallel backend or client-side business
+authority. Delivery is split into connected customer, connected studio,
+repeatable Windows environment and final acceptance checkpoints. The normative
+boundary and acceptance evidence are defined in
+[`STAGE16_1F_CONTRACT.md`](STAGE16_1F_CONTRACT.md).
+
+**Owner-visible checkpoint:** a Windows owner can start the local stack without
+editing source or configuration, complete a synthetic customer order, accept
+it in the studio workspace and observe the customer status change.
+
+**Dependencies:** Stage 16.1 and the accepted Stage 1–15 baseline. Docker
+Desktop with Linux containers is required for the owner environment; real
+external providers are not required and remain fail-closed in production.
+
 ### Stage 16.2 — Capacitor mobile shell and installable visual Android preview
 
 **Result**
