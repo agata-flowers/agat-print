@@ -17,6 +17,7 @@ export class PrivateObjectStorageService {
         endPoint: value.hostname,
         port: Number(value.port || (value.protocol === "https:" ? 443 : 80)),
         useSSL: value.protocol === "https:",
+        region: env.minioRegion,
         accessKey: env.minioAccessKey,
         secretKey: env.minioSecretKey,
       });

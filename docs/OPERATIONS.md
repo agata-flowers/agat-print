@@ -310,7 +310,9 @@ test and refuses non-mock OTP/payment configuration.
 
 MinIO storage traffic continues to use the private Compose endpoint. Only
 short-lived signed URL calculation uses `MINIO_PUBLIC_ENDPOINT`, which must be
-the browser-reachable object-storage origin. Do not place credentials in this
+the browser-reachable object-storage origin. `MINIO_REGION` must match the
+private bucket region and lets signing remain a local operation rather than a
+network probe against that public origin. Do not place credentials in either
 value. Production storage remains private and requires TLS and deployment
 secret-store credentials. The local pilot is not a public deployment and does
 not certify a physical printer or external provider.

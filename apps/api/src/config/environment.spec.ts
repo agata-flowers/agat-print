@@ -27,14 +27,22 @@ describe("environment validation", () => {
         ...base,
         MINIO_ENDPOINT: "http://minio:9000",
         MINIO_PUBLIC_ENDPOINT: "https://objects.example.invalid",
+        MINIO_REGION: "uz-central-1",
       }).minioPublicEndpoint,
     ).toBe("https://objects.example.invalid");
+    expect(
+      loadEnvironment({
+        ...base,
+        MINIO_REGION: "uz-central-1",
+      }).minioRegion,
+    ).toBe("uz-central-1");
     expect(
       loadEnvironment({
         ...base,
         MINIO_ENDPOINT: "http://minio:9000",
       }).minioPublicEndpoint,
     ).toBe("http://minio:9000");
+    expect(loadEnvironment(base).minioRegion).toBe("us-east-1");
   });
   it("rejects mock OTP in production", () => {
     expect(() =>

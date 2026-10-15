@@ -15,6 +15,7 @@ export interface AppEnvironment {
   redisUrl: string;
   minioEndpoint: string;
   minioPublicEndpoint: string;
+  minioRegion: string;
   minioAccessKey: string;
   minioSecretKey: string;
   minioBucket: string;
@@ -246,6 +247,7 @@ export function loadEnvironment(
       source.MINIO_PUBLIC_ENDPOINT ??
       source.MINIO_ENDPOINT ??
       "http://localhost:9000",
+    minioRegion: source.MINIO_REGION ?? "us-east-1",
     minioAccessKey: source.MINIO_ACCESS_KEY ?? "development-only",
     minioSecretKey: source.MINIO_SECRET_KEY ?? "development-only-change-me",
     minioBucket: source.MINIO_BUCKET ?? "agat-private",
