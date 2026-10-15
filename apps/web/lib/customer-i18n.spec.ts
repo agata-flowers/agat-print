@@ -7,6 +7,11 @@ describe("customer UZ/RU/EN presentation", () => {
     expect(localeFrom("unsupported")).toBe("ru");
     expect(customerCopy("uz").checkout).toBe("Buyurtmani rasmiylashtirish");
     expect(customerCopy("en").checkout).toBe("Place order");
+    expect([
+      customerCopy("ru").deliveryAddress,
+      customerCopy("uz").deliveryAddress,
+      customerCopy("en").deliveryAddress,
+    ]).toEqual(["Адрес доставки", "Yetkazish manzili", "Delivery address"]);
   });
 
   it("maps bounded domain errors without exposing internal details", () => {

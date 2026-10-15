@@ -105,7 +105,7 @@ const copy = {
     fulfillmentMethod: "Olish usuli",
     pickup: "Studiyadan olib ketish",
     delivery: "Yetkazib berish",
-    deliveryAddress: "Yetkazib berish manzili",
+    deliveryAddress: "Yetkazish manzili",
     serviceUnavailable: "Xizmatlar vaqtincha mavjud emas.",
     serviceNotFound: "Xizmat topilmadi.",
     loadingServices: "Xizmatlar yuklanmoqda",
