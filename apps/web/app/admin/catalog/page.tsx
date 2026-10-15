@@ -8,43 +8,84 @@ const fields = [
     code: "WIDTH_MM",
     labelRu: "Размер",
     labelUz: "O‘lcham",
+    labelEn: "Size",
     required: true,
-    values: [{ code: "210", labelRu: "A4 — 210 мм", labelUz: "A4 — 210 mm" }],
+    values: [
+      {
+        code: "210",
+        labelRu: "A4 — 210 мм",
+        labelUz: "A4 — 210 mm",
+        labelEn: "A4 — 210 mm",
+      },
+    ],
   },
   {
     code: "HEIGHT_MM",
     labelRu: "Высота",
     labelUz: "Balandlik",
+    labelEn: "Height",
     required: true,
-    values: [{ code: "297", labelRu: "A4 — 297 мм", labelUz: "A4 — 297 mm" }],
+    values: [
+      {
+        code: "297",
+        labelRu: "A4 — 297 мм",
+        labelUz: "A4 — 297 mm",
+        labelEn: "A4 — 297 mm",
+      },
+    ],
   },
   {
     code: "MIN_DPI",
     labelRu: "Качество",
     labelUz: "Sifat",
+    labelEn: "Quality",
     required: true,
-    values: [{ code: "300", labelRu: "Стандартное", labelUz: "Standart" }],
+    values: [
+      {
+        code: "300",
+        labelRu: "Стандартное",
+        labelUz: "Standart",
+        labelEn: "Standard",
+      },
+    ],
   },
   {
     code: "PAPER",
     labelRu: "Бумага",
     labelUz: "Qog‘oz",
+    labelEn: "Paper",
     required: true,
-    values: [{ code: "STANDARD", labelRu: "Стандартная", labelUz: "Standart" }],
+    values: [
+      {
+        code: "STANDARD",
+        labelRu: "Стандартная",
+        labelUz: "Standart",
+        labelEn: "Standard",
+      },
+    ],
   },
   {
     code: "COLOR",
     labelRu: "Цветность",
     labelUz: "Rang",
+    labelEn: "Colour",
     required: true,
-    values: [{ code: "COLOR", labelRu: "Цветная", labelUz: "Rangli" }],
+    values: [
+      {
+        code: "COLOR",
+        labelRu: "Цветная",
+        labelUz: "Rangli",
+        labelEn: "Colour",
+      },
+    ],
   },
   {
     code: "PHOTO_DOCUMENT",
     labelRu: "Фото на документы",
     labelUz: "Hujjat uchun foto",
+    labelEn: "ID photo",
     required: true,
-    values: [{ code: "NO", labelRu: "Нет", labelUz: "Yo‘q" }],
+    values: [{ code: "NO", labelRu: "Нет", labelUz: "Yo‘q", labelEn: "No" }],
   },
 ];
 const initialItems = [

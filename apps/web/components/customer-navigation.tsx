@@ -14,7 +14,7 @@ export function CustomerNavigation() {
         <Link href={`/orders?lang=${locale}`}>{text.orders}</Link>
         <Link href={`/basket?lang=${locale}`}>{text.basket}</Link>
         <Link href={`/notifications?lang=${locale}`}>{text.notifications}</Link>
-        <Link href="/partner">{text.partners}</Link>
+        <Link href={`/partner?lang=${locale}`}>{text.partners}</Link>
       </nav>
       <LanguageSwitcher />
     </>

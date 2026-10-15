@@ -312,7 +312,7 @@ export default function DraftPage() {
               disabled={busy}
               onClick={saveStudio}
             >
-              {locale === "uz" ? "Tanlovni saqlash" : "Сохранить выбор"}
+              {text.saveChoice}
             </button>
           </fieldset>
         )}
@@ -373,9 +373,7 @@ export default function DraftPage() {
         )}
         {draft.step === "fulfillment" && (
           <fieldset className="studio-choice" data-testid="fulfillment-step">
-            <legend>
-              {locale === "uz" ? "Olish usuli" : "Способ получения"}
-            </legend>
+            <legend>{text.fulfillmentMethod}</legend>
             {fulfillmentOptions.map((option) => (
               <label key={`${option.mode}-${option.locationCode}`}>
                 <input
@@ -384,19 +382,13 @@ export default function DraftPage() {
                   checked={fulfillmentMode === option.mode}
                   onChange={() => setFulfillmentMode(option.mode)}
                 />{" "}
-                {option.mode === "PICKUP"
-                  ? locale === "uz"
-                    ? "Studiyadan olib ketish"
-                    : "Самовывоз из студии"
-                  : locale === "uz"
-                    ? "Yetkazib berish"
-                    : "Доставка"}{" "}
-                · {option.feeMinor} UZS
+                {option.mode === "PICKUP" ? text.pickup : text.delivery} ·{" "}
+                {option.feeMinor} UZS
               </label>
             ))}
             {fulfillmentMode === "DELIVERY" && (
               <label>
-                {locale === "uz" ? "Yetkazish manzili" : "Адрес доставки"}
+                {text.deliveryAddress}
                 <input
                   value={deliveryAddress}
                   onChange={(event) => setDeliveryAddress(event.target.value)}
@@ -416,7 +408,7 @@ export default function DraftPage() {
               }
               onClick={saveFulfillment}
             >
-              {locale === "uz" ? "Davom etish" : "Продолжить"}
+              {text.continue}
             </button>
           </fieldset>
         )}
@@ -434,12 +426,8 @@ export default function DraftPage() {
             {draft.fulfillmentPreference && (
               <span>
                 {draft.fulfillmentPreference.mode === "PICKUP"
-                  ? locale === "uz"
-                    ? "Studiyadan olib ketish"
-                    : "Самовывоз из студии"
-                  : locale === "uz"
-                    ? "Yetkazib berish"
-                    : "Доставка"}
+                  ? text.pickup
+                  : text.delivery}
                 :{" "}
                 {fulfillmentOptions.find(
                   (option) =>

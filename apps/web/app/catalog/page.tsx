@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { publicApiRequest } from "../../lib/api";
 import { customerCopy, useCustomerLocale } from "../../lib/customer-i18n";
+import { LanguageSwitcher } from "../../components/language-switcher";
 type Service = {
   slug: string;
   title: string;
@@ -14,6 +15,7 @@ export default function CatalogPage() {
   const text = customerCopy(locale);
   const [services, setServices] = useState<Service[]>([]);
   const [unavailable, setUnavailable] = useState(false);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     void publicApiRequest(`/catalog?locale=${locale}`)
       .then(async (response) =>
@@ -21,26 +23,34 @@ export default function CatalogPage() {
           ((await response.json()) as { services: Service[] }).services,
         ),
       )
-      .catch(() => setUnavailable(true));
+      .catch(() => setUnavailable(true))
+      .finally(() => setLoading(false));
   }, [locale]);
   return (
-    <main className="narrow wide-mobile">
-      <div className="language">
-        <Link href="/catalog?lang=ru">RU</Link>
-        <Link href="/catalog?lang=uz">UZ</Link>
-      </div>
+    <main className="narrow wide-mobile flow-page">
+      <LanguageSwitcher />
       <p className="eyebrow">AGAT PRINT</p>
       <h1>{text.choose}</h1>
-      {unavailable && (
-        <p className="notice error">
-          {locale === "uz"
-            ? "Xizmatlar vaqtincha mavjud emas."
-            : "Услуги временно недоступны."}
-        </p>
+      <p className="lead small">
+        {locale === "uz"
+          ? "Kerakli xizmatni tanlang — keyingi qadamda bosma parametrlarini sozlaysiz."
+          : locale === "en"
+            ? "Choose a service, then configure the print options in the next step."
+            : "Выберите услугу — параметры печати можно настроить на следующем шаге."}
+      </p>
+      {unavailable && <p className="notice error">{text.serviceUnavailable}</p>}
+      {loading && (
+        <div className="loading-card" aria-label={text.loadingServices} />
       )}
       <section className="service-grid">
-        {services.map((service) => (
-          <article className="service-card" key={service.slug}>
+        {services.map((service, index) => (
+          <article
+            className={`service-card tone-${(index % 3) + 1}`}
+            key={service.slug}
+          >
+            <span className="service-icon" aria-hidden="true">
+              {service.acceptedFileKinds.includes("PDF") ? "Aa" : "◫"}
+            </span>
             <h2>{service.title}</h2>
             <p>{service.description}</p>
             <small>{service.acceptedFileKinds.join(" · ")}</small>

@@ -5,8 +5,14 @@ export type CatalogOptionField = {
   code: string;
   labelRu: string;
   labelUz: string;
+  labelEn?: string;
   required: boolean;
-  values: Array<{ code: string; labelRu: string; labelUz: string }>;
+  values: Array<{
+    code: string;
+    labelRu: string;
+    labelUz: string;
+    labelEn?: string;
+  }>;
 };
 
 export type CatalogOptionSchema = { fields: CatalogOptionField[] };
@@ -53,6 +59,8 @@ export function validateCatalogItem(input: {
       field.labelRu.length > 120 ||
       typeof field.labelUz !== "string" ||
       field.labelUz.length > 120 ||
+      (field.labelEn !== undefined &&
+        (typeof field.labelEn !== "string" || field.labelEn.length > 120)) ||
       typeof field.required !== "boolean" ||
       !Array.isArray(field.values) ||
       field.values.length === 0 ||
@@ -66,7 +74,10 @@ export function validateCatalogItem(input: {
           typeof candidate.labelRu !== "string" ||
           candidate.labelRu.length > 120 ||
           typeof candidate.labelUz !== "string" ||
-          candidate.labelUz.length > 120
+          candidate.labelUz.length > 120 ||
+          (candidate.labelEn !== undefined &&
+            (typeof candidate.labelEn !== "string" ||
+              candidate.labelEn.length > 120))
         );
       })
     )
@@ -76,12 +87,14 @@ export function validateCatalogItem(input: {
       code: field.code,
       labelRu: field.labelRu,
       labelUz: field.labelUz,
+      ...(typeof field.labelEn === "string" ? { labelEn: field.labelEn } : {}),
       required: field.required,
       values: (
         field.values as Array<{
           code: string;
           labelRu: string;
           labelUz: string;
+          labelEn?: string;
         }>
       ).filter(
         (value, index, values) =>

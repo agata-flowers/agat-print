@@ -7,11 +7,17 @@ import {
   useCustomerLocale,
 } from "../../lib/customer-i18n";
 
-type OptionValue = { code: string; labelRu: string; labelUz: string };
+type OptionValue = {
+  code: string;
+  labelRu: string;
+  labelUz: string;
+  labelEn?: string;
+};
 type OptionField = {
   code: string;
   labelRu: string;
   labelUz: string;
+  labelEn?: string;
   required: boolean;
   values: OptionValue[];
 };
@@ -71,6 +77,12 @@ export default function NewOrderPage() {
       ),
     [configuration, service],
   );
+  const optionLabel = (value: OptionField | OptionValue) =>
+    locale === "uz"
+      ? value.labelUz
+      : locale === "en"
+        ? (value.labelEn ?? value.labelRu)
+        : value.labelRu;
   const submit = async () => {
     if (!service || !valid) return;
     setMessage("");
@@ -103,16 +115,16 @@ export default function NewOrderPage() {
     }
   };
   return (
-    <main className="narrow">
+    <main className="narrow flow-page">
       <p className="eyebrow">{text.catalog}</p>
       <h1>{text.configure}</h1>
       {service ? (
-        <section className="panel auth-form">
+        <section className="panel auth-form configuration-card">
           <h2>{service.title}</h2>
           <p>{service.description}</p>
           {service.options.fields.map((field) => (
             <label key={field.code}>
-              {locale === "uz" ? field.labelUz : field.labelRu}
+              {optionLabel(field)}
               <select
                 value={configuration[field.code] ?? ""}
                 onChange={(event) =>
@@ -124,7 +136,7 @@ export default function NewOrderPage() {
               >
                 {field.values.map((value) => (
                   <option key={value.code} value={value.code}>
-                    {locale === "uz" ? value.labelUz : value.labelRu}
+                    {optionLabel(value)}
                   </option>
                 ))}
               </select>
@@ -151,10 +163,7 @@ export default function NewOrderPage() {
           <p aria-live="polite">{message}</p>
         </section>
       ) : (
-        <p>
-          {message ||
-            (locale === "uz" ? "Xizmat topilmadi." : "Услуга не найдена.")}
-        </p>
+        <p>{message || text.serviceNotFound}</p>
       )}
     </main>
   );
