@@ -43,9 +43,37 @@ async function customerOrder(browser: Browser) {
     buffer: syntheticPdf,
   });
   await page.getByRole("button", { name: "Загрузить файл" }).click();
+  const layoutResponsePromise = page.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/create-layout")
+    );
+  });
   await page
     .getByRole("button", { name: "Подготовить макет" })
     .click({ timeout: 120_000 });
+  const layoutResponse = await layoutResponsePromise;
+  const layoutBody = (await layoutResponse.json()) as {
+    layout?: { presentation?: string; previewAvailable?: boolean };
+    upload?: { errorCode?: string | null };
+    code?: string;
+  };
+  const safeLayoutResult = {
+    status: layoutResponse.status(),
+    code: layoutBody.code ?? null,
+    presentation: layoutBody.layout?.presentation ?? null,
+    previewAvailable: layoutBody.layout?.previewAvailable ?? null,
+    uploadErrorCode: layoutBody.upload?.errorCode ?? null,
+  };
+  console.info("Stage 16.1F layout transition", safeLayoutResult);
+  expect(safeLayoutResult).toEqual({
+    status: 201,
+    code: null,
+    presentation: "approval",
+    previewAvailable: true,
+    uploadErrorCode: null,
+  });
   await expect(page.getByTitle("Проверьте макет")).toBeVisible({
     timeout: 120_000,
   });
