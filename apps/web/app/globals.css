@@ -785,7 +785,7 @@ select:focus-visible {
 }
 
 @media (max-width: 700px) {
-  .topbar nav a:nth-child(n + 3) {
+  .topbar nav {
     display: none;
   }
   .topbar {
@@ -813,9 +813,6 @@ select:focus-visible {
   }
   .topbar {
     height: 64px;
-  }
-  .topbar > .language {
-    display: none;
   }
   .hero-card {
     grid-template-columns: 1fr;
