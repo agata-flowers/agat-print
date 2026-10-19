@@ -39,6 +39,15 @@ const hashSettings = (sourceFileVersion: string, input: GenerateLayoutDto) =>
     )
     .digest("hex");
 
+const layoutJobKey = (
+  layoutId: string,
+  version: number,
+  settingsHash: string,
+) =>
+  createHash("sha256")
+    .update(`${layoutId}:${version}:${settingsHash}`)
+    .digest("hex");
+
 const view = (layout: {
   id: string;
   uploadId: string;
@@ -84,7 +93,6 @@ export class LayoutsService {
     });
     if (!upload?.permanentObjectKey || !upload.processingResults[0])
       throw new ConflictException({ code: "STAGE3_FILE_NOT_READY" });
-    const origin = upload.processingResults[0];
     const settingsHash = hashSettings(upload.fileVersion, input);
     const existing = input.layoutId
       ? await this.prisma.layoutRequest.findFirst({
@@ -96,8 +104,7 @@ export class LayoutsService {
     if (input.layoutId && !existing) throw new NotFoundException();
     if (
       existing?.sourceFileVersion === upload.fileVersion &&
-      existing.settingsHash === settingsHash &&
-      existing.status !== "PROCESSING"
+      existing.settingsHash === settingsHash
     )
       return view(existing);
 
@@ -108,36 +115,99 @@ export class LayoutsService {
       photoDocument: input.photoDocument,
       customerConfigurationHash: input.customerConfigurationHash,
     };
-    const layout = existing
-      ? await this.prisma.$transaction(async (tx) => {
-          await tx.manualReview.updateMany({
-            where: { layoutId: existing.id, status: "PENDING" },
-            data: { status: "SUPERSEDED", version: { increment: 1 } },
-          });
-          return tx.layoutRequest.update({
-            where: { id: existing.id },
+    const layout = await this.prisma.$transaction(async (tx) => {
+      const updated = existing
+        ? await (async () => {
+            await tx.manualReview.updateMany({
+              where: { layoutId: existing.id, status: "PENDING" },
+              data: { status: "SUPERSEDED", version: { increment: 1 } },
+            });
+            return tx.layoutRequest.update({
+              where: { id: existing.id },
+              data: {
+                uploadId: upload.id,
+                sourceFileVersion: upload.fileVersion,
+                settingsHash,
+                settings,
+                status: "PROCESSING",
+                qualityCode: null,
+                manualReviewReason: null,
+                currentApprovalId: null,
+                version: { increment: 1 },
+              },
+            });
+          })()
+        : await tx.layoutRequest.create({
             data: {
               uploadId: upload.id,
+              userId,
               sourceFileVersion: upload.fileVersion,
               settingsHash,
               settings,
-              status: "PROCESSING",
-              qualityCode: null,
-              manualReviewReason: null,
-              currentApprovalId: null,
-              version: { increment: 1 },
             },
           });
-        })
-      : await this.prisma.layoutRequest.create({
+      if (this.env.processingDispatchEnabled) {
+        const dedupKey = layoutJobKey(
+          updated.id,
+          updated.version,
+          settingsHash,
+        );
+        await tx.outboxEvent.create({
           data: {
-            uploadId: upload.id,
-            userId,
-            sourceFileVersion: upload.fileVersion,
-            settingsHash,
-            settings,
+            aggregateType: "LayoutRequest",
+            aggregateId: updated.id,
+            aggregateVersion: updated.version,
+            eventType: "LAYOUT_PROCESSING_REQUESTED",
+            dedupKey,
+            payload: {
+              layoutId: updated.id,
+              dedupKey,
+              settingsHash,
+              operation: "PREFLIGHT",
+            },
           },
         });
+      }
+      return updated;
+    });
+
+    if (this.env.processingDispatchEnabled) return view(layout);
+    return this.processPending(layout.id, settingsHash);
+  }
+
+  async processPending(layoutId: string, expectedSettingsHash: string) {
+    const layout = await this.prisma.layoutRequest.findUniqueOrThrow({
+      where: { id: layoutId },
+      include: {
+        upload: {
+          include: {
+            processingResults: { orderBy: { createdAt: "desc" }, take: 1 },
+          },
+        },
+      },
+    });
+    if (layout.settingsHash !== expectedSettingsHash)
+      throw new ConflictException({ code: "LAYOUT_REVISION_CHANGED" });
+    if (layout.status !== "PROCESSING") return view(layout);
+    const upload = layout.upload;
+    const origin = upload.processingResults[0];
+    if (!upload.permanentObjectKey || !origin)
+      throw new ConflictException({ code: "STAGE3_FILE_NOT_READY" });
+    const settings = layout.settings as Record<string, unknown>;
+    const input = {
+      targetWidthMm: Number(settings.targetWidthMm),
+      targetHeightMm: Number(settings.targetHeightMm),
+      minDpi: Number(settings.minDpi),
+      photoDocument: settings.photoDocument === true,
+    };
+    if (
+      ![input.targetWidthMm, input.targetHeightMm, input.minDpi].every(
+        Number.isInteger,
+      )
+    )
+      throw new ConflictException({ code: "INVALID_LAYOUT_OPTIONS" });
+    const settingsHash = layout.settingsHash;
+    const userId = layout.userId;
 
     let processed: Awaited<
       ReturnType<CommandIsolatedProcessorService["preflight"]>
@@ -161,7 +231,7 @@ export class LayoutsService {
       await this.antivirus.scan(processed.output);
     } catch {
       const failed = await this.markQualityFailure(
-        layout.id,
+        layoutId,
         "PREFLIGHT_FAILED",
       );
       await this.audit.record("LAYOUT_QUALITY_FAILED", userId, "layout", {
@@ -176,7 +246,7 @@ export class LayoutsService {
         processed.metadata.effectiveDpi < input.minDpi)
     ) {
       const failed = await this.markQualityFailure(
-        layout.id,
+        layoutId,
         "IMAGE_RESOLUTION_TOO_LOW",
       );
       await this.audit.record("LAYOUT_QUALITY_FAILED", userId, "layout", {
@@ -203,7 +273,7 @@ export class LayoutsService {
       const result = await this.prisma.$transaction(
         async (tx) => {
           const current = await tx.layoutRequest.findUniqueOrThrow({
-            where: { id: layout.id },
+            where: { id: layoutId },
           });
           if (
             current.settingsHash !== settingsHash ||
@@ -214,7 +284,7 @@ export class LayoutsService {
           const duplicate = await tx.previewVersion.findUnique({
             where: {
               layoutId_sourceFileVersion_settingsHash: {
-                layoutId: layout.id,
+                layoutId,
                 sourceFileVersion: upload.fileVersion,
                 settingsHash,
               },
@@ -224,17 +294,17 @@ export class LayoutsService {
             return {
               created: false,
               layout: await tx.layoutRequest.findUniqueOrThrow({
-                where: { id: layout.id },
+                where: { id: layoutId },
               }),
             };
           const aggregate = await tx.previewVersion.aggregate({
-            where: { layoutId: layout.id },
+            where: { layoutId },
             _max: { version: true },
           });
           const artifactVersion = (aggregate._max.version ?? 0) + 1;
           const preview = await tx.previewVersion.create({
             data: {
-              layoutId: layout.id,
+              layoutId,
               version: artifactVersion,
               objectKey: previewKey,
               checksum,
@@ -247,7 +317,7 @@ export class LayoutsService {
           });
           const printReady = await tx.printReadyVersion.create({
             data: {
-              layoutId: layout.id,
+              layoutId,
               version: artifactVersion,
               objectKey: printReadyKey,
               checksum,
@@ -277,7 +347,7 @@ export class LayoutsService {
           if (requiresManualReview)
             await tx.manualReview.create({
               data: {
-                layoutId: layout.id,
+                layoutId,
                 previewVersionId: preview.id,
                 reason: "PHOTO_CONFIDENCE_LOW",
               },
@@ -285,7 +355,7 @@ export class LayoutsService {
           return {
             created: true,
             layout: await tx.layoutRequest.update({
-              where: { id: layout.id },
+              where: { id: layoutId },
               data: {
                 latestPreviewId: preview.id,
                 latestPrintReadyId: printReady.id,

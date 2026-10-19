@@ -23,22 +23,25 @@ const connectionOptions = (redisUrl: string) => {
 
 @Injectable()
 export class OutboxDispatcherService implements OnModuleInit, OnModuleDestroy {
-  private readonly queue: Queue;
+  private readonly fileQueue: Queue;
+  private readonly layoutQueue: Queue;
   private timer?: NodeJS.Timeout;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(APP_ENVIRONMENT) private readonly env: AppEnvironment,
   ) {
-    this.queue = new Queue("file-processing", {
+    const options = {
       connection: connectionOptions(env.redisUrl),
       defaultJobOptions: {
         attempts: 3,
-        backoff: { type: "exponential", delay: 1_000 },
+        backoff: { type: "exponential" as const, delay: 1_000 },
         removeOnComplete: 500,
         removeOnFail: 500,
       },
-    });
+    };
+    this.fileQueue = new Queue("file-processing", options);
+    this.layoutQueue = new Queue("layout-processing", options);
   }
 
   onModuleInit(): void {
@@ -51,13 +54,22 @@ export class OutboxDispatcherService implements OnModuleInit, OnModuleDestroy {
 
   async dispatchBatch(): Promise<number> {
     const events = await this.prisma.outboxEvent.findMany({
-      where: { publishedAt: null, eventType: "FILE_PROCESSING_REQUESTED" },
+      where: {
+        publishedAt: null,
+        eventType: {
+          in: ["FILE_PROCESSING_REQUESTED", "LAYOUT_PROCESSING_REQUESTED"],
+        },
+      },
       orderBy: { createdAt: "asc" },
       take: 50,
     });
     let published = 0;
     for (const event of events) {
-      await this.queue.add(event.eventType, event.payload, {
+      const queue =
+        event.eventType === "LAYOUT_PROCESSING_REQUESTED"
+          ? this.layoutQueue
+          : this.fileQueue;
+      await queue.add(event.eventType, event.payload, {
         jobId: event.dedupKey,
       });
       const updated = await this.prisma.outboxEvent.updateMany({
@@ -70,11 +82,14 @@ export class OutboxDispatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   async ready(): Promise<void> {
-    await this.queue.waitUntilReady();
+    await Promise.all([
+      this.fileQueue.waitUntilReady(),
+      this.layoutQueue.waitUntilReady(),
+    ]);
   }
 
   async onModuleDestroy(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
-    await this.queue.close();
+    await Promise.all([this.fileQueue.close(), this.layoutQueue.close()]);
   }
 }

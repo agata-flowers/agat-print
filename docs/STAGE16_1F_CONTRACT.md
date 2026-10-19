@@ -33,6 +33,11 @@ The accepted end-to-end journey is:
 
 - Existing Stage 1–15 domain transitions and `/api/v1` contracts remain
   authoritative.
+- Layout preflight requested by the containerized Web pilot is dispatched by
+  the existing transactional outbox to the trusted processing worker. The API
+  never receives Docker-socket access, and the worker still runs each input in
+  the existing networkless, one-job processing runtime. Duplicate queue
+  delivery is bounded by the layout revision plus the inbox deduplication key.
 - Mock OTP, payment and fiscal providers are development/test only. Production
   configuration remains fail-closed.
 - Authentication continues to use HttpOnly cookies, CSRF and Origin checks.

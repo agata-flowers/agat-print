@@ -55,7 +55,11 @@ async function customerOrder(browser: Browser) {
     .click({ timeout: 120_000 });
   const layoutResponse = await layoutResponsePromise;
   const layoutBody = (await layoutResponse.json()) as {
-    layout?: { presentation?: string; previewAvailable?: boolean };
+    layout?: {
+      presentation?: string;
+      previewAvailable?: boolean;
+      qualityCode?: string | null;
+    };
     upload?: { errorCode?: string | null };
     code?: string;
   };
@@ -64,15 +68,20 @@ async function customerOrder(browser: Browser) {
     code: layoutBody.code ?? null,
     presentation: layoutBody.layout?.presentation ?? null,
     previewAvailable: layoutBody.layout?.previewAvailable ?? null,
+    qualityCode: layoutBody.layout?.qualityCode ?? null,
     uploadErrorCode: layoutBody.upload?.errorCode ?? null,
   };
   console.info("Stage 16.1F layout transition", safeLayoutResult);
-  expect(safeLayoutResult).toEqual({
-    status: 201,
-    code: null,
-    presentation: "approval",
-    previewAvailable: true,
-    uploadErrorCode: null,
+  expect(safeLayoutResult.status).toBe(201);
+  expect(safeLayoutResult.code).toBeNull();
+  expect(safeLayoutResult.qualityCode).toBeNull();
+  expect(safeLayoutResult.uploadErrorCode).toBeNull();
+  expect([
+    { presentation: "processing", previewAvailable: false },
+    { presentation: "approval", previewAvailable: true },
+  ]).toContainEqual({
+    presentation: safeLayoutResult.presentation,
+    previewAvailable: safeLayoutResult.previewAvailable,
   });
   await expect(page.getByTitle("Проверьте макет")).toBeVisible({
     timeout: 120_000,
