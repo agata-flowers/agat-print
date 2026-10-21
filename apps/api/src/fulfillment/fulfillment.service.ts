@@ -26,6 +26,7 @@ import type {
 import { FulfillmentCrypto } from "./fulfillment.crypto";
 import type { DeliveryProvider } from "@agat/providers";
 import { DELIVERY_PROVIDER } from "../providers/provider-tokens";
+import { withSerializableRetry } from "../matching/serializable-retry";
 
 const sha256 = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -377,71 +378,75 @@ export class FulfillmentService {
       idempotencyKey: deliveryDedupKey,
       correlationId: orderId,
     });
-    return this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
-        await tx.$queryRaw`SELECT id FROM "CourierProfile" WHERE id = ${courier.id}::uuid FOR UPDATE`;
-        const prior = await tx.inboxOperation.findUnique({
-          where: { dedupKey: deliveryDedupKey },
-        });
-        if (prior) return { duplicate: true };
-        const current = await tx.order.findUniqueOrThrow({
-          where: { id: orderId },
-          include: {
-            productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
-          },
-        });
-        const currentCourier = await tx.courierProfile.findFirst({
-          where: {
-            id: courier.id,
-            status: "APPROVED",
-            active: true,
-            deliveries: { none: { active: true } },
-          },
-        });
-        if (
-          !currentCourier ||
-          current.status !== "AWAITING_PICKUP" ||
-          current.productionCycles[0]?.id !== fulfillment.productionCycleId
-        )
-          throw new ConflictException({ code: "DELIVERY_ASSIGNMENT_CONFLICT" });
-        const delivery = await tx.deliveryTask.create({
-          data: {
-            orderId,
-            fulfillmentId: fulfillment.id,
-            courierId: courier.id,
-            branchId: assignment.branchId,
-            providerReference: provider.reference,
-          },
-        });
-        const changed = await tx.order.updateMany({
-          where: {
-            id: orderId,
-            version: current.version,
-            status: "AWAITING_PICKUP",
-          },
-          data: { status: "COURIER_ASSIGNED", version: { increment: 1 } },
-        });
-        if (changed.count !== 1)
-          throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
-        await tx.inboxOperation.create({
-          data: {
-            dedupKey: deliveryDedupKey,
-            operation: "ASSIGN_COURIER",
-            resultId: delivery.id,
-          },
-        });
-        await tx.outboxEvent.create({
-          data: outbox(
-            "order",
-            orderId,
-            current.version + 1,
-            "COURIER_ASSIGNED",
-          ),
-        });
-        return { duplicate: false, deliveryId: delivery.id };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    return withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId}::uuid FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM "CourierProfile" WHERE id = ${courier.id}::uuid FOR UPDATE`;
+          const prior = await tx.inboxOperation.findUnique({
+            where: { dedupKey: deliveryDedupKey },
+          });
+          if (prior) return { duplicate: true };
+          const current = await tx.order.findUniqueOrThrow({
+            where: { id: orderId },
+            include: {
+              productionCycles: { orderBy: { sequence: "desc" }, take: 1 },
+            },
+          });
+          const currentCourier = await tx.courierProfile.findFirst({
+            where: {
+              id: courier.id,
+              status: "APPROVED",
+              active: true,
+              deliveries: { none: { active: true } },
+            },
+          });
+          if (
+            !currentCourier ||
+            current.status !== "AWAITING_PICKUP" ||
+            current.productionCycles[0]?.id !== fulfillment.productionCycleId
+          )
+            throw new ConflictException({
+              code: "DELIVERY_ASSIGNMENT_CONFLICT",
+            });
+          const delivery = await tx.deliveryTask.create({
+            data: {
+              orderId,
+              fulfillmentId: fulfillment.id,
+              courierId: courier.id,
+              branchId: assignment.branchId,
+              providerReference: provider.reference,
+            },
+          });
+          const changed = await tx.order.updateMany({
+            where: {
+              id: orderId,
+              version: current.version,
+              status: "AWAITING_PICKUP",
+            },
+            data: { status: "COURIER_ASSIGNED", version: { increment: 1 } },
+          });
+          if (changed.count !== 1)
+            throw new ConflictException({ code: "ORDER_VERSION_CONFLICT" });
+          await tx.inboxOperation.create({
+            data: {
+              dedupKey: deliveryDedupKey,
+              operation: "ASSIGN_COURIER",
+              resultId: delivery.id,
+            },
+          });
+          await tx.outboxEvent.create({
+            data: outbox(
+              "order",
+              orderId,
+              current.version + 1,
+              "COURIER_ASSIGNED",
+            ),
+          });
+          return { duplicate: false, deliveryId: delivery.id };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
     );
   }
 
