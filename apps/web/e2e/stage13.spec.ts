@@ -87,11 +87,27 @@ async function reachApprovedLayout(
   await page
     .getByLabel(locale === "ru" ? "Номер телефона" : "Telefon raqami")
     .fill(phone);
+  const otpResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/v1/auth/otp/request",
+  );
   await page
     .getByRole("button", {
       name: locale === "ru" ? "Получить код" : "Kod olish",
     })
     .click();
+  const otpResponse = await otpResponsePromise;
+  const otpBody = (await otpResponse.json().catch(() => ({}))) as {
+    accepted?: boolean;
+    code?: string;
+    message?: { code?: string };
+  };
+  expect({
+    status: otpResponse.status(),
+    accepted: otpBody.accepted ?? null,
+    code: otpBody.code ?? otpBody.message?.code ?? null,
+  }).toEqual({ status: 202, accepted: true, code: null });
   await page
     .getByLabel(locale === "ru" ? "Одноразовый код" : "Bir martalik kod")
     .fill("000000");
