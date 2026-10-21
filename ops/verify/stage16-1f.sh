@@ -29,7 +29,7 @@ cleanup() {
     test -f "$work_dir/browser-e2e.log" && tail -120 "$work_dir/browser-e2e.log" >&2 || true
     if [[ "$phase" == stage16-1f-browser-e2e ]]; then
       "${compose[@]}" exec -T postgres psql -XAt -U agat -d agat_print \
-        -c 'SELECT array_to_string(e."reasonCodes", '"'"','"'"') FROM "MatchingCandidateEvaluation" e JOIN "Branch" b ON b.id=e."branchId" JOIN "Partner" p ON p.id=b."partnerId" WHERE p."displayName"='"'"'AGAT PRINT Pilot Studio'"'"' ORDER BY e."createdAt" DESC LIMIT 1' \
+        -c 'SELECT '"'"'pilot_reasons='"'"' || array_to_string(e."reasonCodes", '"'"','"'"') FROM "MatchingCandidateEvaluation" e JOIN "Branch" b ON b.id=e."branchId" JOIN "Partner" p ON p.id=b."partnerId" WHERE p."displayName"='"'"'AGAT PRINT Pilot Studio'"'"' ORDER BY e."createdAt" DESC LIMIT 1; SELECT '"'"'pilot_partner_role_links='"'"' || count(*) FROM "Partner" p JOIN "UserRole" r ON r."userId"=p."ownerId" AND r.role='"'"'PARTNER'"'"' WHERE p."displayName"='"'"'AGAT PRINT Pilot Studio'"'"'; SELECT '"'"'latest_offer_target='"'"' || CASE WHEN p."displayName"='"'"'AGAT PRINT Pilot Studio'"'"' THEN '"'"'pilot'"'"' ELSE '"'"'other'"'"' END || '"'"';status='"'"' || o.status || '"'"';unexpired='"'"' || (o."expiresAt">now()) FROM "PartnerOffer" o JOIN "Partner" p ON p.id=o."partnerId" ORDER BY o."createdAt" DESC LIMIT 1' \
         > "$work_dir/matching-diagnostic.txt" 2>/dev/null || true
       if [[ -s "$work_dir/matching-diagnostic.txt" ]]; then
         echo "Pilot matching reason codes: $(cat "$work_dir/matching-diagnostic.txt")" >&2
