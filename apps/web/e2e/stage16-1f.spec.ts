@@ -89,6 +89,7 @@ async function customerOrder(browser: Browser) {
   await page.getByRole("button", { name: "Подтвердить макет" }).click();
   await page.getByRole("link", { name: "Добавить в корзину" }).click();
   await expect(page.getByTestId("basket-item")).toHaveCount(1);
+  await page.getByLabel(/AGAT PRINT Pilot Studio/).check();
   await page.getByLabel("Самовывоз из студии").check();
   await page.getByRole("button", { name: "Продолжить" }).click();
   await page.getByRole("button", { name: "Рассчитать общую цену" }).click();

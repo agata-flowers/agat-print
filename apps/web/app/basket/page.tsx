@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, apiRequest } from "../../lib/api";
+import { ApiError, apiRequest, publicApiRequest } from "../../lib/api";
 import {
   customerCopy,
   customerError,
@@ -18,12 +18,20 @@ type Basket = {
     id: string;
     sequence: number;
     draftId: string;
+    serviceCode: string;
     title: string;
     quantity: number;
     ready: boolean;
   }>;
   quote: null | { totalMinor: string; currency: string; expiresAt: string };
   order: null | { id: string; status: string };
+};
+
+type Studio = {
+  slug: string;
+  name: string;
+  city: string;
+  district?: string;
 };
 
 const key = () => crypto.randomUUID();
@@ -37,6 +45,9 @@ export default function BasketPage() {
   const [delivery, setDelivery] = useState(false);
   const [address, setAddress] = useState("");
   const [configured, setConfigured] = useState(false);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [selectedStudio, setSelectedStudio] = useState("");
+  const [strictStudio, setStrictStudio] = useState(false);
   const added = useRef(false);
 
   const load = useCallback(async () => {
@@ -69,6 +80,18 @@ export default function BasketPage() {
       window.history.replaceState({}, "", `/basket?lang=${locale}`);
     }
     setBasket(current);
+    const serviceCodes = [
+      ...new Set(current.items.map((item) => item.serviceCode)),
+    ];
+    const params = new URLSearchParams({ locale });
+    if (serviceCodes.length === 1) params.set("serviceCode", serviceCodes[0]!);
+    const studiosResponse = await publicApiRequest(
+      `/studios?${params.toString()}`,
+    );
+    if (studiosResponse.ok)
+      setStudios(
+        ((await studiosResponse.json()) as { studios: Studio[] }).studios,
+      );
   }, [locale]);
 
   useEffect(() => {
@@ -133,8 +156,11 @@ export default function BasketPage() {
           headers: { "Idempotency-Key": key() },
           body: JSON.stringify({
             version: basket.version,
-            mode: "AUTO_ASSIGN",
-            fallbackPolicy: "ALLOW_ELIGIBLE_ALTERNATIVE",
+            mode: selectedStudio ? "PREFERRED_STUDIO" : "AUTO_ASSIGN",
+            fallbackPolicy: strictStudio
+              ? "STRICT_PREFERENCE"
+              : "ALLOW_ELIGIBLE_ALTERNATIVE",
+            ...(selectedStudio ? { studioSlug: selectedStudio } : {}),
           }),
         },
       );
@@ -209,6 +235,39 @@ export default function BasketPage() {
       </div>
       {basket.items.length > 0 && !basket.quote && (
         <section className="quote">
+          <fieldset className="studio-choice">
+            <legend>{text.studioChoice}</legend>
+            <label>
+              <input
+                type="radio"
+                name="basket-studio"
+                checked={!selectedStudio}
+                onChange={() => setSelectedStudio("")}
+              />{" "}
+              {text.autoAssign}
+            </label>
+            {studios.map((studio) => (
+              <label key={studio.slug}>
+                <input
+                  type="radio"
+                  name="basket-studio"
+                  checked={selectedStudio === studio.slug}
+                  onChange={() => setSelectedStudio(studio.slug)}
+                />{" "}
+                {studio.name} · {studio.district ?? studio.city}
+              </label>
+            ))}
+            {selectedStudio && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={strictStudio}
+                  onChange={(event) => setStrictStudio(event.target.checked)}
+                />{" "}
+                {strictStudio ? text.strictPreference : text.allowFallback}
+              </label>
+            )}
+          </fieldset>
           <label>
             <input
               type="radio"
