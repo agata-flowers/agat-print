@@ -27,6 +27,14 @@ cleanup() {
     write_report failure
     echo "Stage 16.1F verification failed during phase: $phase" >&2
     test -f "$work_dir/browser-e2e.log" && tail -120 "$work_dir/browser-e2e.log" >&2 || true
+    if [[ "$phase" == stage16-1f-browser-e2e ]]; then
+      "${compose[@]}" exec -T postgres psql -XAt -U agat -d agat_print \
+        -c 'SELECT array_to_string(e."reasonCodes", '"'"','"'"') FROM "MatchingCandidateEvaluation" e JOIN "Branch" b ON b.id=e."branchId" JOIN "Partner" p ON p.id=b."partnerId" WHERE p."displayName"='"'"'AGAT PRINT Pilot Studio'"'"' ORDER BY e."createdAt" DESC LIMIT 1' \
+        > "$work_dir/matching-diagnostic.txt" 2>/dev/null || true
+      if [[ -s "$work_dir/matching-diagnostic.txt" ]]; then
+        echo "Pilot matching reason codes: $(cat "$work_dir/matching-diagnostic.txt")" >&2
+      fi
+    fi
     "${compose[@]}" logs --no-color --tail=100 api web processing-worker >&2 || true
   fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true

@@ -354,4 +354,5 @@ jobs:
             outputs/stage16-functional-web-windows.zip
             outputs/stage16-functional-web-windows.zip.sha256
             apps/web/test-results
+            work/stage16-1f-verification/matching-diagnostic.txt
           if-no-files-found: error
