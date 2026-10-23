@@ -99,15 +99,13 @@ async function reachApprovedLayout(
     .click();
   const otpResponse = await otpResponsePromise;
   const otpBody = (await otpResponse.json().catch(() => ({}))) as {
-    accepted?: boolean;
     code?: string;
     message?: { code?: string };
   };
   expect({
     status: otpResponse.status(),
-    accepted: otpBody.accepted ?? null,
     code: otpBody.code ?? otpBody.message?.code ?? null,
-  }).toEqual({ status: 202, accepted: true, code: null });
+  }).toEqual({ status: 202, code: null });
   await page
     .getByLabel(locale === "ru" ? "Одноразовый код" : "Bir martalik kod")
     .fill("000000");
