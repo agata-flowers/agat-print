@@ -98,14 +98,10 @@ async function reachApprovedLayout(
     })
     .click();
   const otpResponse = await otpResponsePromise;
-  const otpBody = (await otpResponse.json().catch(() => ({}))) as {
-    code?: string;
-    message?: { code?: string };
-  };
-  expect({
-    status: otpResponse.status(),
-    code: otpBody.code ?? otpBody.message?.code ?? null,
-  }).toEqual({ status: 202, code: null });
+  expect(otpResponse.status()).toBe(202);
+  await expect(
+    page.getByText(locale === "ru" ? "Код отправлен." : "Kod yuborildi."),
+  ).toBeVisible({ timeout: 15_000 });
   await page
     .getByLabel(locale === "ru" ? "Одноразовый код" : "Bir martalik kod")
     .fill("000000");
