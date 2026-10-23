@@ -109,12 +109,9 @@ test("real customer and studio complete the functional pilot journey", async ({
   const partner = await partnerContext.newPage();
   await login(partner, "+998000016102", "/partner?lang=ru");
 
-  await expect(async () => {
-    await partner.reload();
-    await expect(
-      partner.getByRole("button", { name: "Принять заказ" }),
-    ).toBeVisible();
-  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 3_000] });
+  await expect(
+    partner.getByRole("button", { name: "Принять заказ" }),
+  ).toBeVisible({ timeout: 120_000 });
   await partner.getByRole("button", { name: "Принять заказ" }).click();
   await expect(
     partner.getByText("Заказ принят", { exact: true }),

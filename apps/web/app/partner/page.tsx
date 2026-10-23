@@ -261,7 +261,11 @@ export default function PartnerPage() {
     }
   }, [locale, text.signIn]);
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => void load(), 5_000);
+    return () => clearInterval(timer);
+  }, [load]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
