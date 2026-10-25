@@ -538,7 +538,9 @@ export default function PartnerPage() {
                             </button>
                           )}
                         {active.items.length > 0 &&
-                          item.productionStatus !== "COMPLETED" && (
+                          ["PENDING", "PRINTING"].includes(
+                            item.productionStatus,
+                          ) && (
                             <button
                               className="button primary"
                               disabled={busy}

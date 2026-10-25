@@ -131,15 +131,42 @@ test("real customer and studio complete the functional pilot journey", async ({
   const start = partner.getByRole("button", {
     name: "Начать печать позиции",
   });
-  if (await start.isVisible()) await start.click();
-  await partner.getByRole("button", { name: "Позиция готова" }).click();
-
-  await expect(async () => {
-    await customer.page.reload();
-    await expect(customer.page.getByTestId("order-status")).toContainText(
-      "Готов к получению",
+  await expect(start).toBeVisible({ timeout: 120_000 });
+  const printingResponsePromise = partner.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === "POST" &&
+      /\/partner\/orders\/[0-9a-f-]+\/items\/1\/status$/.test(
+        new URL(response.url()).pathname,
+      ) &&
+      request.postDataJSON()?.status === "PRINTING"
     );
-  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 3_000] });
+  });
+  await start.click();
+  const printingResponse = await printingResponsePromise;
+  expect(printingResponse.status()).toBe(201);
+  await expect(start).toBeHidden();
+
+  const complete = partner.getByRole("button", { name: "Позиция готова" });
+  await expect(complete).toBeVisible();
+  const completedResponsePromise = partner.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === "POST" &&
+      /\/partner\/orders\/[0-9a-f-]+\/items\/1\/status$/.test(
+        new URL(response.url()).pathname,
+      ) &&
+      request.postDataJSON()?.status === "COMPLETED"
+    );
+  });
+  await complete.click();
+  const completedResponse = await completedResponsePromise;
+  expect(completedResponse.status()).toBe(201);
+
+  await expect(customer.page.getByTestId("order-status")).toContainText(
+    "Готов к получению",
+    { timeout: 120_000 },
+  );
   await customer.page.getByRole("button", { name: "Начать получение" }).click();
   const pinText = await customer.page.locator(".pin strong").textContent();
   expect(pinText).toMatch(/^\d{6}$/);
