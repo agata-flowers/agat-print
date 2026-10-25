@@ -85,3 +85,29 @@ describe("FulfillmentService courier assignment retries", () => {
     expect(tx.outboxEvent.create).toHaveBeenCalledOnce();
   });
 });
+
+describe("FulfillmentService assigned partner lifecycle", () => {
+  it.each(["APPROVED", "ACTIVE", "SUSPENDED"])(
+    "allows a %s studio to finish already assigned fulfillment",
+    async (status) => {
+      const findUnique = vi.fn().mockResolvedValue({ id: "partner", status });
+      const service = new FulfillmentService(
+        { partner: { findUnique } } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+      );
+      const lifecycle = service as unknown as {
+        requireApprovedPartner(ownerId: string): Promise<{ id: string }>;
+      };
+
+      await expect(
+        lifecycle.requireApprovedPartner("owner"),
+      ).resolves.toMatchObject({ id: "partner" });
+      expect(findUnique).toHaveBeenCalledWith({ where: { ownerId: "owner" } });
+    },
+  );
+});

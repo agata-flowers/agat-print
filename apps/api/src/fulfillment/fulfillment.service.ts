@@ -1538,7 +1538,10 @@ export class FulfillmentService {
     const partner = await this.prisma.partner.findUnique({
       where: { ownerId },
     });
-    if (!partner || partner.status !== "APPROVED")
+    if (
+      !partner ||
+      !["APPROVED", "ACTIVE", "SUSPENDED"].includes(partner.status)
+    )
       throw new ForbiddenException();
     return partner;
   }

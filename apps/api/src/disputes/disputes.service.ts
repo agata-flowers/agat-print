@@ -480,7 +480,7 @@ export class DisputesService {
           const assignment = dispute.order.assignments[0];
           if (
             !assignment ||
-            assignment.partner.status !== "APPROVED" ||
+            !["APPROVED", "ACTIVE"].includes(assignment.partner.status) ||
             !assignment.branch.active
           )
             throw new ConflictException({
