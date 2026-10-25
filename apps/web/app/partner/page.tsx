@@ -245,8 +245,13 @@ export default function PartnerPage() {
           apiRequest("/partner/orders/active"),
           apiRequest("/partner/disputes"),
         ]);
+      const activeBody = await activeResponse.text();
       setOffers((await offersResponse.json()) as Offer[]);
-      setActive((await activeResponse.json()) as ActiveOrder);
+      setActive(
+        activeBody
+          ? (JSON.parse(activeBody) as Exclude<ActiveOrder, null>)
+          : null,
+      );
       setDisputes((await disputeResponse.json()) as Dispute[]);
       setMessage("");
     } catch (error) {

@@ -718,7 +718,10 @@ export class DisputesService {
   }
   private async requirePartner(ownerId: string) {
     const p = await this.prisma.partner.findFirst({
-      where: { ownerId, status: "APPROVED" },
+      where: {
+        ownerId,
+        status: { in: ["APPROVED", "ACTIVE", "SUSPENDED"] },
+      },
     });
     if (!p) throw new ForbiddenException();
     return p;
