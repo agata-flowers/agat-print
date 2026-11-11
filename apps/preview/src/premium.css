@@ -1199,9 +1199,11 @@ body:has(.premium-root) {
 }
 
 .option-pills button:focus,
-.option-pills button:hover {
+.option-pills button:hover,
+.option-pills button[aria-pressed="true"] {
+  background: var(--premium-red);
   border-color: var(--premium-red);
-  color: var(--premium-red);
+  color: white;
 }
 
 .modal-actions {
