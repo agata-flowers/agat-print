@@ -15,7 +15,7 @@ overrides:
   "express>body-parser": 2.4.0
   "express>proxy-addr": 2.0.8
   "express>qs": 6.16.0
-  "query-string>decode-uri-component": 0.5.0
+  "query-string>decode-uri-component": 0.5.1
   "postcss>source-map-js": 1.2.2
   "router>path-to-regexp": 8.4.2
   "superagent>qs": 6.16.0

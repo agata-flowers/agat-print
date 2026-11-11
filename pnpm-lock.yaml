@@ -17,7 +17,7 @@ overrides:
   express>body-parser: 2.4.0
   express>proxy-addr: 2.0.8
   express>qs: 6.16.0
-  query-string>decode-uri-component: 0.5.0
+  query-string>decode-uri-component: 0.5.1
   postcss>source-map-js: 1.2.2
   router>path-to-regexp: 8.4.2
   superagent>qs: 6.16.0
@@ -2167,8 +2167,8 @@ packages:
       supports-color:
         optional: true
 
-  decode-uri-component@0.5.0:
-    resolution: {integrity: sha512-1BiQVoK8C9gUbQU6NzAtO/tkz2qOFpEObMWpcFvhx4fYnj4Oc5yzaJN/LD36ihkVUdXyh5ZekzX+yM+ty/SrPg==}
+  decode-uri-component@0.5.1:
+    resolution: {integrity: sha512-vWHQkXgg2cE3BB4rR0c+PYw9BCQzLoNIRMI7AunIkZst74tw/vpPp7VLoYtsR/cy1f55g3XDWUslfeCZjiZJyA==}
     engines: {node: '>=14.16'}
 
   deep-is@0.1.4:
@@ -5450,7 +5450,7 @@ snapshots:
     optionalDependencies:
       supports-color: 8.1.1
 
-  decode-uri-component@0.5.0: {}
+  decode-uri-component@0.5.1: {}
 
   deep-is@0.1.4: {}
 
@@ -6441,7 +6441,7 @@ snapshots:
 
   query-string@7.1.3:
     dependencies:
-      decode-uri-component: 0.5.0
+      decode-uri-component: 0.5.1
       filter-obj: 1.1.0
       split-on-first: 1.1.0
       strict-uri-encode: 2.0.0
