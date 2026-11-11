@@ -8,14 +8,14 @@ export default defineConfig({
   retries: 0,
   reporter: [["line"]],
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: "http://127.0.0.1:4273",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     ...devices["Desktop Chrome"],
   },
   webServer: {
-    command: "pnpm preview",
-    url: "http://127.0.0.1:4173",
+    command: "pnpm preview --port 4273",
+    url: "http://127.0.0.1:4273",
     reuseExistingServer: !process.env.CI,
   },
 });

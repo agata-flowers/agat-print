@@ -76,6 +76,84 @@ test("infinite feed appends distinct products and mobile controls remain usable"
   ).toBeVisible();
 });
 
+test("services use dedicated validated order flows and never enter the product cart", async ({
+  page,
+}) => {
+  const serviceCards = page.locator("[data-service-id]");
+  await expect(serviceCards).toHaveCount(6);
+  await page
+    .locator('[data-service-id="printing"]')
+    .getByRole("button", { name: "Оформить услугу" })
+    .click();
+
+  const wizard = page.getByRole("dialog", { name: "Распечатка документов" });
+  await expect(wizard).toBeVisible();
+  await wizard.getByRole("button", { name: /Продолжить/ }).click();
+  await wizard.getByRole("button", { name: /Продолжить/ }).click();
+  await expect(wizard.getByRole("alert")).toHaveText(
+    "Заполните обязательные поля",
+  );
+  await wizard.locator('input[type="file"]').setInputFiles({
+    name: "synthetic-document.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("synthetic stage 17.1 document"),
+  });
+  await wizard.getByRole("button", { name: /Продолжить/ }).click();
+  await expect(wizard.getByText("Проверка", { exact: true })).toBeVisible();
+  await wizard.getByRole("button", { name: /Подтвердить демо-заказ/ }).click();
+  await expect(
+    wizard.getByText("Демо-заказ создан", { exact: true }),
+  ).toBeVisible();
+
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("agat-premium-demo-service") ?? "null"),
+  );
+  expect(stored).toMatchObject({ serviceId: "printing", demo: true });
+  expect(stored.estimate).toBeGreaterThan(0);
+  await wizard.getByRole("button", { name: "Вернуться к услугам" }).click();
+  await page.getByRole("button", { name: /Корзина/ }).click();
+  await expect(
+    page.getByText("Корзина пока пуста", { exact: true }),
+  ).toBeVisible();
+});
+
+test("all six service journeys are localized and available on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "UZ", exact: true }).click();
+  await expect(page.locator("[data-service-id]")).toHaveCount(6);
+  await page
+    .locator('[data-service-id="id-photo"]')
+    .getByRole("button", { name: "Xizmatni buyurtma qilish" })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Hujjat uchun foto" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Yopish" }).click();
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  await expect(
+    page.getByText("Popular services", { exact: true }),
+  ).toBeVisible();
+});
+
+test("premium redesign remains readable at tablet and narrow mobile widths", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  const tabletCard = page.locator('[data-service-id="outdoor"]');
+  await expect(tabletCard).toBeVisible();
+  const tabletBox = await tabletCard.boundingBox();
+  expect(tabletBox?.width).toBeGreaterThan(300);
+
+  await page.setViewportSize({ width: 360, height: 800 });
+  const mobileCard = page.locator('[data-service-id="outdoor"]');
+  await expect(mobileCard).toBeVisible();
+  const mobileBox = await mobileCard.boundingBox();
+  expect(mobileBox?.width).toBeGreaterThan(300);
+  await expect(page.locator(".premium-mobile-nav")).toBeVisible();
+});
+
 test("capture approved desktop and mobile review images", async ({
   page,
 }, testInfo) => {
