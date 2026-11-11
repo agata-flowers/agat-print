@@ -3,7 +3,13 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main, "codex/security-remediation-stage15", "codex/stage16-*"]
+    branches:
+      [
+        main,
+        "codex/security-remediation-stage15",
+        "codex/stage16-*",
+        "codex/stage17-*",
+      ]
 
 permissions:
   contents: read
