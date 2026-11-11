@@ -3,16 +3,31 @@ param([switch]$NoBrowser)
 $ErrorActionPreference = "Stop"
 $previewRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "dist"))
 $previewPrefix = $previewRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-$port = 4173
+$preferredPort = 4173
 
 if (-not (Test-Path -LiteralPath (Join-Path $previewRoot "index.html"))) {
   throw "Preview files are incomplete. Extract the complete ZIP archive and retry."
 }
 
 $mimeTypes = @{ ".html" = "text/html; charset=utf-8"; ".js" = "text/javascript; charset=utf-8"; ".css" = "text/css; charset=utf-8"; ".json" = "application/json; charset=utf-8"; ".svg" = "image/svg+xml"; ".png" = "image/png"; ".ico" = "image/x-icon" }
-$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $port)
-$listener.Start()
+$listener = $null
+$port = $preferredPort
+foreach ($candidatePort in $preferredPort..($preferredPort + 10)) {
+  try {
+    $candidate = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $candidatePort)
+    $candidate.Start()
+    $listener = $candidate
+    $port = $candidatePort
+    break
+  } catch [System.Net.Sockets.SocketException] {
+    if ($candidate) { $candidate.Stop() }
+  }
+}
+if (-not $listener) {
+  throw "No free local preview port was found in the 4173-4183 range. Close another preview and retry."
+}
 $previewUrl = "http://127.0.0.1:$port/premium?lang=ru"
+if ($port -ne $preferredPort) { Write-Host "Port $preferredPort is occupied; using safe local fallback port $port." -ForegroundColor Yellow }
 Write-Host "AGAT PRINT Premium is available at $previewUrl"
 Write-Host "Synthetic demo data only. Press Ctrl+C to stop."
 if (-not $NoBrowser) { Start-Process $previewUrl }
@@ -47,4 +62,4 @@ try {
       $stream.Flush()
     } finally { $client.Dispose() }
   }
-} finally { $listener.Stop() }
+} finally { if ($listener) { $listener.Stop() } }
