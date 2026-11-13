@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0 --port 4173",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test:serve": "vite --host 127.0.0.1 --port 4273 --strictPort",
     "lint": "eslint src",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run src",

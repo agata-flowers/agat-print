@@ -79,18 +79,18 @@ Stages 1–15.
 
 ## Маршруты прототипа
 
-| Маршрут | Назначение |
-| --- | --- |
-| `/premium` | рекомендательная главная |
-| `/premium/catalog` | товары и услуги, поиск/фильтры/сортировка |
-| `/premium/category/:slug` | категория товаров |
-| `/premium/product/:id` | товар и предложения продавцов |
-| `/premium/store/:slug` | публичная страница магазина |
-| `/premium/service/:id` | специализированный мастер услуги |
-| `/premium/cart` | корзина по продавцам |
-| `/premium/checkout` | демонстрационный checkout товаров |
-| `/premium/account/:section` | кабинет покупателя |
-| `/premium/seller/:section` | кабинет продавца |
+| Маршрут                     | Назначение                                |
+| --------------------------- | ----------------------------------------- |
+| `/marketplace`                  | рекомендательная главная                  |
+| `/marketplace/catalog`          | товары и услуги, поиск/фильтры/сортировка |
+| `/marketplace/category/:slug`   | категория товаров                         |
+| `/marketplace/product/:id`      | товар и предложения продавцов             |
+| `/marketplace/store/:slug`      | публичная страница магазина               |
+| `/marketplace/service/:id`      | специализированный мастер услуги          |
+| `/marketplace/cart`             | корзина по продавцам                      |
+| `/marketplace/checkout`         | демонстрационный checkout товаров         |
+| `/marketplace/account/:section` | кабинет покупателя                        |
+| `/marketplace/seller/:section`  | кабинет продавца                          |
 
 Маршруты реализуются через History API без сетевого роутера, чтобы автономный
 Windows server мог отдавать один безопасный SPA entry point.

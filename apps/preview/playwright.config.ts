@@ -14,7 +14,7 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
   },
   webServer: {
-    command: "pnpm preview --port 4273",
+    command: "pnpm test:serve",
     url: "http://127.0.0.1:4273",
     reuseExistingServer: !process.env.CI,
   },
