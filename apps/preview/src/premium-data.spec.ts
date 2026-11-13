@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import { categories, createProductFeed, localized } from "./premium-data";
 
 describe("premium demo catalog", () => {
-  it("contains the nine approved localized categories", () => {
-    expect(categories).toHaveLength(9);
+  it("contains the eleven approved localized service and marketplace categories", () => {
+    expect(categories).toHaveLength(11);
     for (const category of categories) {
       expect(localized(category.label, "ru")).toBeTruthy();
       expect(localized(category.label, "uz")).toBeTruthy();
       expect(localized(category.label, "en")).toBeTruthy();
     }
+    expect(categories.slice(-5).map((category) => category.id)).toEqual([
+      "stationery",
+      "gifts",
+      "accessories",
+      "photo-gifts",
+      "study-office",
+    ]);
   });
 
   it("generates a varied feed with unique identities and integer UZS prices", () => {

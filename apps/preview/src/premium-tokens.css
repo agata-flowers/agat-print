@@ -1,0 +1,30 @@
+.premium-root {
+  /* Stage 17.2 marketplace design system */
+  --ds-container: 1240px;
+  --ds-gutter: clamp(16px, 3vw, 32px);
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 24px;
+  --ds-space-8: 32px;
+  --ds-space-10: 40px;
+  --ds-space-12: 48px;
+  --ds-radius-sm: 10px;
+  --ds-radius-md: 16px;
+  --ds-radius-lg: 24px;
+  --ds-radius-pill: 999px;
+  --ds-control-sm: 40px;
+  --ds-control-md: 48px;
+  --ds-control-lg: 56px;
+  --ds-text-xs: 12px;
+  --ds-text-sm: 14px;
+  --ds-text-md: 16px;
+  --ds-text-lg: 18px;
+  --ds-text-xl: 22px;
+  --ds-text-2xl: clamp(28px, 3vw, 40px);
+  --ds-text-display: clamp(38px, 5vw, 64px);
+  --ds-shadow-card: 0 8px 28px rgb(61 25 20 / 8%);
+  --ds-shadow-float: 0 18px 48px rgb(61 25 20 / 16%);
+}

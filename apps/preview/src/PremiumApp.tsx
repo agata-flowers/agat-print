@@ -14,6 +14,7 @@ import {
   textFor,
   type PremiumService,
 } from "./premium-services";
+import "./premium-tokens.css";
 import "./premium.css";
 
 type Cart = Record<string, number>;
@@ -188,9 +189,11 @@ function ProductVisual({
   const iconName =
     product.category === "stationery"
       ? "stationery"
-      : product.category === "gifts"
+      : ["gifts", "photo-gifts"].includes(product.category)
         ? "gift"
-        : "accessories";
+        : product.category === "study-office"
+          ? "book"
+          : "accessories";
   return (
     <div
       className={`premium-product-visual tone-${product.tone}${large ? " large" : ""}`}
@@ -598,11 +601,22 @@ export function PremiumApp() {
     () => createProductFeed(Math.max(feedSize * 3, 500)),
     [feedSize],
   );
-  const products = catalog
-    .filter((item) =>
-      ["stationery", "gifts", "accessories"].includes(item.category),
-    )
-    .slice(0, feedSize);
+  const productCategoryIds: PremiumCategory[] = [
+    "stationery",
+    "gifts",
+    "accessories",
+    "photo-gifts",
+    "study-office",
+  ];
+  const marketCatalog = catalog.filter((item) =>
+    productCategoryIds.includes(item.category),
+  );
+  const curatedShelves = [
+    { title: copy.popularProducts, products: marketCatalog.slice(0, 5) },
+    { title: copy.newProducts, products: marketCatalog.slice(5, 10) },
+    { title: copy.personalProducts, products: marketCatalog.slice(10, 15) },
+  ];
+  const products = marketCatalog.slice(15, 15 + feedSize);
   useEffect(() => {
     document.documentElement.lang = locale;
     const params = new URLSearchParams(window.location.search);
@@ -738,123 +752,117 @@ export function PremiumApp() {
     <div className="premium-root">
       <div className="premium-demo-bar">{copy.demo}</div>
       <header className="premium-header">
-        <button
-          className="logo-button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          type="button"
-        >
-          <Logo />
-        </button>
-        <button
-          className="location-button"
-          onClick={() => notify(copy.demoSection)}
-          type="button"
-        >
-          <span className="location-pin">●</span>
-          <span>{copy.location}</span>
-          <b>⌄</b>
-        </button>
-        <label className="premium-search">
-          <Icon name="search" size={21} />
-          <input
-            aria-label={copy.search}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={copy.search}
-            value={query}
-          />
-          {query ? (
-            <button
-              aria-label={copy.close}
-              onClick={() => setQuery("")}
-              type="button"
-            >
-              ×
-            </button>
-          ) : null}
-        </label>
-        <nav className="premium-actions" aria-label={copy.account}>
+        <div className="marketplace-topline">
           <button
-            onClick={() => {
-              setActiveCategory("all");
-              setQuery("");
-              setFavoritesOnly(true);
-              scrollTo("premium-catalog");
-            }}
-            type="button"
-          >
-            <Icon name="heart" />
-            <small>{copy.favorites}</small>
-            <b>{favorites.length}</b>
-          </button>
-          <button onClick={() => setCartOpen(true)} type="button">
-            <Icon name="cart" />
-            <small>{copy.cart}</small>
-            <b>{cartCount}</b>
-          </button>
-          <button
-            className="account-action"
+            className="location-button"
             onClick={() => notify(copy.demoSection)}
             type="button"
           >
-            <Icon name="user" />
-            <small>{copy.account}</small>
+            <span className="location-pin">●</span>
+            <span>
+              <small>{copy.cityCaption}</small>
+              {copy.location}
+            </span>
+            <b>⌄</b>
           </button>
-        </nav>
-        <div className="premium-locales" aria-label="Til / Язык / Language">
-          {(["uz", "ru", "en"] as CustomerLocale[]).map((code) => (
-            <button
-              aria-pressed={locale === code}
-              key={code}
-              onClick={() => setLocale(code)}
-              type="button"
-            >
-              {code.toUpperCase()}
-            </button>
-          ))}
+          <div className="premium-locales" aria-label="Til / Язык / Language">
+            {(["uz", "ru", "en"] as CustomerLocale[]).map((code) => (
+              <button
+                aria-pressed={locale === code}
+                key={code}
+                onClick={() => setLocale(code)}
+                type="button"
+              >
+                {code.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
-      </header>
-      <div className="premium-layout">
-        <aside className="premium-sidebar">
-          <nav>
+        <div className="marketplace-head-row">
+          <button
+            className="logo-button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            type="button"
+          >
+            <Logo />
+          </button>
+          <button
+            className="catalog-button"
+            onClick={() => scrollTo("premium-services")}
+            type="button"
+          >
+            <span className="catalog-bars" aria-hidden="true">
+              ☷
+            </span>
+            {copy.catalog}
+          </button>
+          <label className="premium-search">
+            <Icon name="search" size={23} />
+            <input
+              aria-label={copy.search}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={copy.search}
+              value={query}
+            />
+            {query ? (
+              <button
+                aria-label={copy.close}
+                onClick={() => setQuery("")}
+                type="button"
+              >
+                ×
+              </button>
+            ) : null}
+          </label>
+          <nav className="premium-actions" aria-label={copy.account}>
             <button
-              className="active"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              onClick={() => {
+                setActiveCategory("all");
+                setQuery("");
+                setFavoritesOnly(true);
+                scrollTo("premium-catalog");
+              }}
               type="button"
             >
-              <Icon name="home" />
-              {copy.home}
+              <Icon name="heart" />
+              <small>{copy.favorites}</small>
+              <b>{favorites.length}</b>
             </button>
-            <button onClick={() => scrollTo("premium-services")} type="button">
-              <Icon name="printer" />
-              {copy.services}
-            </button>
-            <button onClick={() => scrollTo("premium-catalog")} type="button">
-              <Icon name="stationery" />
-              {copy.products}
-            </button>
-            <button onClick={() => selectCategory("gifts")} type="button">
-              <Icon name="gift" />
-              {copy.gifts}
-            </button>
-            <button onClick={() => selectCategory("design")} type="button">
-              <Icon name="pen" />
-              {copy.design}
+            <button onClick={() => setCartOpen(true)} type="button">
+              <Icon name="cart" />
+              <small>{copy.cart}</small>
+              <b>{cartCount}</b>
             </button>
             <button
-              onClick={() => scrollTo("premium-promotions")}
+              className="account-action"
+              onClick={() => notify(copy.demoSection)}
               type="button"
             >
-              <Icon name="tag" />
-              {copy.promotions}
+              <Icon name="user" />
+              <small>{copy.account}</small>
             </button>
           </nav>
-          <div className="app-promo">
-            <div className="app-promo-mark">A</div>
-            <strong>AGAT Premium</strong>
-            <span>Web prototype</span>
-            <small>UZ · RU · EN</small>
-          </div>
-        </aside>
+        </div>
+        <nav className="category-ribbon" aria-label={copy.categories}>
+          <button onClick={() => scrollTo("premium-services")} type="button">
+            <Icon name="printer" size={20} />
+            {copy.services}
+          </button>
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              onClick={() => selectCategory(category.id)}
+              type="button"
+            >
+              {localized(category.label, locale)}
+            </button>
+          ))}
+          <button onClick={() => scrollTo("premium-promotions")} type="button">
+            {copy.promotions}
+          </button>
+        </nav>
+      </header>
+      <div className="premium-layout">
         <main className="premium-main">
           <section className="premium-hero">
             <div className="premium-hero-copy">
@@ -960,9 +968,7 @@ export function PremiumApp() {
             </div>
             <div className="premium-category-grid">
               {categories
-                .filter((item) =>
-                  ["stationery", "gifts", "accessories"].includes(item.id),
-                )
+                .filter((item) => productCategoryIds.includes(item.id))
                 .map((category) => (
                   <button
                     aria-pressed={activeCategory === category.id}
@@ -972,7 +978,13 @@ export function PremiumApp() {
                   >
                     <span>
                       <Icon
-                        name={category.id === "gifts" ? "gift" : category.id}
+                        name={
+                          ["gifts", "photo-gifts"].includes(category.id)
+                            ? "gift"
+                            : category.id === "study-office"
+                              ? "book"
+                              : category.id
+                        }
                         size={42}
                       />
                     </span>
@@ -1003,6 +1015,45 @@ export function PremiumApp() {
               </span>
             </div>
           </section>
+          {!query && !favoritesOnly && activeCategory === "all" ? (
+            <div className="marketplace-shelves">
+              {curatedShelves.map((shelf, shelfIndex) => (
+                <section
+                  className="premium-section product-shelf"
+                  key={shelf.title}
+                >
+                  <div className="premium-section-heading">
+                    <div>
+                      <span>
+                        {shelfIndex === 0 ? "AGAT TREND" : "AGAT SELECT"}
+                      </span>
+                      <h2>{shelf.title}</h2>
+                      <p>{copy.marketplaceLead}</p>
+                    </div>
+                    <button
+                      onClick={() => scrollTo("premium-catalog")}
+                      type="button"
+                    >
+                      {copy.all} →
+                    </button>
+                  </div>
+                  <div className="premium-products-grid shelf-grid">
+                    {shelf.products.map((product) => (
+                      <ProductCard
+                        favorite={favorites.includes(product.id)}
+                        key={product.id}
+                        locale={locale}
+                        onAdd={() => addProduct(product)}
+                        onFavorite={() => toggleFavorite(product)}
+                        onOpen={() => openProduct(product)}
+                        product={product}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : null}
           <section className="premium-section" id="premium-catalog">
             <div className="premium-section-heading">
               <div>

@@ -9,7 +9,9 @@ export type PremiumCategory =
   | "design"
   | "stationery"
   | "gifts"
-  | "accessories";
+  | "accessories"
+  | "photo-gifts"
+  | "study-office";
 
 export interface LocalizedText {
   ru: string;
@@ -95,6 +97,20 @@ export const categories: Array<{
     id: "accessories",
     icon: "AC",
     label: { ru: "Аксессуары", uz: "Aksessuarlar", en: "Accessories" },
+  },
+  {
+    id: "photo-gifts",
+    icon: "PG",
+    label: { ru: "Фотоподарки", uz: "Foto sovg‘alar", en: "Photo gifts" },
+  },
+  {
+    id: "study-office",
+    icon: "SO",
+    label: {
+      ru: "Учёба и офис",
+      uz: "Ta’lim va ofis",
+      en: "Study & office",
+    },
   },
 ];
 
@@ -190,7 +206,7 @@ const productTemplates: PremiumProduct[] = [
   },
   {
     id: "photo-frame",
-    category: "gifts",
+    category: "photo-gifts",
     icon: "▣",
     name: { ru: "Фоторамка A4", uz: "A4 fotoramka", en: "A4 photo frame" },
     description: {
@@ -205,7 +221,7 @@ const productTemplates: PremiumProduct[] = [
   },
   {
     id: "photo-mug",
-    category: "gifts",
+    category: "photo-gifts",
     icon: "◉",
     name: { ru: "Кружка с фотографией", uz: "Suratli krujka", en: "Photo mug" },
     description: {
@@ -221,7 +237,7 @@ const productTemplates: PremiumProduct[] = [
   },
   {
     id: "print-tshirt",
-    category: "gifts",
+    category: "photo-gifts",
     icon: "T",
     name: {
       ru: "Футболка с принтом",
@@ -240,7 +256,7 @@ const productTemplates: PremiumProduct[] = [
   },
   {
     id: "photo-pillow",
-    category: "gifts",
+    category: "photo-gifts",
     icon: "◇",
     name: { ru: "Подушка с фото", uz: "Suratli yostiq", en: "Photo cushion" },
     description: {
@@ -400,7 +416,7 @@ const productTemplates: PremiumProduct[] = [
   },
   {
     id: "school-backpack",
-    category: "accessories",
+    category: "study-office",
     icon: "▰",
     name: {
       ru: "Школьный рюкзак",

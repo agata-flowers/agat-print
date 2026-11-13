@@ -32,14 +32,16 @@ test("premium catalog supports search, favorites, details and persistent cart", 
   await expect(
     page
       .locator(".premium-cart-drawer")
-      .getByText("Ежедневник A5", { exact: true }),
+      .getByText(/Ежедневник A5/)
+      .first(),
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /Корзина/ }).click();
   await expect(
     page
       .locator(".premium-cart-drawer")
-      .getByText("Ежедневник A5", { exact: true }),
+      .getByText(/Ежедневник A5/)
+      .first(),
   ).toBeVisible();
 });
 
@@ -154,19 +156,74 @@ test("premium redesign remains readable at tablet and narrow mobile widths", asy
   await expect(page.locator(".premium-mobile-nav")).toBeVisible();
 });
 
+test("marketplace grid uses five desktop columns without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const cards = page
+    .locator(".product-shelf")
+    .first()
+    .locator("[data-product-id]");
+  await expect(cards).toHaveCount(5);
+  const tops = await cards.evaluateAll((nodes) =>
+    nodes.map((node) => Math.round(node.getBoundingClientRect().top)),
+  );
+  expect(new Set(tops).size).toBe(1);
+  await expect(page.locator(".premium-sidebar")).toHaveCount(0);
+  await expect(page.locator(".category-ribbon")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+
+  for (const width of [1024, 768, 430, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("marketplace navigation and cart controls have meaningful reactions", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "Каталог", exact: true }).click();
+  await expect(page.locator("#premium-services")).toBeInViewport();
+
+  await page
+    .getByRole("navigation", { name: "Категории" })
+    .getByRole("button", { name: "Фотоподарки", exact: true })
+    .click();
+  await expect(page.locator("#premium-catalog")).toBeInViewport();
+  const filteredCard = page.locator("[data-product-id]").first();
+  await filteredCard.getByRole("button", { name: /В корзину:/ }).click();
+  await page.getByRole("button", { name: /Корзина/ }).click();
+
+  const drawer = page.locator(".premium-cart-drawer");
+  await drawer.getByRole("button", { name: "+", exact: true }).click();
+  await expect(drawer.locator(".quantity-control span")).toHaveText("2");
+  await drawer.getByRole("button", { name: "Удалить", exact: true }).click();
+  await expect(
+    drawer.getByText("Корзина пока пуста", { exact: true }),
+  ).toBeVisible();
+});
+
 test("capture approved desktop and mobile review images", async ({
   page,
 }, testInfo) => {
   test.skip(process.env.CAPTURE_STAGE17_SCREENSHOTS !== "1");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
-    path: testInfo.outputPath("stage17-premium-desktop.png"),
-    fullPage: true,
+    path: testInfo.outputPath("stage17-2-premium-desktop.png"),
+    fullPage: false,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/premium?lang=uz");
   await page.screenshot({
-    path: testInfo.outputPath("stage17-premium-mobile.png"),
-    fullPage: true,
+    path: testInfo.outputPath("stage17-2-premium-mobile.png"),
+    fullPage: false,
   });
 });
