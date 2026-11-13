@@ -146,17 +146,19 @@ test("premium redesign remains readable at tablet and narrow mobile widths", asy
   const tabletCard = page.locator('[data-service-id="outdoor"]');
   await expect(tabletCard).toBeVisible();
   const tabletBox = await tabletCard.boundingBox();
-  expect(tabletBox?.width).toBeGreaterThan(300);
+  expect(tabletBox?.width).toBeGreaterThan(210);
+  expect(tabletBox?.height).toBeGreaterThan(100);
 
   await page.setViewportSize({ width: 360, height: 800 });
   const mobileCard = page.locator('[data-service-id="outdoor"]');
   await expect(mobileCard).toBeVisible();
   const mobileBox = await mobileCard.boundingBox();
-  expect(mobileBox?.width).toBeGreaterThan(300);
+  expect(mobileBox?.width).toBeGreaterThan(210);
+  expect(mobileBox?.height).toBeGreaterThan(100);
   await expect(page.locator(".premium-mobile-nav")).toBeVisible();
 });
 
-test("marketplace grid uses five desktop columns without horizontal overflow", async ({
+test("approved marketplace grid uses six desktop columns without horizontal overflow", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -164,13 +166,12 @@ test("marketplace grid uses five desktop columns without horizontal overflow", a
     .locator(".product-shelf")
     .first()
     .locator("[data-product-id]");
-  await expect(cards).toHaveCount(5);
+  await expect(cards).toHaveCount(6);
   const tops = await cards.evaluateAll((nodes) =>
     nodes.map((node) => Math.round(node.getBoundingClientRect().top)),
   );
   expect(new Set(tops).size).toBe(1);
-  await expect(page.locator(".premium-sidebar")).toHaveCount(0);
-  await expect(page.locator(".category-ribbon")).toBeVisible();
+  await expect(page.locator(".premium-sidebar")).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -194,8 +195,8 @@ test("marketplace navigation and cart controls have meaningful reactions", async
   await expect(page.locator("#premium-services")).toBeInViewport();
 
   await page
-    .getByRole("navigation", { name: "Категории" })
-    .getByRole("button", { name: "Фотоподарки", exact: true })
+    .locator(".premium-category-grid")
+    .getByRole("button", { name: /Фотоподарки/ })
     .click();
   await expect(page.locator("#premium-catalog")).toBeInViewport();
   const filteredCard = page.locator("[data-product-id]").first();
@@ -215,15 +216,15 @@ test("capture approved desktop and mobile review images", async ({
   page,
 }, testInfo) => {
   test.skip(process.env.CAPTURE_STAGE17_SCREENSHOTS !== "1");
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1674, height: 940 });
   await page.screenshot({
-    path: testInfo.outputPath("stage17-2-premium-desktop.png"),
+    path: testInfo.outputPath("stage17-3-approved-desktop.png"),
     fullPage: false,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/premium?lang=uz");
   await page.screenshot({
-    path: testInfo.outputPath("stage17-2-premium-mobile.png"),
+    path: testInfo.outputPath("stage17-3-approved-mobile.png"),
     fullPage: false,
   });
 });
