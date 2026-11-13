@@ -474,3 +474,31 @@ jobs:
             outputs/stage17-3-screenshots
             apps/preview/test-results
           if-no-files-found: error
+      - name: Initialize stage 17.4 complete marketplace diagnostic artifact
+        if: always()
+        run: |
+          printf '%s\n' '{"result":"not_run","phase":"prior-stage-regressions"}' > outputs/stage17-4-complete-marketplace-verification-report.json
+          sha256sum outputs/stage17-4-complete-marketplace-verification-report.json > outputs/stage17-4-complete-marketplace-verification-report.sha256
+      - name: Run stage 17.4 complete marketplace verification
+        run: |
+          set +e
+          bash ops/verify/stage17-4.sh
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            diagnostic="$(node -e 'const fs=require("node:fs"); const p="outputs/stage17-4-complete-marketplace-verification-report.json"; if(!fs.existsSync(p)){process.stdout.write("phase=report-missing; failureLine=unknown"); process.exit(0)} const r=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(`phase=${r.phase}; failureLine=${r.failureLine ?? "unknown"}`)')"
+            echo "::error title=Stage 17.4 complete marketplace diagnostic::$diagnostic"
+          fi
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage17-4-complete-marketplace-prototype
+          path: |
+            outputs/stage17-4-complete-marketplace-verification-report.json
+            outputs/stage17-4-complete-marketplace-verification-report.sha256
+            outputs/stage17-4-complete-marketplace-windows.zip
+            outputs/stage17-4-complete-marketplace-windows.zip.sha256
+            outputs/stage17-4-screenshots
+            apps/preview/test-results
+          if-no-files-found: error
