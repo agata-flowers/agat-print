@@ -154,6 +154,43 @@ function Icon({ name, size = 30 }: { name: string; size?: number }) {
         <circle {...common} cx="16" cy="9" r="2" />
       </>
     ),
+    bolt: <path {...common} d="m13 2-8 12h6l-1 8 9-13h-6z" />,
+    star: (
+      <path
+        {...common}
+        d="m12 2 3 6 7 .9-5 4.8 1.3 6.8L12 17.2l-6.3 3.3L7 13.7 2 8.9 9 8z"
+      />
+    ),
+    headphones: (
+      <path
+        {...common}
+        d="M4 14v-3a8 8 0 0 1 16 0v3M4 14h4v7H6a2 2 0 0 1-2-2zM20 14h-4v7h2a2 2 0 0 0 2-2z"
+      />
+    ),
+    compare: <path {...common} d="M5 20V10M12 20V4M19 20v-7" />,
+    grid: (
+      <path
+        {...common}
+        d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"
+      />
+    ),
+    box: (
+      <path {...common} d="m4 7 8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10" />
+    ),
+    briefcase: (
+      <path {...common} d="M3 8h18v12H3zM8 8V5h8v3M3 13h18M10 13v2h4v-2" />
+    ),
+    megaphone: <path {...common} d="M4 13h4l9 4V5L8 9H4zM8 13l2 7h3l-2-6" />,
+    bag: <path {...common} d="M5 8h14l1 13H4zM9 9V6a3 3 0 0 1 6 0v3" />,
+    roll: (
+      <path
+        {...common}
+        d="M6 7c0-3 3-4 6-4h6v14h-6c-3 0-6 1-6 4M6 7c3 0 5 2 5 5s-2 5-5 5-4-2-4-5 1-5 4-5z"
+      />
+    ),
+    layers: (
+      <path {...common} d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5" />
+    ),
   };
   return (
     <svg
@@ -186,24 +223,21 @@ function ProductVisual({
   product: PremiumProduct;
   large?: boolean;
 }) {
-  const iconName =
-    product.category === "stationery"
-      ? "stationery"
-      : ["gifts", "photo-gifts"].includes(product.category)
-        ? "gift"
-        : product.category === "study-office"
-          ? "book"
-          : "accessories";
+  const spriteIndex =
+    [...product.id].reduce(
+      (total, character) => total + character.charCodeAt(0),
+      0,
+    ) % 9;
+  const spriteStyle = {
+    "--sprite-x": `${(spriteIndex % 3) * 50}%`,
+    "--sprite-y": `${Math.floor(spriteIndex / 3) * 50}%`,
+  } as React.CSSProperties;
   return (
     <div
       className={`premium-product-visual tone-${product.tone}${large ? " large" : ""}`}
+      style={spriteStyle}
     >
-      <span className="visual-orbit" />
-      <span className="visual-object">
-        <Icon name={iconName} size={large ? 92 : 62} />
-      </span>
-      <span className="visual-shadow" />
-      <span className="visual-brand">AGAT</span>
+      <span className="product-photo" aria-hidden="true" />
     </div>
   );
 }
@@ -291,13 +325,11 @@ function ServiceCard({
   const t = serviceText[locale];
   return (
     <article
-      className="service-card"
+      className={`service-card service-${service.id}`}
       style={{ "--service-accent": service.accent } as React.CSSProperties}
       data-service-id={service.id}
     >
-      <div className="service-card-icon">
-        <Icon name={service.icon} size={56} />
-      </div>
+      <div className="service-card-photo" aria-hidden="true" />
       <div className="service-card-copy">
         <span>{textFor(service.turnaround, locale)}</span>
         <h3>{textFor(service.title, locale)}</h3>
@@ -612,11 +644,11 @@ export function PremiumApp() {
     productCategoryIds.includes(item.category),
   );
   const curatedShelves = [
-    { title: copy.popularProducts, products: marketCatalog.slice(0, 5) },
-    { title: copy.newProducts, products: marketCatalog.slice(5, 10) },
-    { title: copy.personalProducts, products: marketCatalog.slice(10, 15) },
+    { title: copy.popularProducts, products: marketCatalog.slice(0, 6) },
+    { title: copy.newProducts, products: marketCatalog.slice(6, 12) },
+    { title: copy.personalProducts, products: marketCatalog.slice(12, 18) },
   ];
-  const products = marketCatalog.slice(15, 15 + feedSize);
+  const products = marketCatalog.slice(18, 18 + feedSize);
   useEffect(() => {
     document.documentElement.lang = locale;
     const params = new URLSearchParams(window.location.search);
@@ -742,15 +774,15 @@ export function PremiumApp() {
     0,
   );
   const benefitItems: Array<[string, string, string]> = [
-    ["truck", copy.fast, copy.fastText],
+    ["bolt", copy.fast, copy.fastText],
     ["shield", copy.quality, copy.qualityText],
     ["tag", copy.useful, copy.usefulText],
-    ["home", copy.near, copy.nearText],
+    ["star", copy.near, copy.nearText],
+    ["truck", copy.delivery, copy.deliveryText],
   ];
 
   return (
     <div className="premium-root">
-      <div className="premium-demo-bar">{copy.demo}</div>
       <header className="premium-header">
         <div className="marketplace-topline">
           <button
@@ -765,6 +797,27 @@ export function PremiumApp() {
             </span>
             <b>⌄</b>
           </button>
+          <nav className="utility-links" aria-label={copy.about}>
+            <span>
+              <Icon name="truck" size={17} /> {copy.quickDelivery}
+            </span>
+            <span>
+              <Icon name="shield" size={17} /> {copy.guarantee}
+            </span>
+            <button
+              onClick={() => scrollTo("premium-promotions")}
+              type="button"
+            >
+              <Icon name="tag" size={17} /> {copy.promotions}
+            </button>
+            <span>
+              <Icon name="headphones" size={17} /> {copy.support}
+            </span>
+          </nav>
+          <span className="demo-pill" title={copy.demo}>
+            DEMO
+          </span>
+          <span className="sr-only">{copy.demo}</span>
           <div className="premium-locales" aria-label="Til / Язык / Language">
             {(["uz", "ru", "en"] as CustomerLocale[]).map((code) => (
               <button
@@ -816,6 +869,14 @@ export function PremiumApp() {
           </label>
           <nav className="premium-actions" aria-label={copy.account}>
             <button
+              className="account-action"
+              onClick={() => notify(copy.demoSection)}
+              type="button"
+            >
+              <Icon name="user" />
+              <small>{copy.login}</small>
+            </button>
+            <button
               onClick={() => {
                 setActiveCategory("all");
                 setQuery("");
@@ -828,41 +889,113 @@ export function PremiumApp() {
               <small>{copy.favorites}</small>
               <b>{favorites.length}</b>
             </button>
+            <button
+              className="compare-action"
+              onClick={() => notify(copy.demoSection)}
+              type="button"
+            >
+              <Icon name="compare" />
+              <small>{copy.compare}</small>
+            </button>
             <button onClick={() => setCartOpen(true)} type="button">
               <Icon name="cart" />
               <small>{copy.cart}</small>
               <b>{cartCount}</b>
             </button>
-            <button
-              className="account-action"
-              onClick={() => notify(copy.demoSection)}
-              type="button"
-            >
-              <Icon name="user" />
-              <small>{copy.account}</small>
-            </button>
           </nav>
         </div>
-        <nav className="category-ribbon" aria-label={copy.categories}>
-          <button onClick={() => scrollTo("premium-services")} type="button">
-            <Icon name="printer" size={20} />
-            {copy.services}
-          </button>
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => selectCategory(category.id)}
-              type="button"
-            >
-              {localized(category.label, locale)}
-            </button>
-          ))}
-          <button onClick={() => scrollTo("premium-promotions")} type="button">
-            {copy.promotions}
-          </button>
-        </nav>
       </header>
       <div className="premium-layout">
+        <aside className="premium-sidebar" aria-label={copy.catalog}>
+          <nav>
+            <button
+              className="active"
+              onClick={() => scrollTo("premium-services")}
+              type="button"
+            >
+              <Icon name="grid" />
+              {copy.services}
+              <span>›</span>
+            </button>
+            <button onClick={() => scrollTo("premium-catalog")} type="button">
+              <Icon name="box" />
+              {copy.printProducts}
+              <span>›</span>
+            </button>
+            <button
+              onClick={() =>
+                setService(
+                  premiumServices.find((item) => item.id === "design")!,
+                )
+              }
+              type="button"
+            >
+              <Icon name="pen" /> {copy.layouts}
+            </button>
+            <button
+              onClick={() =>
+                setService(
+                  premiumServices.find((item) => item.id === "id-photo")!,
+                )
+              }
+              type="button"
+            >
+              <Icon name="photo" />{" "}
+              {localized(
+                premiumServices.find((item) => item.id === "id-photo")!.title,
+                locale,
+              )}
+            </button>
+            <button
+              onClick={() =>
+                setService(
+                  premiumServices.find((item) => item.id === "printing")!,
+                )
+              }
+              type="button"
+            >
+              <Icon name="briefcase" /> {copy.businessPrint}
+            </button>
+            <button
+              onClick={() =>
+                setService(
+                  premiumServices.find((item) => item.id === "outdoor")!,
+                )
+              }
+              type="button"
+            >
+              <Icon name="megaphone" /> {copy.advertising}
+            </button>
+            <button onClick={() => selectCategory("gifts")} type="button">
+              <Icon name="gift" /> {copy.souvenirs}
+            </button>
+            <button onClick={() => selectCategory("stationery")} type="button">
+              <Icon name="stationery" />{" "}
+              {localized(
+                categories.find((item) => item.id === "stationery")!.label,
+                locale,
+              )}
+            </button>
+            <button onClick={() => notify(copy.demoSection)} type="button">
+              <Icon name="bag" /> {copy.packaging}
+            </button>
+            <button onClick={() => notify(copy.demoSection)} type="button">
+              <Icon name="roll" /> {copy.printMaterials}
+            </button>
+          </nav>
+          <button
+            className="corporate-card"
+            onClick={() => notify(copy.demoSection)}
+            type="button"
+          >
+            <Icon name="layers" size={34} />
+            <span>
+              <strong>{copy.corporateOrders}</strong>
+              <small>{copy.corporateText}</small>
+            </span>
+            <b>→</b>
+          </button>
+        </aside>
         <main className="premium-main">
           <section className="premium-hero">
             <div className="premium-hero-copy">
@@ -876,17 +1009,8 @@ export function PremiumApp() {
                 {copy.order} <span>→</span>
               </button>
             </div>
-            <div className="premium-hero-art" aria-hidden="true">
-              <div className="hero-glow" />
-              <div className="hero-letter">A</div>
-              <div className="hero-sheet">
-                <Icon name="photo" size={72} />
-                <b>AGAT</b>
-              </div>
-              <div className="hero-printer">
-                <Icon name="printer" size={108} />
-              </div>
-              <div className="hero-cup">A</div>
+            <div className="hero-pagination" aria-hidden="true">
+              <span className="active" /> <span /> <span /> <span />
             </div>
           </section>
           <section className="premium-benefits">
@@ -960,7 +1084,7 @@ export function PremiumApp() {
             <div className="premium-section-heading">
               <div>
                 <span>AGAT MARKET</span>
-                <h2>{copy.categories}</h2>
+                <h2>{copy.popularProducts}</h2>
               </div>
               <button onClick={() => selectCategory("all")} type="button">
                 {copy.all} →
@@ -992,27 +1116,6 @@ export function PremiumApp() {
                     <small>{copy.synthetic}</small>
                   </button>
                 ))}
-            </div>
-          </section>
-          <section className="weekly-banner">
-            <div>
-              <span>{copy.weekly}</span>
-              <strong>−50%</strong>
-              <p>{copy.discountText}</p>
-              <button onClick={() => scrollTo("premium-catalog")} type="button">
-                {copy.all} →
-              </button>
-            </div>
-            <div className="weekly-products">
-              <span>
-                <Icon name="stationery" size={64} />
-              </span>
-              <span>
-                <Icon name="accessories" size={74} />
-              </span>
-              <span>
-                <Icon name="gift" size={68} />
-              </span>
             </div>
           </section>
           {!query && !favoritesOnly && activeCategory === "all" ? (
@@ -1054,6 +1157,21 @@ export function PremiumApp() {
               ))}
             </div>
           ) : null}
+          <section className="weekly-banner">
+            <div>
+              <span>{copy.weekly}</span>
+              <strong>−50%</strong>
+              <p>{copy.discountText}</p>
+              <button onClick={() => scrollTo("premium-catalog")} type="button">
+                {copy.all} →
+              </button>
+            </div>
+            <div className="weekly-products" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </section>
           <section className="premium-section" id="premium-catalog">
             <div className="premium-section-heading">
               <div>
