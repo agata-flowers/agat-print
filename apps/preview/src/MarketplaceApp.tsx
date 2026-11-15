@@ -23,6 +23,11 @@ import {
 } from "./marketplace-data";
 import { localized } from "./premium-data";
 import { premiumServices, type PremiumService } from "./premium-services";
+import {
+  eligibleAssignmentCandidates,
+  rankAssignmentCandidates,
+  type RankedCandidate,
+} from "./marketplace-assignment";
 import "./marketplace.css";
 
 type Cart = Record<string, number>;
@@ -61,6 +66,22 @@ const money = (amount: number, locale: CustomerLocale) =>
   new Intl.NumberFormat(
     locale === "uz" ? "uz-UZ" : locale === "ru" ? "ru-RU" : "en-US",
   ).format(amount);
+
+const ui = (locale: CustomerLocale, ru: string, uz: string, en: string) =>
+  ({ ru, uz, en })[locale];
+
+const asSellerListings = (products: MarketplaceProduct[]) =>
+  products.flatMap((product) =>
+    product.offers.map((offer) => {
+      const seller = sellerById(offer.sellerId);
+      return {
+        ...product,
+        id: `${product.id}--${offer.id}`,
+        slug: `${product.slug}--${seller.slug}`,
+        offers: [offer],
+      } satisfies MarketplaceProduct;
+    }),
+  );
 
 const effectiveOfferPrice = (
   product: MarketplaceProduct,
@@ -200,6 +221,19 @@ function Icon({ name, size = 22 }: { name: string; size?: number }) {
         d="M3 5c4-1 7 0 9 2v14c-2-2-5-3-9-2Zm18 0c-4-1-7 0-9 2v14c2-2 5-3 9-2Z"
       />
     ),
+    mobile: (
+      <>
+        <rect {...common} x="7" y="2" width="10" height="20" rx="2" />
+        <path {...common} d="M10 5h4M11 18h2" />
+      </>
+    ),
+    printer: (
+      <>
+        <path {...common} d="M7 8V3h10v5M7 17H4V9h16v8h-3" />
+        <path {...common} d="M7 14h10v7H7Z" />
+      </>
+    ),
+    up: <path {...common} d="m5 15 7-7 7 7" />,
   };
   return (
     <svg aria-hidden="true" height={size} viewBox="0 0 24 24" width={size}>
@@ -418,6 +452,186 @@ function ServiceStrip({
   );
 }
 
+function HomeSidebar({
+  locale,
+  navigate,
+}: {
+  locale: CustomerLocale;
+  navigate: (path: string) => void;
+}) {
+  const items = [
+    ["home", ui(locale, "Главная", "Bosh sahifa", "Home"), "/"],
+    [
+      "printer",
+      ui(locale, "Услуги печати", "Chop etish xizmatlari", "Print services"),
+      "/catalog?tab=services",
+    ],
+    [
+      "book",
+      ui(
+        locale,
+        "Дизайн и документы",
+        "Dizayn va hujjatlar",
+        "Design & documents",
+      ),
+      "/service/design",
+    ],
+    [
+      "photo",
+      ui(
+        locale,
+        "Реклама и вывески",
+        "Reklama va peshlavhalar",
+        "Advertising & signs",
+      ),
+      "/service/outdoor",
+    ],
+    [
+      "grid",
+      ui(locale, "Каталог товаров", "Mahsulotlar katalogi", "Product catalog"),
+      "/catalog",
+    ],
+    [
+      "gift",
+      ui(
+        locale,
+        "Акции и скидки",
+        "Aksiyalar va chegirmalar",
+        "Deals & discounts",
+      ),
+      "/catalog?sort=discount",
+    ],
+    [
+      "store",
+      ui(locale, "Наши точки", "Bizning punktlar", "Our locations"),
+      "/store/agat-print-tashkent",
+    ],
+    ["headphones", ui(locale, "Помощь", "Yordam", "Help"), "/account/support"],
+  ] as const;
+  return (
+    <aside
+      className="market-home-sidebar"
+      aria-label={ui(locale, "Разделы", "Bo‘limlar", "Sections")}
+    >
+      <nav>
+        {items.map(([icon, label, path], index) => (
+          <button
+            className={index === 0 ? "active" : ""}
+            key={path}
+            onClick={() => navigate(path)}
+            type="button"
+          >
+            <Icon name={icon} size={22} />
+            <span>{label}</span>
+            <Icon name="arrow" size={16} />
+          </button>
+        ))}
+      </nav>
+      <div className="market-app-promo">
+        <Icon name="mobile" size={34} />
+        <strong>
+          {ui(locale, "Мобильное приложение", "Mobil ilova", "Mobile app")}
+        </strong>
+        <p>
+          {ui(
+            locale,
+            "Скоро для Android и iOS",
+            "Tez orada Android va iOS uchun",
+            "Coming soon to Android and iOS",
+          )}
+        </p>
+        <span>DEMO</span>
+      </div>
+    </aside>
+  );
+}
+
+function HomePromotions({
+  locale,
+  navigate,
+}: {
+  locale: CustomerLocale;
+  navigate: (path: string) => void;
+}) {
+  const cards = [
+    [
+      "-20%",
+      ui(locale, "Первый заказ", "Birinchi buyurtma", "First order"),
+      "/catalog?sort=discount",
+    ],
+    [
+      "B2B",
+      ui(locale, "Для бизнеса", "Biznes uchun", "For business"),
+      "/service/design",
+    ],
+    [
+      "NEW",
+      ui(locale, "Фото-подарки", "Foto sovg‘alar", "Photo gifts"),
+      "/category/gifts",
+    ],
+  ] as const;
+  return (
+    <section
+      className="market-home-promotions"
+      aria-label={ui(locale, "Акции", "Aksiyalar", "Promotions")}
+    >
+      {cards.map(([badge, title, path]) => (
+        <button key={title} onClick={() => navigate(path)} type="button">
+          <b>{badge}</b>
+          <strong>{title}</strong>
+          <span>→</span>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function QuickServices({
+  locale,
+  navigate,
+}: {
+  locale: CustomerLocale;
+  navigate: (path: string) => void;
+}) {
+  const services = [
+    ["Ксерокопия", "Nusxa olish", "Photocopy", "printing"],
+    ["Сканирование", "Skanerlash", "Scanning", "printing"],
+    ["Ламинация", "Laminatsiya", "Lamination", "printing"],
+    ["Переплёт", "Muqovalash", "Binding", "coursework"],
+    ["Визитки", "Vizitkalar", "Business cards", "design"],
+    ["Флаеры", "Flayerlar", "Flyers", "design"],
+    ["Баннеры", "Bannerlar", "Banners", "outdoor"],
+    ["Оракал", "Orakal", "Vinyl", "outdoor"],
+  ] as const;
+  return (
+    <section className="market-quick-services">
+      <div className="market-section-title">
+        <h2>
+          {ui(
+            locale,
+            "Популярные услуги",
+            "Mashhur xizmatlar",
+            "Popular services",
+          )}
+        </h2>
+      </div>
+      <div>
+        {services.map(([ru, uz, en, id], index) => (
+          <button
+            key={ru}
+            onClick={() => navigate(`/service/${id}`)}
+            type="button"
+          >
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <strong>{ui(locale, ru, uz, en)}</strong>
+            <Icon name="arrow" size={16} />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function HomePage(props: CommonPageProps & { viewed: string[] }) {
   const { locale, products, navigate, favorites, viewed } = props;
   const copy = getMarketplaceCopy(locale);
@@ -450,106 +664,120 @@ function HomePage(props: CommonPageProps & { viewed: string[] }) {
     observer.observe(target);
     return () => observer.disconnect();
   }, [feed.length, visible]);
+  const uniqueProducts = products.filter(
+    (product, index, source) =>
+      source.findIndex((item) => item.name.en === product.name.en) === index,
+  );
   return (
-    <>
-      <section className="market-hero">
-        <div>
-          <span>
-            {marketplaceBrand.name} · {marketplaceBrand.descriptor}
-          </span>
-          <h1>{copy.heroTitle}</h1>
-          <p>{copy.heroText}</p>
+    <div className="market-home-layout">
+      <HomeSidebar locale={locale} navigate={navigate} />
+      <div className="market-home-content">
+        <section className="market-hero">
           <div>
-            <button onClick={() => navigate("/catalog")} type="button">
-              {copy.heroAction}
-            </button>
+            <span>
+              {marketplaceBrand.name} · {marketplaceBrand.descriptor}
+            </span>
+            <h1>{copy.heroTitle}</h1>
+            <p>{copy.heroText}</p>
+            <div>
+              <button onClick={() => navigate("/catalog")} type="button">
+                {copy.heroAction}
+              </button>
+              <button
+                className="secondary"
+                onClick={() => navigate("/catalog?tab=services")}
+                type="button"
+              >
+                {copy.heroService}
+              </button>
+            </div>
+          </div>
+          <div className="market-hero-products" aria-hidden="true">
+            <ProductImage product={products[0]!} />
+            <ProductImage product={products[12]!} />
+            <ProductImage product={products[4]!} />
+          </div>
+        </section>
+        <ServiceStrip locale={locale} navigate={navigate} />
+        <nav className="market-category-row" aria-label={copy.categories}>
+          {marketplaceCategories.map((category) => (
             <button
-              className="secondary"
-              onClick={() => navigate("/catalog?tab=services")}
+              key={category.id}
+              onClick={() => navigate(`/category/${category.id}`)}
               type="button"
             >
-              {copy.heroService}
+              <Icon name={category.icon} />
+              <span>{marketplaceText(category.label, locale)}</span>
             </button>
-          </div>
-        </div>
-        <div className="market-hero-products" aria-hidden="true">
-          <ProductImage product={products[0]!} />
-          <ProductImage product={products[12]!} />
-          <ProductImage product={products[4]!} />
-        </div>
-      </section>
-      <nav className="market-category-row" aria-label={copy.categories}>
-        {marketplaceCategories.map((category) => (
+          ))}
+        </nav>
+        <HomePromotions locale={locale} navigate={navigate} />
+        <QuickServices locale={locale} navigate={navigate} />
+        <Section
+          action={() => navigate("/catalog?sort=popular")}
+          title={copy.recommended}
+        >
+          <p className="market-hint">{copy.recommendationHint}</p>
+          <ProductGrid
+            items={
+              recommended.length ? recommended : uniqueProducts.slice(0, 6)
+            }
+            {...props}
+          />
+        </Section>
+        <section className="market-promo-grid">
           <button
-            key={category.id}
-            onClick={() => navigate(`/category/${category.id}`)}
+            onClick={() => navigate("/catalog?sort=discount")}
             type="button"
           >
-            <Icon name={category.icon} />
-            <span>{marketplaceText(category.label, locale)}</span>
+            <span>-20%</span>
+            <strong>{copy.discounts}</strong>
+            <small>{copy.synthetic}</small>
           </button>
-        ))}
-      </nav>
-      <ServiceStrip locale={locale} navigate={navigate} />
-      <Section
-        action={() => navigate("/catalog?sort=popular")}
-        title={copy.recommended}
-      >
-        <p className="market-hint">{copy.recommendationHint}</p>
-        <ProductGrid items={recommended} {...props} />
-      </Section>
-      <section className="market-promo-grid">
-        <button
-          onClick={() => navigate("/catalog?sort=discount")}
-          type="button"
+          <button onClick={() => navigate("/category/gifts")} type="button">
+            <span>NEW</span>
+            <strong>{copy.gifts}</strong>
+            <small>{copy.synthetic}</small>
+          </button>
+        </section>
+        <Section
+          action={() => navigate("/catalog?sort=discount")}
+          title={copy.discounts}
         >
-          <span>-20%</span>
-          <strong>{copy.discounts}</strong>
-          <small>{copy.synthetic}</small>
-        </button>
-        <button onClick={() => navigate("/category/gifts")} type="button">
-          <span>NEW</span>
-          <strong>{copy.gifts}</strong>
-          <small>{copy.synthetic}</small>
-        </button>
-      </section>
-      <Section
-        action={() => navigate("/catalog?sort=discount")}
-        title={copy.discounts}
-      >
-        <ProductGrid items={discounted} {...props} />
-      </Section>
-      <Section
-        action={() => navigate("/catalog?sort=new")}
-        title={copy.newItems}
-      >
-        <ProductGrid items={newItems} {...props} />
-      </Section>
-      <Section
-        action={() => navigate("/catalog?seller=nearby")}
-        title={copy.nearby}
-      >
-        <ProductGrid items={nearby} {...props} />
-      </Section>
-      <Section title={copy.more}>
-        <div data-market-feed>
-          <ProductGrid items={feed.slice(0, visible)} {...props} />
-        </div>
-        {visible < feed.length ? (
-          <div className="market-feed-sentinel" ref={feedSentinel}>
-            <button
-              className="market-load-more"
-              onClick={() =>
-                setVisible((count) => Math.min(count + 6, feed.length))
-              }
-              type="button"
-            >
-              {copy.more}
-            </button>
+          <ProductGrid items={discounted} {...props} />
+        </Section>
+        <Section
+          action={() => navigate("/catalog?sort=new")}
+          title={copy.newItems}
+        >
+          <ProductGrid items={newItems} {...props} />
+        </Section>
+        <Section
+          action={() => navigate("/catalog?seller=nearby")}
+          title={copy.nearby}
+        >
+          <ProductGrid items={nearby} {...props} />
+        </Section>
+        <Section title={copy.more}>
+          <div data-market-feed>
+            <ProductGrid items={feed.slice(0, visible)} {...props} />
           </div>
-        ) : null}
-      </Section>
-    </>
+          {visible < feed.length ? (
+            <div className="market-feed-sentinel" ref={feedSentinel}>
+              <button
+                className="market-load-more"
+                onClick={() =>
+                  setVisible((count) => Math.min(count + 6, feed.length))
+                }
+                type="button"
+              >
+                {copy.more}
+              </button>
+            </div>
+          ) : null}
+        </Section>
+      </div>
+    </div>
   );
 }
 
@@ -758,10 +986,35 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
 function ProductPage(props: CommonPageProps & { slug: string }) {
   const copy = getMarketplaceCopy(props.locale);
   const product =
-    productBySlug(props.slug) ??
-    props.products.find((item) => item.slug === props.slug);
+    props.products.find((item) => item.slug === props.slug) ??
+    productBySlug(props.slug);
   const [variant, setVariant] = useState(0);
+  const [gallery, setGallery] = useState(0);
+  const [quantity, setQuantity] = useState(1);
   if (!product) return <div className="market-empty">{copy.nothing}</div>;
+  const offer = lowestOffer(product);
+  const seller = sellerById(offer.sellerId);
+  const override = props.overrides[product.id];
+  const price =
+    override && offer.sellerId === "seller-agat"
+      ? override.price
+      : offer.priceMinor;
+  const stock =
+    override && offer.sellerId === "seller-agat" ? override.stock : offer.stock;
+  const related = props.products
+    .filter(
+      (item) => item.id !== product.id && item.category === product.category,
+    )
+    .slice(0, 6);
+  const recommended = props.products
+    .filter(
+      (item) => item.id !== product.id && item.category !== product.category,
+    )
+    .slice(0, 6);
+  const addQuantity = () => {
+    for (let index = 0; index < quantity; index += 1)
+      props.addProduct(product, offer.id);
+  };
   return (
     <div className="market-detail-page">
       <button
@@ -771,9 +1024,34 @@ function ProductPage(props: CommonPageProps & { slug: string }) {
       >
         ← {copy.back}
       </button>
-      <div className="market-product-detail">
-        <ProductImage className="detail-image" product={product} />
-        <div className="market-detail-copy">
+      <div className="market-product-detail market-listing-detail">
+        <div className="market-gallery">
+          <div className="market-gallery-thumbs">
+            {[0, 1, 2, 3].map((item) => (
+              <button
+                className={gallery === item ? "active" : ""}
+                key={item}
+                onClick={() => setGallery(item)}
+                type="button"
+              >
+                <ProductImage
+                  product={{
+                    ...product,
+                    imageIndex: (product.imageIndex + item) % 12,
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+          <ProductImage
+            className="detail-image"
+            product={{
+              ...product,
+              imageIndex: (product.imageIndex + gallery) % 12,
+            }}
+          />
+        </div>
+        <div className="market-detail-copy market-buy-panel">
           <span>
             {marketplaceText(
               marketplaceCategories.find(
@@ -788,9 +1066,13 @@ function ProductPage(props: CommonPageProps & { slug: string }) {
             <small>
               {product.reviews} {copy.reviews}
             </small>
+            <small>
+              · {ui(props.locale, "Артикул", "Artikul", "SKU")}:{" "}
+              {product.id.slice(0, 18)}
+            </small>
           </div>
           <p>{marketplaceText(product.description, props.locale)}</p>
-          <h3>{copy.chooseOffer}</h3>
+          <h3>{ui(props.locale, "Вариант", "Variant", "Variant")}</h3>
           <div className="market-variants">
             {product.variants.map((item, index) => (
               <button
@@ -803,58 +1085,170 @@ function ProductPage(props: CommonPageProps & { slug: string }) {
               </button>
             ))}
           </div>
+          <div className="market-detail-price">
+            {offer.oldPriceMinor ? (
+              <del>
+                {money(offer.oldPriceMinor, props.locale)} {copy.sum}
+              </del>
+            ) : null}
+            <strong>
+              {money(price, props.locale)} {copy.sum}
+            </strong>
+            {offer.oldPriceMinor ? (
+              <b>-{Math.round((1 - price / offer.oldPriceMinor) * 100)}%</b>
+            ) : null}
+          </div>
+          <div className="market-stock-line">
+            <span>
+              {stock > 0 ? `${copy.stock}: ${stock}` : copy.outOfStock}
+            </span>
+            <span>
+              {copy.delivery}: {marketplaceText(seller.delivery, props.locale)}
+            </span>
+          </div>
+          <div className="market-detail-actions">
+            <div className="market-quantity">
+              <button
+                aria-label="−"
+                onClick={() => setQuantity((value) => Math.max(1, value - 1))}
+                type="button"
+              >
+                −
+              </button>
+              <span>{quantity}</span>
+              <button
+                aria-label="+"
+                onClick={() =>
+                  setQuantity((value) => Math.min(stock, value + 1))
+                }
+                type="button"
+              >
+                +
+              </button>
+            </div>
+            <button disabled={stock < 1} onClick={addQuantity} type="button">
+              <Icon name="cart" /> {copy.add}
+            </button>
+            <button
+              aria-label={copy.favorites}
+              aria-pressed={props.favorites.includes(product.id)}
+              className="outline"
+              onClick={() => props.toggleFavorite(product.id)}
+              type="button"
+            >
+              <Icon name="heart" />
+            </button>
+          </div>
+          <button
+            className="market-product-seller"
+            onClick={() => props.navigate(`/store/${seller.slug}`)}
+            type="button"
+          >
+            <span>{seller.name.slice(0, 1)}</span>
+            <div>
+              <strong>{seller.name}</strong>
+              <small>
+                ★ {seller.rating} · {seller.reviews} {copy.reviews}
+              </small>
+            </div>
+            <b>{copy.goToStore} →</b>
+          </button>
         </div>
       </div>
-      <section className="market-offers">
-        <h2>{copy.offers}</h2>
-        {product.offers.map((offer) => {
-          const seller = sellerById(offer.sellerId);
-          const override = props.overrides[product.id];
-          const price =
-            override && offer.sellerId === "seller-agat"
-              ? override.price
-              : offer.priceMinor;
-          const stock =
-            override && offer.sellerId === "seller-agat"
-              ? override.stock
-              : offer.stock;
-          return (
-            <article key={offer.id}>
-              <div>
-                <button
-                  onClick={() => props.navigate(`/store/${seller.slug}`)}
-                  type="button"
-                >
-                  <strong>{seller.name}</strong>
-                  {seller.verified ? <span>✓ {copy.verified}</span> : null}
-                </button>
-                <small>
-                  ★ {seller.rating} · {seller.reviews} {copy.reviews}
-                </small>
-                <small>
-                  {copy.delivery}:{" "}
-                  {marketplaceText(seller.delivery, props.locale)}
-                </small>
-              </div>
-              <div>
-                <strong>
-                  {money(price, props.locale)} {copy.sum}
-                </strong>
-                <small>
-                  {stock > 0 ? `${copy.stock}: ${stock}` : copy.outOfStock}
-                </small>
-                <button
-                  disabled={stock < 1}
-                  onClick={() => props.addProduct(product, offer.id)}
-                  type="button"
-                >
-                  {copy.add}
-                </button>
-              </div>
+      <div className="market-product-info-grid">
+        <section>
+          <h2>
+            {ui(
+              props.locale,
+              "Характеристики",
+              "Xususiyatlar",
+              "Specifications",
+            )}
+          </h2>
+          <dl>
+            <div>
+              <dt>{ui(props.locale, "Категория", "Toifa", "Category")}</dt>
+              <dd>
+                {marketplaceText(
+                  marketplaceCategories.find(
+                    (item) => item.id === product.category,
+                  )!.label,
+                  props.locale,
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{ui(props.locale, "Продавец", "Sotuvchi", "Seller")}</dt>
+              <dd>{seller.name}</dd>
+            </div>
+            <div>
+              <dt>{ui(props.locale, "Доставка", "Yetkazish", "Delivery")}</dt>
+              <dd>{marketplaceText(seller.delivery, props.locale)}</dd>
+            </div>
+          </dl>
+        </section>
+        <section>
+          <h2>{ui(props.locale, "Описание", "Tavsif", "Description")}</h2>
+          <p>
+            {marketplaceText(product.description, props.locale)}.{" "}
+            {ui(
+              props.locale,
+              "Демонстрационная карточка: характеристики и цены синтетические.",
+              "Demo karta: xususiyatlar va narxlar sintetik.",
+              "Demo listing: specifications and prices are synthetic.",
+            )}
+          </p>
+        </section>
+        <section>
+          <h2>{copy.reviews}</h2>
+          <div className="market-review-grid">
+            <article>
+              <strong>★★★★★</strong>
+              <p>
+                {ui(
+                  props.locale,
+                  "Качественно упаковано, описание понятное.",
+                  "Sifatli qadoqlangan, tavsifi tushunarli.",
+                  "Packed well and clearly described.",
+                )}
+              </p>
+              <small>{copy.synthetic}</small>
             </article>
-          );
-        })}
-      </section>
+            <article>
+              <strong>★★★★★</strong>
+              <p>
+                {ui(
+                  props.locale,
+                  "Заказ подготовили вовремя.",
+                  "Buyurtma o‘z vaqtida tayyorlandi.",
+                  "The order was prepared on time.",
+                )}
+              </p>
+              <small>{copy.synthetic}</small>
+            </article>
+          </div>
+        </section>
+      </div>
+      <Section
+        title={ui(
+          props.locale,
+          "Похожие товары",
+          "O‘xshash mahsulotlar",
+          "Similar products",
+        )}
+      >
+        <ProductGrid items={related} {...props} />
+      </Section>
+      <Section
+        title={ui(
+          props.locale,
+          "Рекомендуем",
+          "Tavsiya qilamiz",
+          "Recommended",
+        )}
+      >
+        <ProductGrid items={recommended} {...props} />
+      </Section>
     </div>
   );
 }
@@ -1130,6 +1524,233 @@ function CheckoutPage(
   );
 }
 
+function AssignmentSimulation({
+  service,
+  locale,
+  navigate,
+}: {
+  service: PremiumService;
+  locale: CustomerLocale;
+  navigate: (path: string) => void;
+}) {
+  const copy = getMarketplaceCopy(locale);
+  const ranked = useMemo(() => rankAssignmentCandidates(service), [service]);
+  const eligible = useMemo(
+    () => eligibleAssignmentCandidates(service),
+    [service],
+  );
+  const [queueIndex, setQueueIndex] = useState(0);
+  const [history, setHistory] = useState<
+    Array<{ id: string; state: "declined" | "timeout" | "accepted" }>
+  >([]);
+  const [forceEmpty, setForceEmpty] = useState(false);
+  const active = forceEmpty ? undefined : eligible[queueIndex];
+  const accepted = history.find((event) => event.state === "accepted");
+  const advance = (state: "declined" | "timeout") => {
+    if (!active || accepted) return;
+    setHistory((current) => [...current, { id: active.id, state }]);
+    setQueueIndex((value) => value + 1);
+  };
+  const accept = () => {
+    if (!active || accepted) return;
+    setHistory((current) => [...current, { id: active.id, state: "accepted" }]);
+  };
+  const reset = () => {
+    setQueueIndex(0);
+    setHistory([]);
+    setForceEmpty(false);
+  };
+  return (
+    <div
+      className="market-assignment"
+      data-assignment-state={
+        accepted ? "accepted" : active ? "offered" : "unavailable"
+      }
+    >
+      <header>
+        <Icon name={accepted ? "check" : "store"} size={54} />
+        <div>
+          <span>
+            {ui(
+              locale,
+              "Автоматический подбор",
+              "Avtomatik tanlash",
+              "Automatic assignment",
+            )}
+          </span>
+          <h1>
+            {accepted
+              ? ui(
+                  locale,
+                  "Исполнитель назначен",
+                  "Ijrochi tayinlandi",
+                  "Studio assigned",
+                )
+              : active
+                ? ui(
+                    locale,
+                    "Ожидаем ответ студии",
+                    "Studiya javobini kutmoqdamiz",
+                    "Waiting for studio response",
+                  )
+                : ui(
+                    locale,
+                    "Сейчас нет доступного исполнителя",
+                    "Hozir mos ijrochi yo‘q",
+                    "No eligible studio is available",
+                  )}
+          </h1>
+          <p>
+            {accepted
+              ? ui(
+                  locale,
+                  "Назначение защищено от повторного подтверждения в этой демонстрации.",
+                  "Ushbu demoda takroriy tasdiqlashdan himoyalangan.",
+                  "This demo protects the assignment from duplicate acceptance.",
+                )
+              : ui(
+                  locale,
+                  "Система проверяет услугу, оборудование, радиус, рейтинг и текущую загрузку.",
+                  "Tizim xizmat, uskunalar, radius, reyting va joriy yuklamani tekshiradi.",
+                  "The system checks service, equipment, radius, rating and current load.",
+                )}
+          </p>
+        </div>
+      </header>
+      {active && !accepted ? (
+        <article className="market-active-offer">
+          <div>
+            <strong>{active.name}</strong>
+            <span>
+              ★ {active.rating} · {active.distanceKm} km · {active.loadPercent}%
+            </span>
+          </div>
+          <time>03:00</time>
+        </article>
+      ) : null}
+      {accepted ? (
+        <div className="market-assigned-studio">
+          <strong>
+            {eligible.find((item) => item.id === accepted.id)?.name}
+          </strong>
+          <span>
+            {ui(
+              locale,
+              "Заказ принят в работу",
+              "Buyurtma ishga qabul qilindi",
+              "Order accepted for production",
+            )}
+          </span>
+        </div>
+      ) : null}
+      <ol className="market-assignment-timeline">
+        {history.map((event) => (
+          <li key={`${event.id}-${event.state}`}>
+            <b>{eligible.find((item) => item.id === event.id)?.name}</b>
+            <span>
+              {event.state === "declined"
+                ? ui(locale, "Отказ", "Rad etildi", "Declined")
+                : event.state === "timeout"
+                  ? ui(
+                      locale,
+                      "Время ответа истекло",
+                      "Javob vaqti tugadi",
+                      "Offer timed out",
+                    )
+                  : ui(locale, "Принято", "Qabul qilindi", "Accepted")}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <details className="market-assignment-controls" open>
+        <summary>
+          {ui(
+            locale,
+            "Управление демонстрацией",
+            "Demo boshqaruvi",
+            "Demo controls",
+          )}
+        </summary>
+        <div>
+          <button
+            disabled={!active || Boolean(accepted)}
+            onClick={() => advance("declined")}
+            type="button"
+          >
+            {ui(
+              locale,
+              "Симулировать отказ",
+              "Rad etishni simulyatsiya qilish",
+              "Simulate decline",
+            )}
+          </button>
+          <button
+            disabled={!active || Boolean(accepted)}
+            onClick={() => advance("timeout")}
+            type="button"
+          >
+            {ui(
+              locale,
+              "Симулировать тайм-аут",
+              "Taym-autni simulyatsiya qilish",
+              "Simulate timeout",
+            )}
+          </button>
+          <button
+            disabled={!active || Boolean(accepted)}
+            onClick={accept}
+            type="button"
+          >
+            {ui(
+              locale,
+              "Принять исполнителем",
+              "Ijrochi qabul qiladi",
+              "Accept as studio",
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setForceEmpty(true);
+              setHistory([]);
+            }}
+            type="button"
+          >
+            {ui(locale, "Нет исполнителей", "Ijrochi yo‘q", "No candidates")}
+          </button>
+          <button onClick={reset} type="button">
+            {ui(locale, "Повторить", "Qayta boshlash", "Reset")}
+          </button>
+        </div>
+      </details>
+      <details className="market-ranking-evidence">
+        <summary>
+          {ui(
+            locale,
+            "Почему такой порядок",
+            "Nega bunday tartib",
+            "Why this order",
+          )}
+        </summary>
+        {ranked.map((candidate: RankedCandidate) => (
+          <p key={candidate.id}>
+            <strong>{candidate.name}</strong>
+            <span>
+              {candidate.outcome} · {candidate.score}
+            </span>
+          </p>
+        ))}
+      </details>
+      <button
+        className="market-assignment-history"
+        onClick={() => navigate("/account/service-orders")}
+        type="button"
+      >
+        {copy.orderHistory}
+      </button>
+    </div>
+  );
+}
+
 function ServicePage({
   service,
   locale,
@@ -1169,19 +1790,24 @@ function ServicePage({
       setError(copy.required);
       return;
     }
+    if (
+      step === 2 &&
+      values.fulfillment === "courier" &&
+      !values.address?.trim()
+    ) {
+      setError(copy.required);
+      return;
+    }
     setError("");
     setStep((value) => Math.min(3, value + 1));
   };
   if (complete)
     return (
-      <div className="market-success">
-        <Icon name="check" size={58} />
-        <h1>{copy.serviceCreated}</h1>
-        <p>{copy.synthetic}</p>
-        <button onClick={() => navigate("/account/orders")} type="button">
-          {copy.orderHistory}
-        </button>
-      </div>
+      <AssignmentSimulation
+        locale={locale}
+        navigate={navigate}
+        service={service}
+      />
     );
   return (
     <div className="market-service-page">
@@ -1198,7 +1824,7 @@ function ServicePage({
         <p>{localized(service.subtitle, locale)}</p>
       </header>
       <ol className="market-steps">
-        {[copy.parameters, copy.files, copy.contractor, copy.confirmation].map(
+        {[copy.parameters, copy.files, copy.fulfillment, copy.confirmation].map(
           (label, index) => (
             <li className={index <= step ? "active" : ""} key={label}>
               <b>{index + 1}</b>
@@ -1300,23 +1926,77 @@ function ServicePage({
           </div>
         ) : null}
         {step === 2 ? (
-          <div className="market-contractor-grid">
-            {marketplaceSellers.slice(0, 2).map((seller) => (
+          <div className="market-fulfillment-choice">
+            <h2>{copy.fulfillment}</h2>
+            <div>
               <button
-                className={values.seller === seller.id ? "active" : ""}
-                key={seller.id}
+                className={
+                  (values.fulfillment ?? "pickup") === "pickup" ? "active" : ""
+                }
                 onClick={() =>
-                  setValues((current) => ({ ...current, seller: seller.id }))
+                  setValues((current) => ({
+                    ...current,
+                    fulfillment: "pickup",
+                  }))
                 }
                 type="button"
               >
                 <Icon name="store" />
-                <strong>{seller.name}</strong>
-                <small>
-                  ★ {seller.rating} · {marketplaceText(seller.city, locale)}
-                </small>
+                <strong>{copy.pickup}</strong>
+                <span>
+                  {ui(
+                    locale,
+                    "Пункт определится после назначения",
+                    "Punkt tayinlashdan keyin aniqlanadi",
+                    "Location is confirmed after assignment",
+                  )}
+                </span>
               </button>
-            ))}
+              <button
+                className={values.fulfillment === "courier" ? "active" : ""}
+                onClick={() =>
+                  setValues((current) => ({
+                    ...current,
+                    fulfillment: "courier",
+                  }))
+                }
+                type="button"
+              >
+                <Icon name="package" />
+                <strong>{copy.courier}</strong>
+                <span>
+                  {ui(
+                    locale,
+                    "Синтетический адрес, без передачи данных",
+                    "Sintetik manzil, ma’lumot uzatilmaydi",
+                    "Synthetic address; no data is transmitted",
+                  )}
+                </span>
+              </button>
+            </div>
+            {values.fulfillment === "courier" ? (
+              <label>
+                {copy.address}
+                <input
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      address: event.target.value,
+                    }))
+                  }
+                  placeholder={copy.addressPlaceholder}
+                  value={values.address ?? ""}
+                />
+              </label>
+            ) : null}
+            <p>
+              {ui(
+                locale,
+                "Исполнитель будет выбран автоматически после подтверждения.",
+                "Ijrochi tasdiqlangandan so‘ng avtomatik tanlanadi.",
+                "The studio will be assigned automatically after confirmation.",
+              )}
+            </p>
           </div>
         ) : null}
         {step === 3 ? (
@@ -1362,9 +2042,31 @@ function AccountPage({
 }) {
   const copy = getMarketplaceCopy(props.locale);
   const tabs = [
-    ["profile", copy.profile],
+    ["overview", ui(props.locale, "Обзор", "Umumiy", "Overview")],
+    [
+      "profile",
+      ui(
+        props.locale,
+        "Личные данные",
+        "Shaxsiy ma’lumotlar",
+        "Personal details",
+      ),
+    ],
+    ["phone", ui(props.locale, "Телефон", "Telefon", "Phone")],
     ["addresses", copy.addresses],
-    ["orders", copy.orderHistory],
+    [
+      "orders",
+      ui(
+        props.locale,
+        "Товарные заказы",
+        "Mahsulot buyurtmalari",
+        "Product orders",
+      ),
+    ],
+    [
+      "service-orders",
+      ui(props.locale, "Заказы услуг", "Xizmat buyurtmalari", "Service orders"),
+    ],
     ["favorites", copy.favorites],
     ["notifications", copy.notifications],
     ["reviews", copy.buyerReviews],
@@ -1373,9 +2075,28 @@ function AccountPage({
   ];
   const [name, setName] = useState(read(STORAGE.profile, "Demo Customer"));
   const [message, setMessage] = useState("");
+  const demoOrders = orders.length
+    ? orders
+    : [
+        {
+          id: "DEMO-0175",
+          createdAt: new Date().toISOString(),
+          total: 174_000,
+          fulfillment: "pickup" as const,
+          status: "preparing" as const,
+          items: [],
+        },
+      ];
   return (
     <div className="market-account-layout">
       <aside>
+        <div className="market-account-person">
+          <span>DC</span>
+          <div>
+            <strong>{name}</strong>
+            <small>{copy.synthetic}</small>
+          </div>
+        </div>
         {tabs.map(([id, label]) => (
           <button
             className={section === id ? "active" : ""}
@@ -1388,32 +2109,158 @@ function AccountPage({
         ))}
       </aside>
       <main>
-        <h1>{tabs.find(([id]) => id === section)?.[1] ?? copy.profile}</h1>
+        <div className="market-account-heading">
+          <span>{copy.account}</span>
+          <h1>{tabs.find(([id]) => id === section)?.[1] ?? copy.profile}</h1>
+        </div>
+        {section === "overview" ? (
+          <>
+            <div className="market-account-stats">
+              <article>
+                <span>
+                  {ui(props.locale, "Заказы", "Buyurtmalar", "Orders")}
+                </span>
+                <strong>{demoOrders.length + 2}</strong>
+              </article>
+              <article>
+                <span>{copy.favorites}</span>
+                <strong>{props.favorites.length}</strong>
+              </article>
+              <article>
+                <span>{copy.notifications}</span>
+                <strong>3</strong>
+              </article>
+            </div>
+            <section className="market-tracking-card">
+              <div>
+                <span>
+                  {ui(
+                    props.locale,
+                    "Активный заказ",
+                    "Faol buyurtma",
+                    "Active order",
+                  )}
+                </span>
+                <h2>DEMO-SERVICE-0175</h2>
+              </div>
+              <ol>
+                <li className="done">{copy.statusCreated}</li>
+                <li className="active">
+                  {ui(
+                    props.locale,
+                    "Исполнитель назначен",
+                    "Ijrochi tayinlandi",
+                    "Studio assigned",
+                  )}
+                </li>
+                <li>{copy.statusPreparing}</li>
+                <li>{copy.statusReady}</li>
+              </ol>
+            </section>
+            <div className="market-account-shortcuts">
+              <button
+                onClick={() => props.navigate("/account/orders")}
+                type="button"
+              >
+                <Icon name="package" />
+                <span>
+                  {ui(
+                    props.locale,
+                    "Мои покупки",
+                    "Xaridlarim",
+                    "My purchases",
+                  )}
+                </span>
+              </button>
+              <button
+                onClick={() => props.navigate("/account/service-orders")}
+                type="button"
+              >
+                <Icon name="printer" />
+                <span>
+                  {ui(props.locale, "Мои услуги", "Xizmatlarim", "My services")}
+                </span>
+              </button>
+              <button
+                onClick={() => props.navigate("/account/support")}
+                type="button"
+              >
+                <Icon name="headphones" />
+                <span>{copy.support}</span>
+              </button>
+            </div>
+          </>
+        ) : null}
         {section === "orders" ? (
           <div className="market-order-list">
-            {orders.length ? (
-              orders.map((order) => (
-                <article key={order.id}>
-                  <span>{order.id}</span>
-                  <strong>
-                    {money(order.total, props.locale)} {copy.sum}
-                  </strong>
-                  <div>
-                    <b>{copy.orderStatus}</b>
-                    <span>
-                      {order.status === "created"
-                        ? copy.statusCreated
-                        : order.status === "preparing"
-                          ? copy.statusPreparing
-                          : copy.statusReady}
-                    </span>
-                  </div>
-                  <small>{new Date(order.createdAt).toLocaleString()}</small>
-                </article>
-              ))
-            ) : (
-              <div className="market-empty">{copy.cartEmpty}</div>
-            )}
+            {demoOrders.map((order) => (
+              <article key={order.id}>
+                <span>{order.id}</span>
+                <strong>
+                  {money(order.total, props.locale)} {copy.sum}
+                </strong>
+                <div>
+                  <b>{copy.orderStatus}</b>
+                  <span>
+                    {order.status === "created"
+                      ? copy.statusCreated
+                      : order.status === "preparing"
+                        ? copy.statusPreparing
+                        : copy.statusReady}
+                  </span>
+                </div>
+                <small>{new Date(order.createdAt).toLocaleString()}</small>
+                <button
+                  onClick={() =>
+                    setMessage(`${copy.orderDetails}: ${order.id}`)
+                  }
+                  type="button"
+                >
+                  {copy.orderDetails}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : section === "service-orders" ? (
+          <div className="market-order-list">
+            <article>
+              <span>DEMO-SERVICE-0175</span>
+              <strong>
+                {ui(
+                  props.locale,
+                  "Распечатка документов",
+                  "Hujjatlarni chop etish",
+                  "Document printing",
+                )}
+              </strong>
+              <div>
+                <b>{copy.orderStatus}</b>
+                <span>
+                  {ui(
+                    props.locale,
+                    "Студия готовит заказ",
+                    "Studiya buyurtmani tayyorlamoqda",
+                    "Studio is preparing the order",
+                  )}
+                </span>
+              </div>
+              <small>{copy.synthetic}</small>
+              <button
+                onClick={() =>
+                  setMessage(
+                    ui(
+                      props.locale,
+                      "Трекинг открыт",
+                      "Kuzatuv ochildi",
+                      "Tracking opened",
+                    ),
+                  )
+                }
+                type="button"
+              >
+                {ui(props.locale, "Отследить", "Kuzatish", "Track")}
+              </button>
+            </article>
           </div>
         ) : section === "favorites" ? (
           props.favorites.length ? (
@@ -1443,7 +2290,9 @@ function AccountPage({
               </div>
             </article>
           </div>
-        ) : (
+        ) : section !== "overview" &&
+          section !== "orders" &&
+          section !== "service-orders" ? (
           <form
             className="market-profile-form"
             onSubmit={(event) => {
@@ -1460,13 +2309,37 @@ function AccountPage({
               />
             </label>
             <label>
-              {section === "addresses" ? copy.address : copy.settings}
-              <textarea defaultValue={copy.synthetic} />
+              {section === "addresses"
+                ? copy.address
+                : section === "phone"
+                  ? ui(
+                      props.locale,
+                      "Номер телефона (демо)",
+                      "Telefon raqami (demo)",
+                      "Phone number (demo)",
+                    )
+                  : copy.settings}
+              <textarea
+                defaultValue={
+                  section === "addresses"
+                    ? ui(
+                        props.locale,
+                        "Ташкент, демо-адрес",
+                        "Toshkent, demo manzil",
+                        "Tashkent, demo address",
+                      )
+                    : copy.synthetic
+                }
+              />
             </label>
             <button type="submit">{copy.save}</button>
-            {message ? <p role="status">{message}</p> : null}
           </form>
-        )}
+        ) : null}
+        {message ? (
+          <div className="market-account-message" role="status">
+            {message}
+          </div>
+        ) : null}
       </main>
     </div>
   );
@@ -1768,6 +2641,7 @@ export function MarketplaceApp() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState("");
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [cart, setCart] = useState<Cart>(() => read(STORAGE.cart, {}));
   const [favorites, setFavorites] = useState<string[]>(() =>
     read(STORAGE.favorites, []),
@@ -1787,7 +2661,7 @@ export function MarketplaceApp() {
   );
   const copy = getMarketplaceCopy(locale);
   const products = useMemo(
-    () => [...marketplaceProducts, ...customProducts],
+    () => asSellerListings([...marketplaceProducts, ...customProducts]),
     [customProducts],
   );
 
@@ -1841,6 +2715,12 @@ export function MarketplaceApp() {
     const timer = setTimeout(() => setToast(""), 2400);
     return () => clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    const update = () => setShowBackToTop(scrollY > 560);
+    update();
+    addEventListener("scroll", update, { passive: true });
+    return () => removeEventListener("scroll", update);
+  }, []);
 
   const navigate = useCallback((path: string) => {
     const next = `${PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
@@ -1964,7 +2844,7 @@ export function MarketplaceApp() {
   const storeSlug = cleanPath.match(/^\/store\/([^/]+)/)?.[1];
   const serviceId = cleanPath.match(/^\/service\/([^/]+)/)?.[1];
   const accountSection =
-    cleanPath.match(/^\/account\/([^/]+)/)?.[1] ?? "profile";
+    cleanPath.match(/^\/account\/([^/]+)/)?.[1] ?? "overview";
   const sellerSection =
     cleanPath.match(/^\/seller\/([^/]+)/)?.[1] ?? "dashboard";
   if (productSlug) page = <ProductPage {...common} slug={productSlug} />;
@@ -2060,7 +2940,7 @@ export function MarketplaceApp() {
               <span>{copy.favorites}</span>
               <b>{favorites.length}</b>
             </button>
-            <button onClick={() => navigate("/account/profile")} type="button">
+            <button onClick={() => navigate("/account/overview")} type="button">
               <Icon name="user" />
               <span>{copy.account}</span>
             </button>
@@ -2163,7 +3043,7 @@ export function MarketplaceApp() {
           <span>{copy.cart}</span>
           <b>{cartCount}</b>
         </button>
-        <button onClick={() => navigate("/account/profile")} type="button">
+        <button onClick={() => navigate("/account/overview")} type="button">
           <Icon name="user" />
           <span>{copy.account}</span>
         </button>
@@ -2172,6 +3052,23 @@ export function MarketplaceApp() {
         <div className="market-toast" role="status">
           {toast}
         </div>
+      ) : null}
+      {showBackToTop ? (
+        <button
+          aria-label={ui(locale, "Наверх", "Yuqoriga", "Back to top")}
+          className="market-back-to-top"
+          onClick={() =>
+            scrollTo({
+              top: 0,
+              behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? "auto"
+                : "smooth",
+            })
+          }
+          type="button"
+        >
+          <Icon name="up" />
+        </button>
       ) : null}
     </div>
   );
