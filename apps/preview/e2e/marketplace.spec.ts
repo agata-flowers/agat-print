@@ -6,14 +6,14 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
-test("catalog search, filters, product offers and grouped checkout work", async ({
+test("catalog search, seller listings and grouped checkout work", async ({
   page,
 }) => {
   await expect(page.getByText("Демо-прототип", { exact: false })).toBeVisible();
   await page.getByLabel("Найти товар, услугу или магазин").fill("Ежедневник");
   await page.getByRole("button", { name: "Найти", exact: true }).click();
   await expect(page).toHaveURL(/\/marketplace\/catalog\?q=/);
-  await expect(page.locator("[data-product-id]")).toHaveCount(1);
+  await expect(page.locator("[data-product-id]")).toHaveCount(2);
   await page
     .locator("[data-product-id]")
     .first()
@@ -22,10 +22,11 @@ test("catalog search, filters, product offers and grouped checkout work", async 
   await expect(
     page.getByRole("heading", { name: "Ежедневник Premium A5" }),
   ).toBeVisible();
-  await expect(page.locator(".market-offers article")).toHaveCount(2);
+  await expect(page.locator(".market-product-seller")).toContainText(
+    "AGAT PRINT",
+  );
   await page
-    .locator(".market-offers article")
-    .first()
+    .locator(".market-detail-actions")
     .getByRole("button", { name: "В корзину" })
     .click();
   await page.getByRole("button", { name: /Корзина 1/ }).click();
@@ -82,15 +83,15 @@ test("services keep a dedicated validated multi-step checkout", async ({
     });
   await page.getByRole("button", { name: "Продолжить" }).click();
   await page.getByRole("button", { name: "Продолжить" }).click();
-  await page.locator(".market-contractor-grid button").first().click();
   await page.getByRole("button", { name: "Продолжить" }).click();
   await expect(page.getByText("Предварительная стоимость")).toBeVisible();
   await page
     .getByRole("button", { name: "Подтвердить демо-заказ услуги" })
     .click();
-  await expect(
-    page.getByRole("heading", { name: "Демонстрационный заказ услуги создан" }),
-  ).toBeVisible();
+  await expect(page.locator("[data-assignment-state=offered]")).toBeVisible();
+  await page.getByRole("button", { name: "Симулировать отказ" }).click();
+  await page.getByRole("button", { name: "Принять исполнителем" }).click();
+  await expect(page.locator("[data-assignment-state=accepted]")).toBeVisible();
 });
 
 test("seller edits and adds local assortment reflected in catalog", async ({
