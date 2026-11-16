@@ -5,5 +5,5 @@
 export const marketplaceBrand = {
   name: "AGAT PRINT",
   shortMark: "A",
-  descriptor: "MARKETPLACE DEMO",
+  descriptor: "we print your ideas",
 } as const;

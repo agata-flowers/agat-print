@@ -11,7 +11,7 @@ test("catalog search, seller listings and grouped checkout work", async ({
 }) => {
   await expect(page.getByText("Демо-прототип", { exact: false })).toBeVisible();
   await page.getByLabel("Найти товар, услугу или магазин").fill("Ежедневник");
-  await page.getByRole("button", { name: "Найти", exact: true }).click();
+  await page.getByLabel("Найти товар, услугу или магазин").press("Enter");
   await expect(page).toHaveURL(/\/marketplace\/catalog\?q=/);
   await expect(page.locator("[data-product-id]")).toHaveCount(2);
   await page
@@ -110,7 +110,6 @@ test("seller edits and adds local assortment reflected in catalog", async ({
   await add.getByLabel("Название товара").fill("Тестовый премиум-блокнот");
   await add.getByRole("button", { name: "Добавить товар" }).click();
   await expect(page.getByText("Тестовый премиум-блокнот")).toBeVisible();
-  await page.getByRole("button", { name: "Товары", exact: true }).click();
   await page
     .getByPlaceholder("Найти товар, услугу или магазин")
     .fill("Тестовый премиум-блокнот");

@@ -45,6 +45,26 @@ state machines, payments, or customer data.
 9. The Windows package runs on loopback without Docker or Node.js, chooses a
    free port automatically and contains Russian instructions.
 
+## Approved-reference correction
+
+The upper desktop home is implemented against the approved raster reference
+at a 1440 px review viewport. This is a composition match, not a claim that
+independently generated product photography is byte- or pixel-identical to
+the source raster.
+
+| Area             | Verified correspondence                                                                                          | Controlled difference / evidence                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Header           | One white row: configurable brand, location, search, favorites, cart, language and sign-in                       | Search retains an explicit submit action for keyboard and automation accessibility |
+| Sidebar          | Sticky white eight-item navigation, burgundy active item, mobile-app/QR block                                    | QR is a clearly synthetic non-production mark                                      |
+| Hero             | Burgundy horizontal banner, approved title/subtitle/yellow CTA, right-side printer/photo/merch composition       | Project-owned generated photography replaces the non-licensed raster subjects      |
+| Main categories  | Seven equal pastel cards directly after the hero with isolated 3D illustrations and horizontal overflow fallback | Illustration details are project-owned rather than copied from the reference       |
+| Promotions       | Three equal offer cards in the approved order and color rhythm                                                   | All prices and offers are explicitly synthetic demo content                        |
+| Popular services | Eight compact equal illustrated cards in one row                                                                 | Product illustrations use a project-owned transparent sprite                       |
+
+Review screenshots are captured at 1440 and 1920 px by the Stage 17.5
+Playwright capture gate and packaged with the Windows prototype. Visual
+acceptance remains a project-owner decision.
+
 ## Explicit exclusions
 
 - No backend, API, database or production changes.

@@ -144,6 +144,12 @@ function Icon({ name, size = 22 }: { name: string; size?: number }) {
         <path {...common} d="M5 9v12h14V9M9 21v-7h6v7" />
       </>
     ),
+    location: (
+      <>
+        <path {...common} d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
+        <circle {...common} cx="12" cy="10" r="2.5" />
+      </>
+    ),
     bell: (
       <>
         <path {...common} d="M6 17h12l-2-3V9a4 4 0 0 0-8 0v5Z" />
@@ -452,6 +458,124 @@ function ServiceStrip({
   );
 }
 
+function HomeServiceCategories({
+  locale,
+  navigate,
+}: {
+  locale: CustomerLocale;
+  navigate: (path: string) => void;
+}) {
+  const cards = [
+    ...premiumServices.map((service) => ({
+      id: service.id,
+      label: localized(service.title, locale),
+      path: `/service/${service.id}`,
+    })),
+    {
+      id: "catalog",
+      label: ui(
+        locale,
+        "Каталог товаров",
+        "Mahsulotlar katalogi",
+        "Product catalog",
+      ),
+      path: "/catalog",
+    },
+  ];
+  return (
+    <section
+      className="market-main-services"
+      aria-label={ui(
+        locale,
+        "Основные услуги",
+        "Asosiy xizmatlar",
+        "Main services",
+      )}
+    >
+      {cards.map((card) => (
+        <button
+          className={`market-main-service-card service-${card.id}`}
+          key={card.id}
+          onClick={() => navigate(card.path)}
+          type="button"
+        >
+          <span aria-hidden="true" />
+          <strong>{card.label}</strong>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function DemoQrMark() {
+  const cells = [
+    [1, 1],
+    [2, 1],
+    [3, 1],
+    [7, 1],
+    [8, 1],
+    [9, 1],
+    [1, 2],
+    [3, 2],
+    [5, 2],
+    [7, 2],
+    [9, 2],
+    [1, 3],
+    [2, 3],
+    [3, 3],
+    [5, 3],
+    [7, 3],
+    [8, 3],
+    [9, 3],
+    [4, 4],
+    [6, 4],
+    [2, 5],
+    [3, 5],
+    [5, 5],
+    [7, 5],
+    [8, 5],
+    [1, 6],
+    [4, 6],
+    [6, 6],
+    [9, 6],
+    [1, 7],
+    [2, 7],
+    [3, 7],
+    [5, 7],
+    [7, 7],
+    [8, 7],
+    [9, 7],
+    [1, 8],
+    [3, 8],
+    [4, 8],
+    [6, 8],
+    [7, 8],
+    [9, 8],
+    [1, 9],
+    [2, 9],
+    [3, 9],
+    [5, 9],
+    [7, 9],
+    [8, 9],
+    [9, 9],
+  ];
+  return (
+    <svg aria-hidden="true" className="market-demo-qr" viewBox="0 0 11 11">
+      <rect width="11" height="11" rx="1" fill="#fff" />
+      {cells.map(([x, y]) => (
+        <rect
+          fill="currentColor"
+          height="1"
+          key={`${x}-${y}`}
+          width="1"
+          x={x}
+          y={y}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function HomeSidebar({
   locale,
   navigate,
@@ -459,6 +583,7 @@ function HomeSidebar({
   locale: CustomerLocale;
   navigate: (path: string) => void;
 }) {
+  const copy = getMarketplaceCopy(locale);
   const items = [
     ["home", ui(locale, "Главная", "Bosh sahifa", "Home"), "/"],
     [
@@ -528,19 +653,23 @@ function HomeSidebar({
         ))}
       </nav>
       <div className="market-app-promo">
-        <Icon name="mobile" size={34} />
-        <strong>
-          {ui(locale, "Мобильное приложение", "Mobil ilova", "Mobile app")}
-        </strong>
-        <p>
-          {ui(
-            locale,
-            "Скоро для Android и iOS",
-            "Tez orada Android va iOS uchun",
-            "Coming soon to Android and iOS",
-          )}
-        </p>
-        <span>DEMO</span>
+        <div>
+          <Icon name="mobile" size={28} />
+          <strong>
+            {ui(
+              locale,
+              "Скачайте мобильное приложение",
+              "Mobil ilovani yuklab oling",
+              "Download our mobile app",
+            )}
+          </strong>
+          <p>{copy.demo}</p>
+        </div>
+        <DemoQrMark />
+        <div className="market-app-badges">
+          <span>App Store</span>
+          <span>Google Play</span>
+        </div>
       </div>
     </aside>
   );
@@ -555,19 +684,32 @@ function HomePromotions({
 }) {
   const cards = [
     [
-      "-20%",
-      ui(locale, "Первый заказ", "Birinchi buyurtma", "First order"),
-      "/catalog?sort=discount",
+      ui(locale, "Фото на документы", "Hujjat uchun foto", "ID photos"),
+      ui(locale, "за 10 минут", "10 daqiqada", "in 10 minutes"),
+      ui(locale, "от 25 000 сум", "25 000 so‘mdan", "from UZS 25,000"),
+      "/service/idPhoto",
     ],
     [
-      "B2B",
-      ui(locale, "Для бизнеса", "Biznes uchun", "For business"),
+      ui(locale, "Скидка 20%", "20% chegirma", "20% off"),
+      ui(
+        locale,
+        "на печать от 50 листов",
+        "50 varaqdan boshlab",
+        "when printing 50+ sheets",
+      ),
+      "",
+      "/service/printing",
+    ],
+    [
+      ui(
+        locale,
+        "Печать на футболках",
+        "Futbolkalarga bosma",
+        "T-shirt printing",
+      ),
+      ui(locale, "и кепках", "va kepkalarga", "and caps"),
+      ui(locale, "от 59 000 сум", "59 000 so‘mdan", "from UZS 59,000"),
       "/service/design",
-    ],
-    [
-      "NEW",
-      ui(locale, "Фото-подарки", "Foto sovg‘alar", "Photo gifts"),
-      "/category/gifts",
     ],
   ] as const;
   return (
@@ -575,13 +717,40 @@ function HomePromotions({
       className="market-home-promotions"
       aria-label={ui(locale, "Акции", "Aksiyalar", "Promotions")}
     >
-      {cards.map(([badge, title, path]) => (
-        <button key={title} onClick={() => navigate(path)} type="button">
-          <b>{badge}</b>
-          <strong>{title}</strong>
-          <span>→</span>
+      <div className="market-section-title market-home-subheading">
+        <h2>
+          🔥{" "}
+          {ui(
+            locale,
+            "Акции и предложения",
+            "Aksiyalar va takliflar",
+            "Deals and offers",
+          )}
+        </h2>
+        <button
+          onClick={() => navigate("/catalog?sort=discount")}
+          type="button"
+        >
+          {ui(locale, "Все акции", "Barcha aksiyalar", "All deals")} →
         </button>
-      ))}
+      </div>
+      <div className="market-home-promotion-row">
+        {cards.map(([title, subtitle, price, path], index) => (
+          <button
+            className={`promo-${index + 1}`}
+            key={title}
+            onClick={() => navigate(path)}
+            type="button"
+          >
+            <span>
+              <strong>{title}</strong>
+              <small>{subtitle}</small>
+              {price ? <b>{price}</b> : null}
+            </span>
+            <i aria-hidden="true" />
+          </button>
+        ))}
+      </div>
     </section>
   );
 }
@@ -622,9 +791,11 @@ function QuickServices({
             onClick={() => navigate(`/service/${id}`)}
             type="button"
           >
-            <span>{String(index + 1).padStart(2, "0")}</span>
+            <span
+              className={`market-quick-visual quick-${index}`}
+              aria-hidden="true"
+            />
             <strong>{ui(locale, ru, uz, en)}</strong>
-            <Icon name="arrow" size={16} />
           </button>
         ))}
       </div>
@@ -675,30 +846,54 @@ function HomePage(props: CommonPageProps & { viewed: string[] }) {
         <section className="market-hero">
           <div>
             <span>
-              {marketplaceBrand.name} · {marketplaceBrand.descriptor}
+              {ui(
+                locale,
+                "ПЕЧАТЬ · ФОТО · ДИЗАЙН",
+                "BOSMA · FOTO · DIZAYN",
+                "PRINT · PHOTO · DESIGN",
+              )}
             </span>
-            <h1>{copy.heroTitle}</h1>
-            <p>{copy.heroText}</p>
+            <h1>
+              {ui(
+                locale,
+                "Онлайн-печать и фотосервисы",
+                "Onlayn bosma va foto xizmatlar",
+                "Online printing and photo services",
+              )}
+            </h1>
+            <p>
+              {ui(
+                locale,
+                "Закажи прямо сейчас — получи быстро и удобно!",
+                "Hozir buyurtma bering — tez va qulay oling!",
+                "Order now — receive it quickly and easily!",
+              )}
+            </p>
             <div>
-              <button onClick={() => navigate("/catalog")} type="button">
-                {copy.heroAction}
-              </button>
               <button
-                className="secondary"
                 onClick={() => navigate("/catalog?tab=services")}
                 type="button"
               >
-                {copy.heroService}
+                {ui(
+                  locale,
+                  "Сделать заказ",
+                  "Buyurtma berish",
+                  "Place an order",
+                )}{" "}
+                →
               </button>
             </div>
           </div>
-          <div className="market-hero-products" aria-hidden="true">
-            <ProductImage product={products[0]!} />
-            <ProductImage product={products[12]!} />
-            <ProductImage product={products[4]!} />
+          <div className="market-hero-composition" aria-hidden="true" />
+          <div className="market-hero-dots" aria-hidden="true">
+            <b />
+            <b />
+            <b />
           </div>
         </section>
-        <ServiceStrip locale={locale} navigate={navigate} />
+        <HomeServiceCategories locale={locale} navigate={navigate} />
+        <HomePromotions locale={locale} navigate={navigate} />
+        <QuickServices locale={locale} navigate={navigate} />
         <nav className="market-category-row" aria-label={copy.categories}>
           {marketplaceCategories.map((category) => (
             <button
@@ -711,8 +906,6 @@ function HomePage(props: CommonPageProps & { viewed: string[] }) {
             </button>
           ))}
         </nav>
-        <HomePromotions locale={locale} navigate={navigate} />
-        <QuickServices locale={locale} navigate={navigate} />
         <Section
           action={() => navigate("/catalog?sort=popular")}
           title={copy.recommended}
@@ -2886,21 +3079,6 @@ export function MarketplaceApp() {
 
   return (
     <div className="market-app">
-      <div className="market-demo-bar">
-        <span>{copy.demo}</span>
-        <nav>
-          {(["uz", "ru", "en"] as CustomerLocale[]).map((item) => (
-            <button
-              aria-pressed={locale === item}
-              key={item}
-              onClick={() => changeLocale(item)}
-              type="button"
-            >
-              {item.toUpperCase()}
-            </button>
-          ))}
-        </nav>
-      </div>
       <header className="market-header">
         <div className="market-header-main">
           <button
@@ -2915,11 +3093,23 @@ export function MarketplaceApp() {
             </span>
           </button>
           <button
-            className="market-catalog-button"
-            onClick={() => setCatalogOpen((value) => !value)}
+            className="market-header-location"
+            onClick={() => navigate("/store/agat-print-tashkent")}
             type="button"
           >
-            <Icon name="grid" /> {copy.catalog}
+            <Icon name="location" size={22} />
+            <span>
+              <strong>{ui(locale, "Ташкент", "Toshkent", "Tashkent")}</strong>
+              <small>
+                {ui(
+                  locale,
+                  "Рядом с вами — рынок Кадышева",
+                  "Yaqiningizda — Qodisheva bozori",
+                  "Near you — Kadysheva market",
+                )}
+              </small>
+            </span>
+            <Icon name="arrow" size={14} />
           </button>
           <form className="market-search" onSubmit={search}>
             <Icon name="search" />
@@ -2940,14 +3130,34 @@ export function MarketplaceApp() {
               <span>{copy.favorites}</span>
               <b>{favorites.length}</b>
             </button>
-            <button onClick={() => navigate("/account/overview")} type="button">
-              <Icon name="user" />
-              <span>{copy.account}</span>
-            </button>
             <button onClick={() => navigate("/cart")} type="button">
               <Icon name="cart" />
               <span>{copy.cart}</span>
               <b>{cartCount}</b>
+            </button>
+            <div
+              className="market-language-switch"
+              aria-label={ui(locale, "Язык", "Til", "Language")}
+            >
+              {(["ru", "uz", "en"] as CustomerLocale[]).map((item) => (
+                <button
+                  aria-pressed={locale === item}
+                  key={item}
+                  onClick={() => changeLocale(item)}
+                  type="button"
+                >
+                  {item.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <button
+              className="market-login-button"
+              onClick={() => navigate("/account/overview")}
+              type="button"
+            >
+              <Icon name="user" />
+              <span className="sr-only">{copy.account}</span>
+              <span>{ui(locale, "Войти", "Kirish", "Sign in")}</span>
             </button>
           </nav>
           <button

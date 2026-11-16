@@ -12,11 +12,16 @@ test("desktop home follows the approved hierarchy at all required widths", async
   for (const width of [1280, 1366, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.locator(".market-home-sidebar")).toBeVisible();
+    await expect(page.locator(".market-header-location")).toBeVisible();
+    await expect(page.locator(".market-demo-bar")).toHaveCount(0);
     await expect(page.locator(".market-hero")).toBeVisible();
     await expect(
-      page.locator(".market-home-content .market-service-grid"),
+      page.getByRole("heading", { name: "Онлайн-печать и фотосервисы" }),
     ).toBeVisible();
-    await expect(page.locator(".market-home-promotions button")).toHaveCount(3);
+    await expect(page.locator(".market-main-service-card")).toHaveCount(7);
+    await expect(page.locator(".market-home-promotion-row button")).toHaveCount(
+      3,
+    );
     await expect(page.locator(".market-quick-services button")).toHaveCount(8);
     expect(
       await page.evaluate(
@@ -28,20 +33,28 @@ test("desktop home follows the approved hierarchy at all required widths", async
     .locator(".market-hero")
     .evaluate((element) => element.getBoundingClientRect().bottom);
   const servicesTop = await page
-    .locator(".market-home-content .market-service-grid")
+    .locator(".market-main-services")
+    .evaluate((element) => element.getBoundingClientRect().top);
+  const promotionsTop = await page
+    .locator(".market-home-promotions")
+    .evaluate((element) => element.getBoundingClientRect().top);
+  const quickServicesTop = await page
+    .locator(".market-quick-services")
     .evaluate((element) => element.getBoundingClientRect().top);
   const categoriesTop = await page
     .locator(".market-category-row")
     .evaluate((element) => element.getBoundingClientRect().top);
   expect(servicesTop).toBeGreaterThan(heroBottom);
-  expect(categoriesTop).toBeGreaterThan(servicesTop);
+  expect(promotionsTop).toBeGreaterThan(servicesTop);
+  expect(quickServicesTop).toBeGreaterThan(promotionsTop);
+  expect(categoriesTop).toBeGreaterThan(quickServicesTop);
 });
 
 test("a seller-specific listing opens a complete product page and adds directly to cart", async ({
   page,
 }) => {
   await page.getByLabel("Найти товар, услугу или магазин").fill("Ежедневник");
-  await page.getByRole("button", { name: "Найти", exact: true }).click();
+  await page.getByLabel("Найти товар, услугу или магазин").press("Enter");
   await expect(page.locator("[data-product-id]")).toHaveCount(2);
   await page
     .locator("[data-product-id]")
