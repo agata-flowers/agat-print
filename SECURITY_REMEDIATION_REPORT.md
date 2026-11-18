@@ -32,6 +32,13 @@ Vitest/Tinypool, Nest CLI, ESLint, TypeScript ESLint, Turbo и их зависи
 Security gate допускает его только по точному GHSA, имени пакета, `dev=true` и
 ограниченному списку dependency-path prefixes; любое отклонение блокирует CI.
 
+В ноябре 2026 опубликован `picomatch` `GHSA-fc5q-39xc-vjpf`; patched release
+на момент обнаружения отсутствует. Все найденные пути имеют `dev=true` и
+ограничены lint/build/test/Nest CLI инструментами с repository-controlled glob
+patterns. Gate допускает advisory по той же fail-closed схеме: точные GHSA,
+package, severity и исчерпывающий список dev-only path prefixes. Появление
+runtime-пути или нового dependency prefix немедленно блокирует CI.
+
 ## 2. Полная матрица 43 исходных findings
 
 Обозначения применимости: **runtime** — достижимый production-код; **bounded** —
@@ -94,6 +101,7 @@ Security gate допускает его только по точному GHSA, �
 | Turbo                      | 2.5.6                   | 2.11.7                | Moderate/Low advisories устранены                             |
 | Supertest                  | 7.1.4                   | 7.3.1                 | Dev request parser обновлён; `qs` закреплён на 6.16.0         |
 | `braces`                   | 3.0.3                   | 3.0.3                 | No patched release; bounded explicit non-runtime exception    |
+| `picomatch`                | 2.3.2 / 4.0.7           | 2.3.2 / 4.0.7         | No patched release; bounded explicit dev-tooling exception    |
 
 ## 3. Изменения и security invariants
 
@@ -158,6 +166,10 @@ CI, а не помечены локально успешными.
 3. Реальный off-host backup backend и production secret store не могут быть
    доказаны ephemeral CI; CI проверяет шифрованный backup/isolated restore на
    синтетических данных.
+4. `braces` и `picomatch` имеют опубликованные High advisories без patched
+   releases. Они разрешены только для явных dev-only repository-controlled
+   glob paths; исключения должны быть удалены сразу после появления
+   совместимого исправления upstream.
 
 Ветка не должна merge-иться в `main` без отдельного разрешения владельца.
 Stage 16 в remediation не входит.

@@ -24,6 +24,29 @@ try {
 
 const acceptedAdvisories = new Map([
   [
+    "GHSA-fc5q-39xc-vjpf",
+    {
+      module: "picomatch",
+      severity: "high",
+      reason:
+        "No patched release exists. Every resolved path is a development-only lint, build, test, or Nest CLI glob matcher and receives only repository-controlled patterns.",
+      allowedPathPrefixes: [
+        ".>@next/eslint-plugin-next>",
+        ".>typescript-eslint>",
+        "apps__api>@nestjs/cli>",
+        "apps__api>vitest>",
+        "apps__preview>@vitejs/plugin-react>",
+        "apps__preview>vite>",
+        "apps__preview>vitest>",
+        "apps__printer-agent>vitest>",
+        "apps__web>vitest>",
+        "packages__api-client>vitest>",
+        "packages__contracts>vitest>",
+        "packages__i18n>vitest>",
+      ],
+    },
+  ],
+  [
     "GHSA-vfj7-8cjw-p6xm",
     {
       module: "braces",
