@@ -255,6 +255,47 @@ const routeFromLocation = () => {
   return `${path}${window.location.search}`;
 };
 
+function MarketplaceBreadcrumbs({
+  path,
+  locale,
+  navigate,
+}: {
+  path: string;
+  locale: CustomerLocale;
+  navigate: (path: string) => void;
+}) {
+  if (path === "/") return null;
+  const first = path.split("/").filter(Boolean)[0] ?? "";
+  const labels: Record<string, string> = {
+    catalog: ui(locale, "Каталог", "Katalog", "Catalog"),
+    category: ui(locale, "Категория", "Toifa", "Category"),
+    product: ui(locale, "Товар", "Mahsulot", "Product"),
+    store: ui(locale, "Магазин", "Do‘kon", "Store"),
+    service: ui(locale, "Услуга", "Xizmat", "Service"),
+    cart: ui(locale, "Корзина", "Savat", "Cart"),
+    checkout: ui(locale, "Оформление", "Rasmiylashtirish", "Checkout"),
+    account: ui(locale, "Личный кабинет", "Kabinet", "Account"),
+    seller: ui(
+      locale,
+      "Кабинет продавца",
+      "Sotuvchi kabineti",
+      "Seller dashboard",
+    ),
+  };
+  return (
+    <nav
+      aria-label={ui(locale, "Хлебные крошки", "Navigatsiya", "Breadcrumb")}
+      className="market-breadcrumbs"
+    >
+      <button onClick={() => navigate("/")} type="button">
+        {ui(locale, "Главная", "Bosh sahifa", "Home")}
+      </button>
+      <span aria-hidden="true">/</span>
+      <strong>{labels[first] ?? labels.catalog}</strong>
+    </nav>
+  );
+}
+
 function ProductImage({
   product,
   className = "",
@@ -986,9 +1027,35 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
   );
   const [sort, setSort] = useState(params.get("sort") ?? "popular");
   const [available, setAvailable] = useState(false);
+  const [subcategory, setSubcategory] = useState("all");
+  const [minimumRating, setMinimumRating] = useState("0");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const isServices = params.get("tab") === "services";
+  const subcategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          props.products
+            .filter(
+              (product) => category === "all" || product.category === category,
+            )
+            .map((product) => product.subcategory),
+        ),
+      ).sort(),
+    [props.products, category],
+  );
+  const suggestions = useMemo(
+    () =>
+      props.products
+        .filter((product) =>
+          marketplaceText(product.name, props.locale)
+            .toLowerCase()
+            .includes(query.toLowerCase()),
+        )
+        .slice(0, 5),
+    [props.products, props.locale, query],
+  );
   const filtered = useMemo(
     () =>
       props.products
@@ -1003,7 +1070,9 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
               : { price: offer.priceMinor, stock: offer.stock };
           return (
             (category === "all" || product.category === category) &&
+            (subcategory === "all" || product.subcategory === subcategory) &&
             (!query || text.includes(query.toLowerCase())) &&
+            product.rating >= Number(minimumRating) &&
             (!available || effective.stock > 0) &&
             (!minPrice || effective.price >= Number(minPrice)) &&
             (!maxPrice || effective.price <= Number(maxPrice))
@@ -1014,12 +1083,18 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
             ? lowestOffer(a).priceMinor - lowestOffer(b).priceMinor
             : sort === "price-desc"
               ? lowestOffer(b).priceMinor - lowestOffer(a).priceMinor
-              : b.reviews - a.reviews,
+              : sort === "rating"
+                ? b.rating - a.rating
+                : sort === "new"
+                  ? b.imageIndex - a.imageIndex
+                  : b.reviews - a.reviews,
         ),
     [
       props.products,
       props.overrides,
       category,
+      subcategory,
+      minimumRating,
       query,
       available,
       minPrice,
@@ -1085,9 +1160,18 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
             <label>
               {copy.search}
               <input
+                list="market-catalog-suggestions"
                 onChange={(event) => setQuery(event.target.value)}
                 value={query}
               />
+              <datalist id="market-catalog-suggestions">
+                {suggestions.map((product) => (
+                  <option
+                    key={product.id}
+                    value={marketplaceText(product.name, props.locale)}
+                  />
+                ))}
+              </datalist>
             </label>
             <label>
               {copy.categories}
@@ -1106,6 +1190,32 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
               </select>
             </label>
             <label>
+              {ui(props.locale, "Подкатегория", "Ichki toifa", "Subcategory")}
+              <select
+                onChange={(event) => setSubcategory(event.target.value)}
+                value={subcategory}
+              >
+                <option value="all">{copy.all}</option>
+                {subcategories.map((item) => (
+                  <option key={item} value={item}>
+                    {item.replaceAll("-", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {ui(props.locale, "Рейтинг от", "Reyting", "Minimum rating")}
+              <select
+                onChange={(event) => setMinimumRating(event.target.value)}
+                value={minimumRating}
+              >
+                <option value="0">{copy.all}</option>
+                <option value="4">4.0+</option>
+                <option value="4.5">4.5+</option>
+                <option value="4.8">4.8+</option>
+              </select>
+            </label>
+            <label>
               {copy.sort}
               <select
                 onChange={(event) => setSort(event.target.value)}
@@ -1114,6 +1224,17 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
                 <option value="popular">{copy.sortPopular}</option>
                 <option value="price-asc">{copy.sortPriceAsc}</option>
                 <option value="price-desc">{copy.sortPriceDesc}</option>
+                <option value="rating">
+                  {ui(
+                    props.locale,
+                    "По рейтингу",
+                    "Reyting bo‘yicha",
+                    "Rating",
+                  )}
+                </option>
+                <option value="new">
+                  {ui(props.locale, "Сначала новые", "Avval yangi", "Newest")}
+                </option>
               </select>
             </label>
             <div className="market-price-filter">
@@ -1150,6 +1271,8 @@ function CatalogPage(props: CommonPageProps & { route: string }) {
               onClick={() => {
                 setQuery("");
                 setCategory("all");
+                setSubcategory("all");
+                setMinimumRating("0");
                 setSort("popular");
                 setAvailable(false);
                 setMinPrice("");
@@ -1321,6 +1444,22 @@ function ProductPage(props: CommonPageProps & { slug: string }) {
             </div>
             <button disabled={stock < 1} onClick={addQuantity} type="button">
               <Icon name="cart" /> {copy.add}
+            </button>
+            <button
+              className="market-buy-now"
+              disabled={stock < 1}
+              onClick={() => {
+                addQuantity();
+                props.navigate("/cart");
+              }}
+              type="button"
+            >
+              {ui(
+                props.locale,
+                "Купить сейчас",
+                "Hozir xarid qilish",
+                "Buy now",
+              )}
             </button>
             <button
               aria-label={copy.favorites}
@@ -2228,10 +2367,12 @@ function ServicePage({
 function AccountPage({
   section,
   orders,
+  repeatOrder,
   ...props
 }: CommonPageProps & {
   section: string;
   orders: DemoOrder[];
+  repeatOrder: (order: DemoOrder) => void;
 }) {
   const copy = getMarketplaceCopy(props.locale);
   const tabs = [
@@ -2268,6 +2409,7 @@ function AccountPage({
   ];
   const [name, setName] = useState(read(STORAGE.profile, "Demo Customer"));
   const [message, setMessage] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<DemoOrder | null>(null);
   const demoOrders = orders.length
     ? orders
     : [
@@ -2403,16 +2545,51 @@ function AccountPage({
                   </span>
                 </div>
                 <small>{new Date(order.createdAt).toLocaleString()}</small>
-                <button
-                  onClick={() =>
-                    setMessage(`${copy.orderDetails}: ${order.id}`)
-                  }
-                  type="button"
-                >
+                <button onClick={() => setSelectedOrder(order)} type="button">
                   {copy.orderDetails}
+                </button>
+                <button onClick={() => repeatOrder(order)} type="button">
+                  {ui(
+                    props.locale,
+                    "Повторить заказ",
+                    "Qayta buyurtma",
+                    "Order again",
+                  )}
                 </button>
               </article>
             ))}
+            {selectedOrder ? (
+              <section className="market-order-detail" aria-live="polite">
+                <button
+                  aria-label={ui(props.locale, "Закрыть", "Yopish", "Close")}
+                  onClick={() => setSelectedOrder(null)}
+                  type="button"
+                >
+                  ×
+                </button>
+                <span>{copy.orderDetails}</span>
+                <h2>{selectedOrder.id}</h2>
+                <ol>
+                  <li className="done">{copy.statusCreated}</li>
+                  <li
+                    className={
+                      selectedOrder.status !== "created" ? "done" : "active"
+                    }
+                  >
+                    {copy.statusPreparing}
+                  </li>
+                  <li
+                    className={selectedOrder.status === "ready" ? "done" : ""}
+                  >
+                    {copy.statusReady}
+                  </li>
+                </ol>
+                <strong>
+                  {money(selectedOrder.total, props.locale)} {copy.sum}
+                </strong>
+                <small>{copy.synthetic}</small>
+              </section>
+            ) : null}
           </div>
         ) : section === "service-orders" ? (
           <div className="market-order-list">
@@ -2577,6 +2754,8 @@ function SellerPage({
   const [newPrice, setNewPrice] = useState("45000");
   const [newStock, setNewStock] = useState("10");
   const [newImage, setNewImage] = useState<string | undefined>();
+  const [storeName, setStoreName] = useState("AGAT PRINT Tashkent");
+  const [sellerNotice, setSellerNotice] = useState("");
   const tabs = [
     ["dashboard", copy.analytics],
     ["products", copy.assortment],
@@ -2616,31 +2795,68 @@ function SellerPage({
           </div>
         </div>
         {section === "dashboard" ? (
-          <div className="market-stat-grid">
-            <article>
-              <span>{copy.sales}</span>
-              <strong>128</strong>
-            </article>
-            <article>
-              <span>{copy.revenue}</span>
-              <strong>8 420 000 {copy.sum}</strong>
-            </article>
-            <article>
-              <span>{copy.inventory}</span>
-              <strong>
-                {own.reduce(
-                  (sum, product) =>
-                    sum +
-                    (overrides[product.id]?.stock ??
-                      product.offers.find(
-                        (item) => item.sellerId === "seller-agat",
-                      )?.stock ??
-                      0),
-                  0,
-                )}
-              </strong>
-            </article>
-          </div>
+          <>
+            <section className="market-seller-onboarding">
+              <div>
+                <span>{copy.synthetic}</span>
+                <h2>
+                  {ui(
+                    locale,
+                    "Магазин готов к работе",
+                    "Do‘kon ishga tayyor",
+                    "Store is ready",
+                  )}
+                </h2>
+                <p>{copy.localChanges}</p>
+              </div>
+              <ol>
+                <li className="done">
+                  {ui(
+                    locale,
+                    "Регистрация",
+                    "Ro‘yxatdan o‘tish",
+                    "Registration",
+                  )}
+                </li>
+                <li className="done">
+                  {ui(
+                    locale,
+                    "Профиль магазина",
+                    "Do‘kon profili",
+                    "Store profile",
+                  )}
+                </li>
+                <li className="done">
+                  {ui(locale, "Демо-проверка", "Demo tekshiruv", "Demo review")}
+                </li>
+              </ol>
+            </section>
+            <div className="market-stat-grid">
+              <article>
+                <span>{copy.sales}</span>
+                <strong>128</strong>
+              </article>
+              <article>
+                <span>{copy.revenue}</span>
+                <strong>8 420 000 {copy.sum}</strong>
+              </article>
+              <article>
+                <span>{copy.inventory}</span>
+                <strong>
+                  {own.reduce(
+                    (sum, product) =>
+                      sum +
+                      (overrides[product.id]?.stock ??
+                        product.offers.find(
+                          (item) => item.sellerId === "seller-agat",
+                        )?.stock ??
+                        0),
+                    0,
+                  )}
+                </strong>
+              </article>
+            </div>
+          </>
         ) : section === "products" ? (
           <div className="market-seller-products-wrap">
             <form
@@ -2805,6 +3021,34 @@ function SellerPage({
               <div className="market-empty">{copy.cartEmpty}</div>
             )}
           </div>
+        ) : section === "settings" ? (
+          <form
+            className="market-profile-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSellerNotice(copy.saved);
+            }}
+          >
+            <label>
+              {ui(locale, "Название магазина", "Do‘kon nomi", "Store name")}
+              <input
+                onChange={(event) => setStoreName(event.target.value)}
+                required
+                value={storeName}
+              />
+            </label>
+            <label>
+              {ui(
+                locale,
+                "Описание и условия",
+                "Tavsif va shartlar",
+                "Description and terms",
+              )}
+              <textarea defaultValue={copy.localChanges} />
+            </label>
+            <button type="submit">{copy.save}</button>
+            {sellerNotice ? <p role="status">{sellerNotice}</p> : null}
+          </form>
         ) : (
           <div className="market-placeholder-panel">
             <Icon
@@ -2984,6 +3228,23 @@ export function MarketplaceApp() {
     setToast(copy.orderCreated);
     navigate("/account/orders");
   };
+  const repeatOrder = (order: DemoOrder) => {
+    setCart(
+      order.items.reduce<Cart>((next, item) => {
+        next[item.offerId] = item.quantity;
+        return next;
+      }, {}),
+    );
+    setToast(
+      ui(
+        locale,
+        "Товары снова добавлены в корзину",
+        "Mahsulotlar yana savatga qo‘shildi",
+        "Items were added to the cart again",
+      ),
+    );
+    navigate("/cart");
+  };
   const updateOverride = (id: string, value: SellerOverride[string]) => {
     setOverrides((current) => ({ ...current, [id]: value }));
     setToast(copy.saved);
@@ -3058,7 +3319,14 @@ export function MarketplaceApp() {
   else if (cleanPath === "/checkout")
     page = <CheckoutPage {...common} cart={cart} createOrder={createOrder} />;
   else if (cleanPath.startsWith("/account"))
-    page = <AccountPage {...common} orders={orders} section={accountSection} />;
+    page = (
+      <AccountPage
+        {...common}
+        orders={orders}
+        repeatOrder={repeatOrder}
+        section={accountSection}
+      />
+    );
   else if (cleanPath.startsWith("/seller"))
     page = (
       <SellerPage
@@ -3230,7 +3498,14 @@ export function MarketplaceApp() {
           </div>
         ) : null}
       </header>
-      <main className="market-main">{page}</main>
+      <main className="market-main">
+        <MarketplaceBreadcrumbs
+          locale={locale}
+          navigate={navigate}
+          path={cleanPath}
+        />
+        {page}
+      </main>
       <nav className="market-bottom-nav">
         <button
           className={cleanPath === "/" ? "active" : ""}
